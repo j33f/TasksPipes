@@ -216,8 +216,6 @@ export const FR: Record<string, string> = {
   "Wrong code": "Code incorrect",
   "Invalid e-mail address": "Adresse e-mail invalide",
   "That is your own address": "C'est votre propre adresse",
-  "This person has an Outline account: they can sign in with Outline.":
-    "Cette personne a un compte Outline : elle peut se connecter avec Outline.",
   "Invitation not found": "Invitation introuvable",
   "Account not found": "Compte introuvable",
   "Incompatible account": "Compte incompatible",

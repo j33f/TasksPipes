@@ -218,8 +218,6 @@ export const FR: Record<string, string> = {
   "moved the task to {place}": "a déplacé la tâche vers {place}",
   "moved the task to “{column}”": "a passé la tâche à « {column} »",
   "Multiple choices": "Choix multiples",
-  "My account": "Mon compte",
-  "My account, invitations": "Mon compte, invitations",
   "My dashboard": "Mon tableau de bord",
   "My model": "Mon modèle",
   "My model · public": "Mon modèle · public",
