@@ -1,0 +1,30 @@
+# Functional tests of the server against a throwaway PostgreSQL (wiped by the tests):
+#   docker compose -f dev/docker-compose.test.yml run --rm tests
+# Add "--coverage" for a coverage report:  ... run --rm tests npx vitest run -c vitest.functional.config.ts --coverage
+services:
+  test-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: taskspipes_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d taskspipes_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  tests:
+    image: node:24-alpine
+    working_dir: /repo/server
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      HOME: /tmp
+      TEST_DATABASE_URL: postgres://postgres:test@test-db:5432/taskspipes_test
+    volumes:
+      - ..:/repo
+    depends_on:
+      test-db:
+        condition: service_healthy
+    command: ["sh", "-c", "npm ci --no-audit --no-fund && npx vitest run -c vitest.functional.config.ts"]

@@ -46,7 +46,7 @@ for (const [a, p] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127
 }
 for (const [a, p] of [["::", 127], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8]] as const) PRIVATE.addSubnet(a, p, "ipv6");
 
-function isPrivateIp(ip: string): boolean {
+export function isPrivateIp(ip: string): boolean {
   const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
   if (mapped) return isPrivateIp(mapped[1]);
   return PRIVATE.check(ip, net.isIPv6(ip) ? "ipv6" : "ipv4");

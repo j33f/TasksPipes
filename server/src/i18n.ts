@@ -72,7 +72,7 @@ export function localizePipeType(lang: Locale, p: PipeType): PipeType {
   };
 }
 
-const FR: Record<string, string> = {
+export const FR: Record<string, string> = {
   // Generic validation
   "{label} is required": "{label} requis",
   "{label} is too long": "{label} trop long",

@@ -41,4 +41,4 @@ http.createServer((req, res) => {
       default: return send(404, { ok: false, message: `Unknown method ${req.url}` });
     }
   });
-}).listen(4000, () => console.log("Mock Outline on :4000"));
+}).listen(Number(process.env.PORT || 4000), () => console.log(`Mock Outline on :${process.env.PORT || 4000}`));
