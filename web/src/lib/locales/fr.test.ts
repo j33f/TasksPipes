@@ -2,22 +2,17 @@
  * Every text of the web app has its French version, and the dictionary holds no stale entry.
  * Texts are found in the sources: t("…"), tn(n, "…", "…"), and the label lists shown with t().
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FR } from "./fr";
 import { FIELD_TYPE_LABELS, STATUSES } from "../constants";
 import { GROUPS } from "../gtd";
 
-const SRC = join(__dirname, "../..");
-
-function sources(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) return name === "locales" ? [] : sources(path);
-    return /\.(svelte|ts)$/.test(name) && !/\.test\.ts$/.test(name) ? [path] : [];
-  });
-}
+// Every source file of the app, as text (tests and the dictionaries left out).
+const sources = import.meta.glob<string>(["../../**/*.{ts,svelte}", "!../../**/*.test.ts", "!../locales/**"], {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
 
 /** String literals passed to t() and tn() (both forms of tn). */
 function textsIn(code: string): string[] {
@@ -31,7 +26,7 @@ function textsIn(code: string): string[] {
 }
 
 const used = new Set<string>([
-  ...sources(SRC).flatMap((f) => textsIn(readFileSync(f, "utf8"))),
+  ...Object.values(sources).flatMap(textsIn),
   // Lists of labels shown with t().
   ...STATUSES.map((s) => s.label),
   ...Object.values(FIELD_TYPE_LABELS),
