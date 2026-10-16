@@ -109,6 +109,18 @@ cd web && npm test                                             # web unit tests
 docker compose -f dev/docker-compose.test.yml run --rm tests   # server functional tests
 ```
 
+## Releases
+
+Versions follow [semver](https://semver.org). To release, set the version everywhere it appears — the server and
+web packages, and the Licensed Work of the [LICENSE](LICENSE) — then commit and tag:
+
+```shell
+node scripts/release.mjs 0.5.0
+git commit -am "chore(release): 0.5.0" && git tag -a v0.5.0 -m "TasksPipes 0.5.0"
+```
+
+A test fails if the LICENSE and the packages disagree.
+
 ## Migrations
 
 The database schema lives in `server/src/db.ts` and is applied at every start. Changes are written to be
