@@ -7,6 +7,7 @@ server/   Fastify 5 API, Node 24 — also serves the built web app
 web/      Svelte 5 single-page app, built with Vite
 dev/      development stack: fake Outline server and compose overrides
 docs/     documentation
+.github/  continuous integration (see TESTING.md)
 ```
 
 ## Server
@@ -16,7 +17,8 @@ Outline through its RPC-style API.
 
 | File | Role |
 | --- | --- |
-| `index.ts` | Starts Fastify, the error handler (translates errors), static files and the SPA fallback. |
+| `app.ts` | Builds the Fastify app: error handler (translates errors), plugins, API, static files and the SPA fallback. |
+| `index.ts` | Starts it: database migration, listening, periodic clean-up, graceful shutdown. |
 | `config.ts` | Environment variables. |
 | `db.ts` | Connection pool, the schema (applied at every start), SQL visibility functions, start-up data fixes. |
 | `auth.ts` | Sessions, Outline sign-in (OAuth and API keys), e-mail sign-up, sign-in links and TOTP. |

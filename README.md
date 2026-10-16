@@ -14,6 +14,8 @@
   <a href="https://svelte.dev" rel="nofollow"><img src="https://img.shields.io/badge/Svelte-5-%23ff3e00.svg" alt="Svelte 5"></a>
   <a href="https://fastify.dev" rel="nofollow"><img src="https://img.shields.io/badge/Fastify-5-%23202020.svg" alt="Fastify 5"></a>
   <a href="docs/TRANSLATION.md"><img src="https://img.shields.io/badge/i18n-English%20%7C%20French-%233ad984.svg" alt="English and French"></a>
+  <a href="https://github.com/j33f/TasksPipes/actions/workflows/ci.yml"><img src="https://github.com/j33f/TasksPipes/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/j33f/TasksPipes"><img src="https://codecov.io/gh/j33f/TasksPipes/graph/badge.svg" alt="Coverage"></a>
 </p>
 
 This is the source code of **TasksPipes**, a multi-user task manager built around [Outline](https://www.getoutline.com):
@@ -59,7 +61,9 @@ Please see the [hosting documentation](docs/HOSTING.md) for the configuration in
 # Contributing
 
 Bug reports and ideas are welcome in [GitHub issues](https://github.com/j33f/TasksPipes/issues). Before writing a
-larger change, please open an issue to agree on the approach first.
+larger change, please open an issue to agree on the approach first. Pull requests need passing tests (see
+[testing](docs/TESTING.md)), and commit messages follow [Conventional Commits](https://www.conventionalcommits.org)
+(`feat:`, `fix:`, `docs:`, `test:`…).
 
 Ways to help:
 
@@ -94,14 +98,15 @@ In development the server logs readable lines to the console; in production it w
 any log pipeline. Set `LOG_LEVEL=debug` for more detail. Session cookies, authorization headers and calendar tokens
 are kept out of the logs.
 
-## Checks
+## Tests
 
-There is no automated test suite yet. Before submitting a change, run the type checks and try it on the
-development stack:
+Unit tests (server and web) and functional tests (the whole API on PostgreSQL, against a fake Outline) run with
+Vitest, with coverage; GitHub Actions runs them on every push. See the [testing documentation](docs/TESTING.md).
 
 ```shell
-cd server && npm run typecheck
-cd web && npm run check        # svelte-check
+cd server && npm test                                          # server unit tests
+cd web && npm test                                             # web unit tests
+docker compose -f dev/docker-compose.test.yml run --rm tests   # server functional tests
 ```
 
 ## Migrations
