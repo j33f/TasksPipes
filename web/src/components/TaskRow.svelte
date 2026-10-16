@@ -1,0 +1,24 @@
+<script lang="ts">
+  import { app } from "../lib/app.svelte";
+  import { dueState, formatDate } from "../lib/constants";
+  import type { Task } from "../lib/types";
+  import Avatar from "./Avatar.svelte";
+  import StatusBadge from "./StatusBadge.svelte";
+
+  let { task, showLocation = true }: { task: Task; showLocation?: boolean } = $props();
+  const due = $derived(dueState(task.dueDate, task.status));
+</script>
+
+<button class="list-item" onclick={() => app.openTask(task.id)}>
+  {#if task.inIncoming}<span class="badge">Incoming</span>{:else}<StatusBadge status={task.status} />{/if}
+  <span class="title">{task.title}</span>
+  {#if showLocation}
+    <span class="muted small loc">{task.space.name}{task.pipe ? ` › ${task.pipe.name}` : ""}</span>
+  {/if}
+  {#if task.dueDate}<span class="small due {due}">{formatDate(task.dueDate)}</span>{/if}
+  {#if task.assignee}<Avatar user={task.assignee} size={20} />{/if}
+</button>
+
+<style>
+  .loc { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
