@@ -8,6 +8,11 @@ TasksPipes is tested with [Vitest](https://vitest.dev) on both sides, at three l
 | Server functional tests | `server/test/functional/*.test.ts` | The whole API on a real database, against the fake Outline of `dev/mock-outline.mjs`: sign-in and servers, tasks and history, incoming buckets, sub-tasks, pipes and archiving, teams and visibility, invitations and requests to connect, TOTP, avatars, models, calendar feed, live updates over WebSocket. | PostgreSQL |
 | Web unit tests | `web/src/**/*.test.ts` | Translations and preferences, dates, history texts, the Next action suggestions, the API client, the version check, and components (checklist, badges, About) with Testing Library. | Nothing (jsdom) |
 
+Translation checks run with the unit tests (`server/src/translations.test.ts`, `web/src/lib/locales/fr.test.ts`): every
+text sent by the server or shown by the app must have its French version, no dictionary entry may be stale,
+placeholders must match, French typography is checked, and every label of the built-in catalog needs its English
+version. Add the translation when you add a text (see [TRANSLATION.md](TRANSLATION.md)).
+
 ## Running the tests
 
 ### Unit tests
