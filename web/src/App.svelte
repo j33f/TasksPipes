@@ -9,6 +9,9 @@
   import Home from "./pages/Home.svelte";
   import SpacePage from "./pages/SpacePage.svelte";
   import PipePage from "./pages/PipePage.svelte";
+  import MyTasks from "./pages/MyTasks.svelte";
+  import Next from "./pages/Next.svelte";
+  import Designer from "./pages/Designer.svelte";
 
   let navOpen = $state(false);
 
@@ -39,6 +42,9 @@
     const p = router.path;
     let m: RegExpMatchArray | null;
     if (p === "/") return { name: "home" } as const;
+    if (p === "/tasks") return { name: "tasks" } as const;
+    if (p === "/next") return { name: "next" } as const;
+    if (p === "/designer") return { name: "designer" } as const;
     if ((m = p.match(/^\/spaces\/([^/]+)$/))) return { name: "space", id: m[1] } as const;
     if ((m = p.match(/^\/pipes\/([^/]+)$/))) return { name: "pipe", id: m[1] } as const;
     return { name: "notfound" } as const;
@@ -60,6 +66,12 @@
       </div>
       {#if route.name === "home"}
         <Home />
+      {:else if route.name === "tasks"}
+        <MyTasks />
+      {:else if route.name === "next"}
+        <Next />
+      {:else if route.name === "designer"}
+        <Designer />
       {:else if route.name === "space"}
         {#key route.id}<SpacePage id={route.id} />{/key}
       {:else if route.name === "pipe"}

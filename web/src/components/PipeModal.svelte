@@ -27,11 +27,13 @@
   const openTasks = $derived(pipe ? openTaskCount(pipe.counts) : 0);
   // A private pipe belongs to its space: personal in a personal space, the team's in a team space.
   const isTeam = $derived(app.spaces.find((s) => s.id === spaceId)?.kind === "team");
-  const groups = $derived([...new Set(app.pipeTypes.map((t) => t.group))]);
+  const choosable = $derived(app.pipeTypes.filter((t) => app.usable(t) || t.id === initial?.kind));
+  const groups = $derived([...new Set(choosable.map((t) => t.group))]);
 
   function chooseKind(id: string) {
     const previous = app.pipeType(kind);
     kind = id;
+    if (app.pipeType(id)?.confidential) visibility = "private";
     // Follow the type's colour unless one was picked by hand.
     if (!color || color === previous?.color) color = app.pipeType(id)?.color ?? color;
   }
@@ -89,11 +91,29 @@
       <select id="pm-kind" class="input" value={kind} onchange={(e) => chooseKind((e.currentTarget as HTMLSelectElement).value)}>
         {#each groups as g (g)}
           <optgroup label={g}>
-            {#each app.pipeTypes.filter((t) => t.group === g) as t (t.id)}<option value={t.id}>{t.label}</option>{/each}
+            {#each choosable.filter((t) => t.group === g) as t (t.id)}
+              <option value={t.id} disabled={t.teamOnly && !isTeam}>{t.label}{t.teamOnly && !isTeam ? " (espace d'équipe uniquement)" : ""}</option>
+            {/each}
           </optgroup>
         {/each}
       </select>
-      {#if type}<div class="hint">{type.description}</div>{/if}
+      {#if !pipe}
+        <div class="hint">Aucun type ne convient ? <a href="/designer" onclick={onclose}>Concevez le vôtre dans Modèles</a>.</div>
+      {/if}
+      {#if type}
+        <div class="hint">{type.description}</div>
+        <div class="preview">
+          <div class="cols">
+            {#each type.columns as c (c.id)}<span class="col"><span class="status-dot" style="background:{c.color}"></span>{c.label}</span>{/each}
+          </div>
+          {#if type.taskTypes.length}
+            <div class="hint">Types de tâches : {type.taskTypes.map((id) => app.taskType(id)?.label ?? id).join(" · ")}</div>
+          {/if}
+        </div>
+        {#if pipe && kind !== pipe.kind}
+          <div class="hint warn">Les tâches seront rangées dans les colonnes du nouveau type selon leur état.</div>
+        {/if}
+      {/if}
       {#if !pipe && type?.templates.length}
         <label class="check">
           <input type="checkbox" bind:checked={withTemplates} />
@@ -129,11 +149,18 @@
             <span>Privé : visible uniquement par vous.</span>
           {/if}
         </button>
-        <button type="button" class="radio-card" class:selected={visibility === "open"} onclick={() => (visibility = "open")}>
+        <button type="button" class="radio-card" class:selected={visibility === "open"} disabled={type?.confidential}
+          onclick={() => (visibility = "open")}>
           <strong><Icon name="globe" size={16} />Open</strong>
           <span>Public : tout le monde le voit et peut y ajouter des tâches.</span>
         </button>
       </div>
+      {#if type?.confidential}
+        <div class="hint"><Icon name="lock" size={12} />
+          {#if type.teamOnly}Données sensibles : visible uniquement par les membres de l'équipe, et ses tâches ne peuvent pas en sortir.
+          {:else}Données personnelles sensibles : ce type de pipe reste privé.{/if}
+        </div>
+      {/if}
     </div>
     {#if error}<div class="error-text">{error}</div>{/if}
     <div class="modal-actions">
@@ -155,6 +182,12 @@
 <style>
   .name-row { gap: 6px; }
   .name-row .input { flex: 1; }
+  .preview { margin-top: 8px; }
+  .cols { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--text-secondary); }
+  .col { display: inline-flex; align-items: center; gap: 4px; }
+  .col .status-dot { width: 8px; height: 8px; }
+  .warn { color: var(--warning, #f08a24); }
+  .radio-card:disabled { opacity: 0.45; cursor: not-allowed; }
   .check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 10px; cursor: pointer; }
   .templates { margin: 6px 0 0; padding-left: 26px; max-height: 160px; overflow-y: auto; font-size: 13px; color: var(--text-tertiary); }
 </style>

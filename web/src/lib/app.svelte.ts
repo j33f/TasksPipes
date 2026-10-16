@@ -1,13 +1,14 @@
 import { api } from "./api";
 import { setParams } from "./router.svelte";
-import type { Me, PipeType, SidebarData, SpaceSummary, User, UserRef } from "./types";
+import type { Column, Me, PipeType, SidebarData, SpaceSummary, Task, TaskType, User, UserRef } from "./types";
 
 class AppState {
   me = $state<Me | null | undefined>(undefined);
   spaces = $state<SpaceSummary[]>([]);
   users = $state<User[]>([]);
   pipeTypes = $state<PipeType[]>([]);
-  sidebar = $state<SidebarData>({ mine: [], pinned: [] });
+  taskTypes = $state<TaskType[]>([]);
+  sidebar = $state<SidebarData>({ mine: [], pinned: [], teams: [] });
   /** Bumped after every mutation so pages reload their data. */
   version = $state(0);
   toastMessage = $state<{ message: string; type: "info" | "error"; id: number } | null>(null);
@@ -32,16 +33,56 @@ class AppState {
 
   async loadShared() {
     if (!this.me) return;
-    const [spaces, users, pipeTypes, sidebar] = await Promise.all([
+    const [spaces, users, catalog, sidebar] = await Promise.all([
       api.get<SpaceSummary[]>("/spaces"),
       api.get<User[]>("/users"),
-      this.pipeTypes.length ? this.pipeTypes : api.get<PipeType[]>("/pipe-types"),
+      this.pipeTypes.length
+        ? { pipeTypes: this.pipeTypes, taskTypes: this.taskTypes }
+        : api.get<{ pipeTypes: PipeType[]; taskTypes: TaskType[] }>("/catalog"),
       api.get<SidebarData>("/sidebar"),
     ]);
     this.spaces = spaces;
     this.users = users;
-    this.pipeTypes = pipeTypes;
+    this.pipeTypes = catalog.pipeTypes;
+    this.taskTypes = catalog.taskTypes;
     this.sidebar = sidebar;
+  }
+
+  /** Whether I may choose a type: built-in, public, or mine. */
+  usable(t: { custom?: true; visibility?: string; createdBy?: { id: string } | null }): boolean {
+    return !t.custom || t.visibility !== "private" || t.createdBy?.id === this.me?.user.id;
+  }
+
+  /** Category of a task type: its own, or that of the first built-in pipe type offering it. */
+  taskTypeGroup(t: TaskType): string {
+    return t.group ?? this.pipeTypes.find((p) => !p.custom && p.taskTypes.includes(t.id))?.group ?? "Général";
+  }
+
+  /** Reloads pipe and task types (after a change in the designer). */
+  async loadCatalog() {
+    const catalog = await api.get<{ pipeTypes: PipeType[]; taskTypes: TaskType[] }>("/catalog");
+    this.pipeTypes = catalog.pipeTypes;
+    this.taskTypes = catalog.taskTypes;
+  }
+
+  /** Board columns of a pipe type. */
+  columnsFor(kind: string | null | undefined): Column[] {
+    return (this.pipeType(kind) ?? this.pipeType("general"))?.columns ?? [];
+  }
+
+  /** The column a task is in, if it sits in a pipe. */
+  columnOf(task: Pick<Task, "stage" | "pipe">): Column | undefined {
+    return task.pipe ? this.columnsFor(task.pipe.kind).find((c) => c.id === task.stage) : undefined;
+  }
+
+  taskType(id: string | null | undefined): TaskType | undefined {
+    return this.taskTypes.find((t) => t.id === id);
+  }
+
+  /** Task types offered in a pipe of this type: the plain task first. */
+  taskTypesFor(kind: string | null | undefined): TaskType[] {
+    const ids = ["task", ...(this.pipeType(kind)?.taskTypes ?? [])];
+    return ids.map((id) => this.taskType(id)).filter((t): t is TaskType => Boolean(t));
   }
 
   isPinned(pipeId: string): boolean {

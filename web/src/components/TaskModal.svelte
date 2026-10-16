@@ -2,18 +2,20 @@
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
   import { STATUSES, dueState, formatDate, formatDateTime, relativeTime } from "../lib/constants";
+  import TaskFields, { type FieldFile } from "./TaskFields.svelte";
   import { eventChanges, eventIcon, eventSummary } from "../lib/events";
-  import type { DocRef, Pipe, Status, TaskDetail, UserRef } from "../lib/types";
+  import type { ChecklistItem, DocRef, Pipe, TaskDetail, UserRef } from "../lib/types";
   import Modal from "./Modal.svelte";
   import Markdown from "./Markdown.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import Avatar from "./Avatar.svelte";
-  import Icon from "./Icon.svelte";
+  import Icon, { iconOf } from "./Icon.svelte";
   import UserSelect from "./UserSelect.svelte";
   import DocPicker from "./DocPicker.svelte";
   import SendDialog from "./SendDialog.svelte";
   import RefuseDialog from "./RefuseDialog.svelte";
   import AcceptDialog from "./AcceptDialog.svelte";
+  import Checklist from "./Checklist.svelte";
 
   let { id, onclose }: { id: string; onclose: () => void } = $props();
 
@@ -70,7 +72,49 @@
   }
 
   const patch = (body: Record<string, unknown>, success?: string) => run(() => api.patch(`/tasks/${id}`, body), success);
-  const move = (pipeId: string, status: Status) => run(() => api.post(`/tasks/${id}/move`, { pipeId, status }));
+  const move = (pipeId: string, stage?: string) => run(() => api.post(`/tasks/${id}/move`, { pipeId, stage }));
+
+  // Sub-tasks: changed in place first so the list reacts at once.
+  const items = {
+    add: (text: string) => run(() => api.post(`/tasks/${id}/items`, { text })),
+    toggle(item: ChecklistItem) {
+      item.done = !item.done;
+      run(() => api.patch(`/items/${item.id}`, { done: item.done }));
+    },
+    rename(item: ChecklistItem, text: string) {
+      item.text = text;
+      run(() => api.patch(`/items/${item.id}`, { text }));
+    },
+    remove(item: ChecklistItem) {
+      task!.items = task!.items.filter((i) => i !== item);
+      run(() => api.del(`/items/${item.id}`));
+    },
+    move(item: ChecklistItem, position: number) {
+      item.position = position;
+      task!.items = [...task!.items].sort((a, b) => a.position - b.position);
+      run(() => api.patch(`/items/${item.id}`, { position }));
+    },
+  };
+
+  const saveField = (fieldId: string, value: unknown) => patch({ fields: { [fieldId]: value } });
+
+  async function uploadFiles(field: string, files: File[]) {
+    await run(async () => {
+      for (const file of files) await api.upload(`/tasks/${id}/files?field=${encodeURIComponent(field)}`, file);
+    }, files.length > 1 ? `${files.length} fichiers ajoutés` : "Fichier ajouté");
+  }
+
+  function deleteFile(file: FieldFile) {
+    if (file.id && confirm(`Retirer « ${file.name} » ?`)) run(() => api.del(`/files/${file.id}`), "Fichier retiré");
+  }
+
+  const taskType = $derived(app.taskType(task?.taskType));
+  // Types offered: those of the pipe type, plus the current one if it comes from elsewhere.
+  const typeChoices = $derived.by(() => {
+    if (!task) return [];
+    const list = app.taskTypesFor(task.pipe?.kind);
+    return taskType && !list.some((t) => t.id === taskType.id) ? [...list, taskType] : list;
+  });
 
   function saveTitle() {
     if (task && title.trim() && title !== task.title) patch({ title });
@@ -175,6 +219,22 @@
 
         {#if error}<div class="error-text">{error}</div>{/if}
 
+        {#if task.items.length || perms?.editContent}
+          <div class="infos">
+            <div class="section-title"><Icon name="checklist" />Sous-tâches</div>
+            <Checklist items={task.items} editable={Boolean(perms?.editContent)}
+              onadd={items.add} ontoggle={items.toggle} onrename={items.rename} ondelete={items.remove} onmove={items.move} />
+          </div>
+        {/if}
+
+        {#if taskType?.fields.length}
+          <div class="infos">
+            <div class="section-title"><Icon name={iconOf(taskType.icon)} />{taskType.label}</div>
+            <TaskFields type={taskType} values={task.fields} files={task.files} editable={Boolean(perms?.editContent)}
+              onchange={saveField} onupload={uploadFiles} ondeletefile={deleteFile} />
+          </div>
+        {/if}
+
         <div class="timeline">
           <div class="section-title"><Icon name="history" />Historique</div>
           {#each task.events as e (e.id)}
@@ -214,7 +274,7 @@
       </section>
 
       <aside class="task-side">
-        {#if perms?.manage}
+        {#if perms?.manage && !app.pipeType(task.pipe?.kind)?.teamOnly}
           <div class="row wrap" style="margin-bottom:20px">
             <button class="btn neutral small" onclick={() => (dialog = "send")}><Icon name="send" size={16} />Envoyer à…</button>
           </div>
@@ -223,12 +283,14 @@
         <div class="prop">
           <span class="label-text">État</span>
           {#if perms?.manage && task.pipe}
-            <select class="input" value={task.status} disabled={busy}
-              onchange={(e) => move(task!.pipe!.id, (e.currentTarget as HTMLSelectElement).value as Status)}>
-              {#each STATUSES as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
+            <select class="input" value={task.stage} disabled={busy}
+              onchange={(e) => move(task!.pipe!.id, (e.currentTarget as HTMLSelectElement).value)}>
+              {#each app.columnsFor(task.pipe.kind) as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
             </select>
           {:else}
-            <div class="value">{task.inIncoming ? "En attente (incoming)" : STATUSES.find((s) => s.id === task!.status)?.label}</div>
+            <div class="value">
+              {task.inIncoming ? "En attente (incoming)" : app.columnOf(task)?.label ?? STATUSES.find((s) => s.id === task!.status)?.label}
+            </div>
           {/if}
         </div>
 
@@ -236,11 +298,23 @@
           <div class="prop">
             <span class="label-text">Pipe</span>
             <select class="input" value={task.pipe.id} disabled={busy}
-              onchange={(e) => move((e.currentTarget as HTMLSelectElement).value, task!.status)}>
+              onchange={(e) => move((e.currentTarget as HTMLSelectElement).value)}>
               {#each pipes.filter((p) => !p.archived || p.id === task!.pipe!.id) as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
             </select>
           </div>
         {/if}
+
+        <div class="prop">
+          <span class="label-text">Type de tâche</span>
+          {#if perms?.editContent && typeChoices.length > 1}
+            <select class="input" value={task.taskType} disabled={busy}
+              onchange={(e) => patch({ taskType: (e.currentTarget as HTMLSelectElement).value })}>
+              {#each typeChoices as t (t.id)}<option value={t.id}>{t.label}</option>{/each}
+            </select>
+          {:else}
+            <div class="value"><Icon name={iconOf(taskType?.icon)} size={16} />{taskType?.label ?? task.taskType}</div>
+          {/if}
+        </div>
 
         <div class="prop">
           <span class="label-text">Propriétaire</span>
@@ -329,6 +403,7 @@
   .prop .value { font-size: 14px; display: flex; align-items: center; gap: 6px; min-height: 28px; }
   .prop .input { min-height: 32px; padding: 4px 8px; font-size: 14px; }
   .timeline { margin-top: 32px; }
+  .infos { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--divider); }
   .event { display: flex; gap: 10px; padding: 8px 0; font-size: 14px; }
   .e-body { flex: 1; min-width: 0; }
   .e-head { color: var(--text-secondary); }

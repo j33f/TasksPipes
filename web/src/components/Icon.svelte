@@ -44,10 +44,16 @@
     mail: "M4 6h16v12H4zM4 7l8 6 8-6",
     chart: "M4 20h16M7 16v-5M12 16V7M17 16v-8",
     archive: "M4 5h16v4H4zM5.5 9v10h13V9M10 13h4",
+    checklist: "M10 6.5h10M10 12h10M10 17.5h10M3.5 6.5l1.5 1.5 2.5-2.5M3.5 12l1.5 1.5L7.5 11M3.5 17.5 5 19l2.5-2.5",
+    play: "M8 5.5v13l10.5-6.5z",
+    grip: "M9.5 6.5h.01M9.5 12h.01M9.5 17.5h.01M14.5 6.5h.01M14.5 12h.01M14.5 17.5h.01",
+    skip: "M6 6l7 6-7 6zM17 6v12",
     history: "M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4M12 8v4l3 2",
   } as const;
   export type IconName = keyof typeof PATHS;
   export const isIconName = (v: string): v is IconName => v in PATHS;
+  /** A catalog icon name (task type…), with a fallback. */
+  export const iconOf = (v: string | null | undefined, fallback: IconName = "check"): IconName => (v && isIconName(v) ? v : fallback);
 </script>
 
 <script lang="ts">

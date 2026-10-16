@@ -2,14 +2,18 @@
   import { untrack } from "svelte";
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
-  import { STATUSES } from "../lib/constants";
-  import type { Pipe, Status, Task } from "../lib/types";
+  import type { Pipe, Task } from "../lib/types";
   import Modal from "./Modal.svelte";
 
   let { task, pipes, onclose, ondone }: { task: Task; pipes: Pipe[]; onclose: () => void; ondone?: () => void } = $props();
 
   let pipeId = $state<string | null>(untrack(() => pipes[0]?.id ?? null));
-  let status = $state<Status>("backlog");
+  // Column of the chosen pipe; reset to its first column when the pipe changes.
+  const columns = $derived(app.columnsFor(pipes.find((p) => p.id === pipeId)?.kind));
+  let stage = $state<string | null>(null);
+  $effect(() => {
+    stage = columns[0]?.id ?? null;
+  });
   let comment = $state("");
   let busy = $state(false);
   let error = $state("");
@@ -18,7 +22,7 @@
     e.preventDefault();
     busy = true;
     try {
-      await api.post(`/tasks/${task.id}/move`, { pipeId, status, comment });
+      await api.post(`/tasks/${task.id}/move`, { pipeId, stage, comment });
       app.toast("Tâche acceptée");
       app.refresh();
       ondone?.();
@@ -44,9 +48,9 @@
         </select>
       </div>
       <div class="field">
-        <label for="acc-status">État</label>
-        <select id="acc-status" class="input" bind:value={status}>
-          {#each STATUSES as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
+        <label for="acc-status">Colonne</label>
+        <select id="acc-status" class="input" bind:value={stage}>
+          {#each columns as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
         </select>
       </div>
       <div class="field">

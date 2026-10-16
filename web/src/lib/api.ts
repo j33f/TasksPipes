@@ -22,7 +22,27 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return json as T;
 }
 
+/** Sends one file as the raw request body. */
+async function upload<T>(path: string, file: File): Promise<T> {
+  const res = await fetch(`/api${path}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "X-File-Name": encodeURIComponent(file.name),
+      "X-File-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, json.error || (res.status === 413 ? "Fichier trop volumineux" : `Erreur ${res.status}`));
+  return json as T;
+}
+
+export const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
 export const api = {
+  upload,
   get: <T = unknown>(p: string) => request<T>("GET", `/api${p}`),
   post: <T = unknown>(p: string, b: unknown = {}) => request<T>("POST", `/api${p}`, b),
   patch: <T = unknown>(p: string, b: unknown = {}) => request<T>("PATCH", `/api${p}`, b),

@@ -10,6 +10,33 @@ export const STATUSES: { id: Status; label: string; color: string }[] = [
   { id: "abandoned", label: "Abandonné", color: "#a2b2c3" },
 ];
 
+export const FIELD_TYPE_LABELS: Record<import("./types").FieldType, string> = {
+  text: "Texte court",
+  textarea: "Texte long",
+  number: "Nombre",
+  money: "Montant (€)",
+  date: "Date",
+  url: "Lien",
+  email: "E-mail",
+  phone: "Téléphone",
+  select: "Liste de choix",
+  multiselect: "Choix multiples",
+  checkbox: "Case à cocher",
+  user: "Personne",
+  rncp: "Titre RNCP / RS",
+  docs: "Documents Outline",
+  files: "Fichiers",
+};
+
+/** Moves an item of a list one step up (-1) or down (+1). */
+export function moved<T>(list: T[], index: number, delta: -1 | 1): T[] {
+  const to = index + delta;
+  if (to < 0 || to >= list.length) return list;
+  const next = [...list];
+  [next[index], next[to]] = [next[to], next[index]];
+  return next;
+}
+
 /** Tasks still to be dealt with, i.e. neither done nor abandoned. */
 export const openTaskCount = (counts: Partial<Record<Status, number>>) =>
   Object.entries(counts).reduce((n, [s, c]) => (s === "done" || s === "abandoned" ? n : n + (c ?? 0)), 0);
@@ -60,7 +87,7 @@ export function relativeTime(iso: string): string {
   return formatDate(iso);
 }
 
-const localDay = (offsetDays = 0) => {
+export const localDay = (offsetDays = 0) => {
   const d = new Date(Date.now() + offsetDays * 86400000);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };

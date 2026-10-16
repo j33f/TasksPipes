@@ -50,7 +50,12 @@
     {/if}
 
     <div class="section">
-      <div class="section-title"><Icon name="user" />Mes tâches</div>
+      <div class="section-title">
+        <Icon name="checklist" />Mes tâches
+        <span class="spacer"></span>
+        <a class="btn ghost small" href="/next"><Icon name="target" size={16} />Prochaine action</a>
+        <a class="btn ghost small" href="/tasks">Tout voir</a>
+      </div>
       {#if data.assigned.length}
         <div class="list">{#each data.assigned as t (t.id)}<TaskRow task={t} />{/each}</div>
       {:else}

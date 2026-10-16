@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { app } from "../lib/app.svelte";
   import { STATUS_BY_ID } from "../lib/constants";
-  import type { Status } from "../lib/types";
+  import type { Task } from "../lib/types";
 
-  let { status }: { status: Status } = $props();
-  const s = $derived(STATUS_BY_ID[status]);
+  /** The task's board column, or its generic status outside a known column. */
+  let { task }: { task: Pick<Task, "status" | "stage" | "pipe"> } = $props();
+  const s = $derived(app.columnOf(task) ?? STATUS_BY_ID[task.status]);
 </script>
 
 <span class="badge"><span class="status-dot" style="background:{s.color}"></span>{s.label}</span>

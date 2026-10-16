@@ -13,16 +13,37 @@ connexion via l'API Outline, documents Outline liés aux tâches, interface repr
   avec glisser-déposer.
   - **Perso** / **Équipe** (privé) : visible uniquement par la personne (espace personnel) ou par les membres de l'équipe.
   - **Open** (public) : visible par tout le monde ; chacun·e peut y ajouter des tâches et commenter, seul·es les membres de l'espace les font avancer.
-  - Chaque espace personnel a toujours un pipe **« Mes tâches »** (tâches générales), qui ne s'archive ni ne se supprime.
-  - **Archivage** : un pipe archivé disparaît des listes, des sélecteurs et de « Mes tâches » sur l'accueil, et n'accepte plus
+  - Chaque espace personnel a toujours un pipe **« Perso »** (tâches générales), qui ne s'archive ni ne se supprime.
+  - **Archivage** : un pipe archivé disparaît des listes, des sélecteurs et de « Mes tâches », et n'accepte plus
     de nouvelles tâches ; il reste consultable (« Voir les pipes archivés ») et peut être désarchivé.
   - **Types** pensés pour un centre de formation pour adultes (`server/src/pipeTypes.ts`) : tâches générales, commercial,
     prospection, communication, ingénierie pédagogique, documentation, formateurs & planning, suivi des apprenants,
     qualité & Qualiopi, administratif & financier, et des **processus** (recrutement / admission, rentrée,
     examen / certification, fin de session) qui peuvent pré-remplir le backlog avec leurs tâches type.
+    Chaque type a **ses colonnes** (ex. commercial : Demande › Qualification › Devis envoyé › Négociation ›
+    En attente de financement › Gagné / Perdu) ; chaque colonne correspond à un état générique, utilisé par l'accueil,
+    les échéances et l'archivage.
+- **Types de tâches** propres à chaque type de pipe (création de cours, opportunité, candidature, indicateur Qualiopi,
+  facture…), avec leurs champs : texte, montant, liste, date, titre RNCP / RS (lien France Compétences),
+  documents Outline, et **fichiers** (syllabus, supports, QCM, TP, TD…, 50 Mo max par fichier, stockés en base).
 - **Propriétaire** : une tâche d'un espace personnel appartient à sa ou son titulaire, sans assignation possible ;
   pour la confier à quelqu'un, on l'envoie dans son incoming. Seules les tâches d'un espace d'équipe ont un
   propriétaire choisi parmi les membres de l'équipe, y compris au moment de les envoyer à l'équipe.
+- **Sous-tâches** : chaque tâche peut contenir une liste de cases à cocher (ajout à la volée, coller plusieurs lignes en crée
+  plusieurs, renommage, réordonnancement par glisser-déposer) ; l'avancement (3/5) s'affiche sur les cartes et les cases cochées
+  sont historisées.
+- **Mes tâches** : tout ce qui m'est attribué et reste à faire, tous pipes confondus, regroupé par état (en cours, bloquées,
+  prêtes, à venir) ou par pipe.
+- **Prochaine action** (GTD) : capture rapide dans « Perso », rappel des tâches en cours (cocher la sous-tâche suivante,
+  terminer), et suggestion de la prochaine tâche à démarrer — en retard ou à échéance proche d'abord, puis prête, déjà
+  entamée ou en attente depuis longtemps — avec « Démarrer » ou « Autre suggestion ». Au-delà de 3 tâches en cours, l'outil
+  invite à en terminer une d'abord.
+- **Modèles** (designer) : chacun peut concevoir ses types de pipes (colonnes et leur état, types de tâches proposés,
+  confidentialité, tâches de départ) et ses types de tâches (champs, avec aperçu), à partir de zéro ou d'un modèle existant.
+  Un modèle naît privé (visible et utilisable par son auteur·rice seulement), peut devenir public, et se range dans une
+  catégorie. Seul·e l'auteur·rice le modifie ; un type utilisé ne se supprime pas, et le type d'un champ enregistré ne change plus.
+- **Menu** : « Moi » (tableau de bord, mes tâches, prochaine action, incoming, mes pipes), épinglés, mes équipes et leurs
+  pipes, autres équipes et personnes (repliées), modèles.
 - **Incoming bucket** pour chaque personne et chaque équipe : il reçoit les tâches envoyées par d'autres.
   Un membre peut les **accepter** (choix du pipe et de l'état) ou les **refuser en donnant une raison** : la tâche
   revient alors dans l'incoming de la personne qui l'a envoyée.

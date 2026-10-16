@@ -23,13 +23,20 @@
   const personalId = $derived(app.me?.personalSpaceId);
   const myIncoming = $derived(app.personalSpace?.incomingCount ?? 0);
 
-  // "Mes pipes" unfolds like an Outline collection; remembered per browser.
-  const read = () => { try { return localStorage.getItem("tp:myPipesOpen") === "1"; } catch { return false; } };
-  let myPipesOpen = $state(read());
-  function toggleMyPipes() {
-    myPipesOpen = !myPipesOpen;
-    try { localStorage.setItem("tp:myPipesOpen", myPipesOpen ? "1" : "0"); } catch { /* storage unavailable */ }
+  // Foldable entries ("Mes pipes", each team, "Personnes"…), like Outline collections; remembered per browser.
+  const legacyMyPipes = () => { try { return localStorage.getItem("tp:myPipesOpen") === "1"; } catch { return false; } };
+  const DEFAULT_OPEN: Record<string, boolean> = { myPipes: legacyMyPipes(), people: false, otherTeams: false };
+  const readFolds = (): Record<string, boolean> => {
+    try { return JSON.parse(localStorage.getItem("tp:folds") || "{}"); } catch { return {}; }
+  };
+  let folds = $state(readFolds());
+  // Teams are unfolded unless folded by hand; a filter unfolds everything.
+  const isOpen = (key: string) => Boolean(filter.trim()) || (folds[key] ?? DEFAULT_OPEN[key] ?? key.startsWith("team:"));
+  function toggle(key: string) {
+    folds = { ...folds, [key]: !isOpen(key) };
+    try { localStorage.setItem("tp:folds", JSON.stringify(folds)); } catch { /* storage unavailable */ }
   }
+  const teamPipes = (spaceId: string) => app.sidebar.teams.filter((p) => p.spaceId === spaceId);
 
   // Hover actions of a pipe: "+" adds a task, "…" opens its menu.
   let menu = $state<{ pipe: SidebarPipe; style: string } | null>(null);
@@ -96,28 +103,36 @@
   </div>
 
   <div class="sidebar-scroll">
-    <a class="sidebar-link" class:active={router.path === "/"} href="/">
-      <Icon name="home" /><span class="label">Accueil</span>
-    </a>
-    <a class="sidebar-link" class:active={isActive(`/spaces/${personalId}?tab=incoming`)} href={`/spaces/${personalId}?tab=incoming`}>
-      <Icon name="inbox" /><span class="label">Mon incoming</span>
-      {#if myIncoming}<span class="count">{myIncoming}</span>{/if}
-    </a>
-    <div class="sidebar-link has-disclosure hover-actions" class:active={isActive(`/spaces/${personalId}`)}>
-      <button class="disclosure" class:open={myPipesOpen} aria-expanded={myPipesOpen}
-        title={myPipesOpen ? "Replier" : "Déplier"} onclick={toggleMyPipes}><Icon name="chevron" size={14} /></button>
-      <a class="row-link" href={`/spaces/${personalId}`}>
-        <Icon name="pipe" /><span class="label">Mes pipes</span>
+    <div class="sidebar-section first">
+      <div class="sidebar-section-title"><span>Moi</span></div>
+      <a class="sidebar-link" class:active={router.path === "/"} href="/">
+        <Icon name="home" /><span class="label">Mon tableau de bord</span>
       </a>
-      <span class="actions">
-        <a class="act" title="Nouveau pipe" href={`/spaces/${personalId}?newPipe=1`}><Icon name="plus" size={16} /></a>
-      </span>
+      <a class="sidebar-link" class:active={router.path === "/tasks"} href="/tasks">
+        <Icon name="checklist" /><span class="label">Mes tâches</span>
+      </a>
+      <a class="sidebar-link" class:active={router.path === "/next"} href="/next">
+        <Icon name="target" /><span class="label">Prochaine action</span>
+      </a>
+      <a class="sidebar-link" class:active={isActive(`/spaces/${personalId}?tab=incoming`)} href={`/spaces/${personalId}?tab=incoming`}>
+        <Icon name="inbox" /><span class="label">Incoming</span>
+        {#if myIncoming}<span class="count">{myIncoming}</span>{/if}
+      </a>
+      <div class="sidebar-link has-disclosure hover-actions" class:active={isActive(`/spaces/${personalId}`)}>
+        {@render disclosure("myPipes")}
+        <a class="row-link" href={`/spaces/${personalId}`}>
+          <Icon name="pipe" /><span class="label">Mes pipes</span>
+        </a>
+        <span class="actions">
+          <a class="act" title="Nouveau pipe" href={`/spaces/${personalId}?newPipe=1`}><Icon name="plus" size={16} /></a>
+        </span>
+      </div>
+      {#if isOpen("myPipes")}
+        {#each app.sidebar.mine as p (p.id)}
+          {@render pipeLink(p, null, true)}
+        {/each}
+      {/if}
     </div>
-    {#if myPipesOpen}
-      {#each app.sidebar.mine as p (p.id)}
-        {@render pipeLink(p, null, true)}
-      {/each}
-    {/if}
 
     {#if app.sidebar.pinned.length}
       <div class="sidebar-section">
@@ -129,7 +144,7 @@
     {/if}
 
     <div class="sidebar-search">
-      <input class="input" placeholder="Filtrer les espaces…" bind:value={filter} />
+      <input class="input" placeholder="Filtrer les équipes et personnes…" bind:value={filter} />
     </div>
 
     <div class="sidebar-section">
@@ -140,10 +155,20 @@
         </button>
       </div>
       {#each app.myTeams.filter((s) => matches(s.name)) as s (s.id)}
-        <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} href={`/spaces/${s.id}`}>
-          <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
-          {#if s.incomingCount}<span class="count">{s.incomingCount}</span>{/if}
-        </a>
+        {@const pipes = teamPipes(s.id)}
+        <div class="sidebar-link has-disclosure hover-actions" class:active={router.path === `/spaces/${s.id}`}>
+          {#if pipes.length}{@render disclosure(`team:${s.id}`)}{:else}<span class="disclosure-space"></span>{/if}
+          <a class="row-link" href={`/spaces/${s.id}`}>
+            <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
+            {#if s.incomingCount}<span class="count" title="En attente dans l'incoming">{s.incomingCount}</span>{/if}
+          </a>
+          <span class="actions">
+            <a class="act" title="Nouveau pipe" href={`/spaces/${s.id}?newPipe=1`}><Icon name="plus" size={16} /></a>
+          </span>
+        </div>
+        {#if isOpen(`team:${s.id}`)}
+          {#each pipes as p (p.id)}{@render pipeLink(p, null, true)}{/each}
+        {/if}
       {:else}
         <button class="sidebar-link muted" onclick={() => (showNewTeam = true)}>
           <Icon name="plus" /><span class="label">Créer une équipe</span>
@@ -152,25 +177,39 @@
     </div>
 
     {#if app.otherTeams.length}
+      {@const others = app.otherTeams.filter((s) => matches(s.name))}
       <div class="sidebar-section">
-        <div class="sidebar-section-title"><span>Autres équipes</span></div>
-        {#each app.otherTeams.filter((s) => matches(s.name)) as s (s.id)}
-          <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} href={`/spaces/${s.id}`}>
-            <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
-          </a>
-        {/each}
+        {@render foldTitle("otherTeams", "Autres équipes", others.length)}
+        {#if isOpen("otherTeams")}
+          {#each others as s (s.id)}
+            <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} href={`/spaces/${s.id}`}>
+              <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
+            </a>
+          {/each}
+        {/if}
+      </div>
+    {/if}
+
+    {#if app.people.length}
+      {@const people = app.people.filter((s) => matches(s.name))}
+      <div class="sidebar-section">
+        {@render foldTitle("people", "Personnes", people.length)}
+        {#if isOpen("people")}
+          {#each people as s (s.id)}
+            <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}
+              href={`/spaces/${s.id}`} title={s.active ? s.name : `${s.name} (ne s'est pas encore connecté·e)`}>
+              <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
+              {#if s.pipeCount}<span class="count neutral">{s.pipeCount}</span>{/if}
+            </a>
+          {/each}
+        {/if}
       </div>
     {/if}
 
     <div class="sidebar-section">
-      <div class="sidebar-section-title"><span>Personnes</span></div>
-      {#each app.people.filter((s) => matches(s.name)) as s (s.id)}
-        <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}
-          href={`/spaces/${s.id}`} title={s.active ? s.name : `${s.name} (ne s'est pas encore connecté·e)`}>
-          <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
-          {#if s.pipeCount}<span class="count neutral">{s.pipeCount}</span>{/if}
-        </a>
-      {/each}
+      <a class="sidebar-link" class:active={router.path === "/designer"} href="/designer">
+        <Icon name="clipboard" /><span class="label">Modèles</span>
+      </a>
     </div>
   </div>
 
@@ -184,6 +223,19 @@
     </div>
   </div>
 </nav>
+
+{#snippet disclosure(key: string)}
+  <button class="disclosure" class:open={isOpen(key)} aria-expanded={isOpen(key)}
+    title={isOpen(key) ? "Replier" : "Déplier"} onclick={() => toggle(key)}><Icon name="chevron" size={14} /></button>
+{/snippet}
+
+{#snippet foldTitle(key: string, label: string, count: number)}
+  <button class="sidebar-section-title fold" aria-expanded={isOpen(key)} onclick={() => toggle(key)}>
+    <span class="disclosure" class:open={isOpen(key)}><Icon name="chevron" size={12} /></span>
+    <span class="grow">{label}</span>
+    {#if !isOpen(key)}<span class="fold-count">{count}</span>{/if}
+  </button>
+{/snippet}
 
 {#snippet pipeLink(p: SidebarPipe, spaceName: string | null, nested: boolean)}
   {#if renamingId === p.id}
@@ -236,7 +288,7 @@
 {/if}
 
 {#if newTaskPipe}
-  <NewTaskModal pipe={{ id: newTaskPipe.id, name: newTaskPipe.name, spaceId: newTaskPipe.spaceId }} onclose={() => (newTaskPipe = null)} />
+  <NewTaskModal pipe={{ id: newTaskPipe.id, name: newTaskPipe.name, spaceId: newTaskPipe.spaceId, kind: newTaskPipe.kind }} onclose={() => (newTaskPipe = null)} />
 {/if}
 {#if editing}<PipeModal spaceId={editing.spaceId} pipe={editing} onclose={() => (editing = null)} />{/if}
 
@@ -252,6 +304,13 @@
   .sidebar-header { display: flex; align-items: center; gap: 8px; padding: 16px 16px 8px; font-weight: 600; color: var(--text); font-size: 16px; }
   .sidebar-scroll { flex: 1; overflow-y: auto; padding: 4px 8px 16px; }
   .sidebar-section { margin-top: 16px; }
+  .sidebar-section.first { margin-top: 0; }
+  .fold { width: 100%; border: 0; background: none; font: inherit; font-size: 13px; cursor: pointer; padding-left: 0; justify-content: flex-start; gap: 0; border-radius: var(--radius); }
+  .fold:hover { color: var(--text); }
+  .fold .disclosure { width: 20px; height: 20px; margin-right: 0; }
+  .fold .grow { flex: 1; text-align: left; }
+  .fold-count { font-size: 12px; padding-right: 8px; }
+  .disclosure-space { width: 22px; flex-shrink: 0; }
   .sidebar-section-title {
     display: flex; align-items: center; justify-content: space-between; min-height: 26px;
     font-size: 13px; font-weight: 500; color: var(--text-tertiary); padding: 0 0 0 8px;

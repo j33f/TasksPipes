@@ -1,6 +1,7 @@
 import pg from "pg";
 import type { FastifyBaseLogger } from "fastify";
 import { config } from "./config.js";
+import { STATUSES, allPipeTypes, resolveStage, setCustomTypes, type PipeType, type TaskType } from "./pipeTypes.js";
 
 // Return DATE columns as plain "YYYY-MM-DD" strings and bigint counts as numbers.
 pg.types.setTypeParser(1082, (v: string) => v);
@@ -41,6 +42,18 @@ export async function tx<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<
 const SCHEMA = `
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- UUIDv7 (RFC 9562): 48-bit Unix time in milliseconds, then random bits; ids sort by creation time.
+-- PostgreSQL 17 has no built-in generator (uuidv7() comes with PostgreSQL 18).
+CREATE OR REPLACE FUNCTION gen_uuidv7() RETURNS uuid AS $$
+  SELECT encode(
+    set_bit(set_bit(
+      overlay(uuid_send(gen_random_uuid())
+        PLACING substring(int8send(floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint) FROM 3)
+        FROM 1 FOR 6),
+      52, 1), 53, 1),
+    'hex')::uuid
+$$ LANGUAGE sql VOLATILE;
+
 CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY,
   name text NOT NULL,
@@ -52,7 +65,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS spaces (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
   kind text NOT NULL CHECK (kind IN ('user', 'team')),
   user_id uuid UNIQUE REFERENCES users(id) ON DELETE CASCADE,
   name text,
@@ -74,7 +87,7 @@ CREATE TABLE IF NOT EXISTS space_members (
 CREATE INDEX IF NOT EXISTS space_members_user_idx ON space_members(user_id);
 
 CREATE TABLE IF NOT EXISTS pipes (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
   space_id uuid NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
   name text NOT NULL,
   description text NOT NULL DEFAULT '',
@@ -88,7 +101,7 @@ CREATE TABLE IF NOT EXISTS pipes (
 CREATE INDEX IF NOT EXISTS pipes_space_idx ON pipes(space_id);
 
 CREATE TABLE IF NOT EXISTS tasks (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
   number serial,
   title text NOT NULL,
   description text NOT NULL DEFAULT '',
@@ -154,6 +167,63 @@ CREATE TABLE IF NOT EXISTS pipe_pins (
   PRIMARY KEY (user_id, pipe_id)
 );
 
+-- Board column of a task, specific to the type of its pipe (NULL in an incoming bucket);
+-- its generic status stays in tasks.status. Task type and its field values.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS stage text;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_type text NOT NULL DEFAULT 'task';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS fields jsonb NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS tasks_pipe_stage_idx ON tasks(pipe_id, stage);
+
+-- History: column labels at the time of the event, and details (fields, files…).
+ALTER TABLE task_events ADD COLUMN IF NOT EXISTS from_stage text;
+ALTER TABLE task_events ADD COLUMN IF NOT EXISTS to_stage text;
+ALTER TABLE task_events ADD COLUMN IF NOT EXISTS details jsonb;
+
+-- Files attached to the "files" fields of a task, stored in the database.
+CREATE TABLE IF NOT EXISTS task_files (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  field text NOT NULL,
+  name text NOT NULL,
+  mime text NOT NULL,
+  size integer NOT NULL,
+  content bytea NOT NULL,
+  uploaded_by uuid NOT NULL REFERENCES users(id),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS task_files_task_idx ON task_files(task_id);
+
+-- Sub-tasks: a checklist inside a task.
+CREATE TABLE IF NOT EXISTS task_items (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  text text NOT NULL,
+  done boolean NOT NULL DEFAULT false,
+  position double precision NOT NULL DEFAULT 0,
+  done_by uuid REFERENCES users(id),
+  done_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS task_items_task_idx ON task_items(task_id, position);
+
+-- Pipe and task types made with the designer; their definition follows PipeType / TaskType.
+CREATE TABLE IF NOT EXISTS custom_types (
+  id text PRIMARY KEY,
+  kind text NOT NULL CHECK (kind IN ('pipe', 'task')),
+  definition jsonb NOT NULL,
+  created_by uuid REFERENCES users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- The default personal pipe used to be called "Mes tâches".
+UPDATE pipes SET name = 'Perso' WHERE is_default AND name = 'Mes tâches';
+
+-- Databases created before UUIDv7: new rows get v7 ids too.
+ALTER TABLE spaces ALTER COLUMN id SET DEFAULT gen_uuidv7();
+ALTER TABLE pipes ALTER COLUMN id SET DEFAULT gen_uuidv7();
+ALTER TABLE tasks ALTER COLUMN id SET DEFAULT gen_uuidv7();
+
 -- Tasks in a personal space belong to that person: no explicit assignee there.
 UPDATE tasks t SET assignee_id = NULL FROM spaces s
 WHERE s.id = t.space_id AND s.kind = 'user' AND t.assignee_id IS NOT NULL;
@@ -163,18 +233,64 @@ WHERE s.id = t.space_id AND s.kind = 'user' AND t.assignee_id IS NOT NULL;
 export async function ensureDefaultPipes(db: Queryable = pool, spaceId: string | null = null) {
   await db.query(
     `INSERT INTO pipes (space_id, name, kind, is_default, created_by, position)
-     SELECT s.id, 'Mes tâches', 'general', true, s.user_id, 0 FROM spaces s
+     SELECT s.id, 'Perso', 'general', true, s.user_id, 0 FROM spaces s
      WHERE s.kind = 'user' AND ($1::uuid IS NULL OR s.id = $1)
        AND NOT EXISTS (SELECT 1 FROM pipes p WHERE p.space_id = s.id AND p.is_default)`,
     [spaceId]
   );
 }
 
+/** Loads the types made with the designer into the catalog. */
+export async function loadCustomTypes() {
+  const { rows } = await pool.query(
+    `SELECT c.*, u.name AS created_by_name FROM custom_types c LEFT JOIN users u ON u.id = c.created_by ORDER BY c.created_at`
+  );
+  const meta = (r: Row) => ({
+    custom: true as const,
+    // Types made before visibility existed stay public.
+    visibility: r.definition.visibility === "private" ? ("private" as const) : ("public" as const),
+    createdBy: r.created_by ? { id: r.created_by, name: r.created_by_name } : null,
+    updatedAt: r.updated_at,
+  });
+  setCustomTypes(
+    rows.filter((r) => r.kind === "pipe").map((r) => ({ ...r.definition, id: r.id, ...meta(r) }) as PipeType),
+    rows.filter((r) => r.kind === "task").map((r) => ({ ...r.definition, id: r.id, ...meta(r) }) as TaskType)
+  );
+}
+
+/**
+ * Keeps tasks consistent with the columns of their pipe type (all types, or only `kind`):
+ * a task in an existing column takes its status; a task without a column, or in a column that
+ * no longer exists, goes to the column matching its status (or the nearest one).
+ */
+export async function syncStages(kind?: string) {
+  for (const type of allPipeTypes().filter((t) => !kind || t.id === kind)) {
+    for (const c of type.columns) {
+      await pool.query(
+        `UPDATE tasks t SET status = $3 FROM pipes p
+         WHERE p.id = t.pipe_id AND p.kind = $1 AND t.stage = $2 AND t.status <> $3`,
+        [type.id, c.id, c.status]
+      );
+    }
+    const ids = type.columns.map((c) => c.id);
+    for (const status of STATUSES) {
+      const c = resolveStage(type.id, null, status);
+      await pool.query(
+        `UPDATE tasks t SET stage = $3, status = $4 FROM pipes p
+         WHERE p.id = t.pipe_id AND p.kind = $1 AND t.status = $2 AND (t.stage IS NULL OR NOT (t.stage = ANY($5)))`,
+        [type.id, status, c.id, c.status, ids]
+      );
+    }
+  }
+}
+
 export async function migrate(log: FastifyBaseLogger) {
   for (let attempt = 1; ; attempt++) {
     try {
       await pool.query(SCHEMA);
+      await loadCustomTypes();
       await ensureDefaultPipes();
+      await syncStages();
       log.info("Database schema up to date");
       return;
     } catch (err) {

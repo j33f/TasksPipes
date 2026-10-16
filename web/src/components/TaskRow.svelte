@@ -4,16 +4,20 @@
   import type { Task } from "../lib/types";
   import Avatar from "./Avatar.svelte";
   import StatusBadge from "./StatusBadge.svelte";
+  import Icon from "./Icon.svelte";
 
   let { task, showLocation = true }: { task: Task; showLocation?: boolean } = $props();
   const due = $derived(dueState(task.dueDate, task.status));
 </script>
 
 <button class="list-item" onclick={() => app.openTask(task.id)}>
-  {#if task.inIncoming}<span class="badge">Incoming</span>{:else}<StatusBadge status={task.status} />{/if}
+  {#if task.inIncoming}<span class="badge">Incoming</span>{:else}<StatusBadge {task} />{/if}
   <span class="title">{task.title}</span>
   {#if showLocation}
     <span class="muted small loc">{task.space.name}{task.pipe ? ` › ${task.pipe.name}` : ""}</span>
+  {/if}
+  {#if task.checklist.total}
+    <span class="small muted row" style="gap:3px" title="Sous-tâches"><Icon name="checklist" size={14} />{task.checklist.done}/{task.checklist.total}</span>
   {/if}
   {#if task.dueDate}<span class="small due {due}">{formatDate(task.dueDate)}</span>{/if}
   {#if task.assignee}<Avatar user={task.assignee} size={20} />{/if}

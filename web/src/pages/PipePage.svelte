@@ -1,8 +1,8 @@
 <script lang="ts">
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
-  import { STATUSES, openTaskCount } from "../lib/constants";
-  import type { PipeDetail, Status, Task } from "../lib/types";
+  import { openTaskCount } from "../lib/constants";
+  import type { PipeDetail, Task } from "../lib/types";
   import SpaceIcon from "../components/SpaceIcon.svelte";
   import Icon from "../components/Icon.svelte";
   import Markdown from "../components/Markdown.svelte";
@@ -16,13 +16,14 @@
   let pipe = $state<PipeDetail | null>(null);
   let error = $state("");
   let editing = $state(false);
-  let newTaskStatus = $state<Status | null>(null);
+  /** Column in which to create a task ("" = the first one). */
+  let newTaskStage = $state<string | null>(null);
   let filter = $state("");
   let mineOnly = $state(false);
 
   // Drag & drop state
   let draggedId = $state<string | null>(null);
-  let drop = $state<{ status: Status; index: number } | null>(null);
+  let drop = $state<{ stage: string; index: number } | null>(null);
 
   $effect(() => {
     app.version;
@@ -36,11 +37,12 @@
         (!mineOnly || t.assignee?.id === app.me?.user.id)
     )
   );
+  const boardColumns = $derived(app.columnsFor(pipe?.kind));
   const columns = $derived(
-    Object.fromEntries(STATUSES.map((s) => [s.id, visible.filter((t) => t.status === s.id)])) as Record<Status, Task[]>
+    Object.fromEntries(boardColumns.map((c) => [c.id, visible.filter((t) => t.stage === c.id)])) as Record<string, Task[]>
   );
 
-  function ondragover(e: DragEvent, status: Status) {
+  function ondragover(e: DragEvent, stage: string) {
     if (!draggedId) return;
     e.preventDefault();
     const body = e.currentTarget as HTMLElement;
@@ -53,7 +55,7 @@
         break;
       }
     }
-    drop = { status, index };
+    drop = { stage, index };
   }
 
   // Every task done or abandoned: the pipe can be closed.
@@ -101,18 +103,18 @@
     e.preventDefault();
     if (!pipe || !draggedId || !drop) return;
     const task = pipe.tasks.find((t) => t.id === draggedId)!;
-    const siblings = columns[drop.status].filter((t) => t.id !== draggedId);
+    const siblings = columns[drop.stage].filter((t) => t.id !== draggedId);
     const prev = siblings[drop.index - 1];
     const next = siblings[drop.index];
     const position = prev && next ? (prev.position + next.position) / 2 : prev ? prev.position + 1 : next ? next.position - 1 : 1;
-    const { status } = drop;
+    const { stage } = drop;
     draggedId = null;
     drop = null;
-    if (task.status === status && task.position === position) return;
+    if (task.stage === stage && task.position === position) return;
     // Optimistic update, then reconcile with the server.
-    pipe.tasks = pipe.tasks.map((t) => (t.id === task.id ? { ...t, status, position } : t)).sort((a, b) => a.position - b.position);
+    pipe.tasks = pipe.tasks.map((t) => (t.id === task.id ? { ...t, stage, position } : t)).sort((a, b) => a.position - b.position);
     try {
-      await api.post(`/tasks/${task.id}/move`, { pipeId: pipe.id, status, position });
+      await api.post(`/tasks/${task.id}/move`, { pipeId: pipe.id, stage, position });
     } catch (err) {
       app.toast(errorMessage(err), "error");
     }
@@ -181,15 +183,15 @@
           <button class="btn neutral icon" title="Modifier le pipe" onclick={() => (editing = true)}><Icon name="settings" /></button>
         {/if}
         {#if pipe.canAddTasks}
-          <button class="btn" onclick={() => (newTaskStatus = "backlog")}><Icon name="plus" size={18} />Nouvelle tâche</button>
+          <button class="btn" onclick={() => (newTaskStage = "")}><Icon name="plus" size={18} />Nouvelle tâche</button>
         {/if}
       </div>
     </div>
 
     <div class="board">
-      {#each STATUSES as s (s.id)}
+      {#each boardColumns as s (s.id)}
         {@const tasks = columns[s.id]}
-        <section class="column" class:drop-target={drop?.status === s.id}>
+        <section class="column" class:drop-target={drop?.stage === s.id}>
           <header class="column-header">
             <span class="status-dot" style="background:{s.color}"></span>
             <span>{s.label}</span>
@@ -198,14 +200,14 @@
           <div class="column-body" role="list" ondragover={(e) => ondragover(e, s.id)} {ondrop}
             ondragleave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) drop = null; }}>
             {#each tasks.filter((t) => t.id !== draggedId) as t, i (t.id)}
-              {#if drop?.status === s.id && drop.index === i}<div class="drop-indicator"></div>{/if}
+              {#if drop?.stage === s.id && drop.index === i}<div class="drop-indicator"></div>{/if}
               <TaskCard task={t} draggable={pipe.canManage}
                 ondragstart={(e) => { e.dataTransfer?.setData("text/plain", t.id); setTimeout(() => (draggedId = t.id)); }}
                 ondragend={() => { draggedId = null; drop = null; }} />
             {/each}
-            {#if drop?.status === s.id && drop.index >= tasks.filter((t) => t.id !== draggedId).length}<div class="drop-indicator"></div>{/if}
+            {#if drop?.stage === s.id && drop.index >= tasks.filter((t) => t.id !== draggedId).length}<div class="drop-indicator"></div>{/if}
             {#if pipe.canAddTasks}
-              <button class="btn ghost small add" onclick={() => (newTaskStatus = s.id)}><Icon name="plus" size={16} />Ajouter</button>
+              <button class="btn ghost small add" onclick={() => (newTaskStage = s.id)}><Icon name="plus" size={16} />Ajouter</button>
             {/if}
           </div>
         </section>
@@ -214,8 +216,9 @@
   </div>
 
   {#if editing}<PipeModal spaceId={pipe.space.id} pipe={pipe} onclose={() => (editing = false)} />{/if}
-  {#if newTaskStatus}
-    <NewTaskModal pipe={{ id: pipe.id, name: pipe.name, spaceId: pipe.space.id }} status={newTaskStatus} onclose={() => (newTaskStatus = null)} />
+  {#if newTaskStage !== null}
+    <NewTaskModal pipe={{ id: pipe.id, name: pipe.name, spaceId: pipe.space.id, kind: pipe.kind }} stage={newTaskStage || null}
+      onclose={() => (newTaskStage = null)} />
   {/if}
 {/if}
 
