@@ -4,6 +4,7 @@
   import type { Task } from "../lib/types";
   import Avatar from "./Avatar.svelte";
   import Icon, { iconOf } from "./Icon.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   let { task, draggable = false, dragging = false, ondragstart, ondragend }: {
     task: Task;
@@ -30,12 +31,12 @@
     {#if task.outlineDoc}<span title={task.outlineDoc.title}><Icon name="doc" size={14} /></span>{/if}
     {#if task.checklist.total}
       <span class="row" class:complete={task.checklist.done === task.checklist.total} style="gap:3px"
-        title="Sous-tâches"><Icon name="checklist" size={13} />{task.checklist.done}/{task.checklist.total}</span>
+        title={t("Sub-tasks")}><Icon name="checklist" size={13} />{task.checklist.done}/{task.checklist.total}</span>
     {/if}
     {#if task.commentCount}<span class="row" style="gap:3px"><Icon name="comment" size={13} />{task.commentCount}</span>{/if}
     <span class="spacer"></span>
     {#if task.author.id !== task.assignee?.id && task.author.id !== app.me?.user.id}
-      <span class="muted" title={`Créée par ${task.author.name}`}>par {task.author.name.split(" ")[0]}</span>
+      <span class="muted" title={t("Created by {name}", { name: task.author.name })}>{t("by {name}", { name: task.author.name.split(" ")[0] })}</span>
     {/if}
     {#if task.assignee && task.space.kind === "team"}<Avatar user={task.assignee} size={20} />{/if}
   </div>

@@ -5,6 +5,7 @@
   import type { Task } from "../lib/types";
   import TaskRow from "../components/TaskRow.svelte";
   import Icon from "../components/Icon.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   let tasks = $state<Task[] | null>(null);
   let filter = $state("");
@@ -22,21 +23,21 @@
   });
 
   const shown = $derived(
-    (tasks ?? []).filter((t) => {
+    (tasks ?? []).filter((task) => {
       const q = filter.trim().toLowerCase();
-      return !q || `${t.title} ${t.pipe?.name} ${t.space.name}`.toLowerCase().includes(q);
+      return !q || `${task.title} ${task.pipe?.name} ${task.space.name}`.toLowerCase().includes(q);
     })
   );
 
   const groups = $derived.by(() => {
     if (by === "state") {
-      return GROUPS.map((g) => ({ id: g.id, label: g.label, hint: g.hint, tasks: shown.filter((t) => g.statuses.includes(t.status)) }));
+      return GROUPS.map((g) => ({ id: g.id, label: t(g.label), hint: t(g.hint), tasks: shown.filter((task) => g.statuses.includes(task.status)) }));
     }
     const map = new Map<string, { id: string; label: string; hint: string; tasks: Task[] }>();
-    for (const t of shown) {
-      const id = t.pipe!.id;
-      if (!map.has(id)) map.set(id, { id, label: t.pipe!.name, hint: t.space.kind === "team" ? t.space.name : "", tasks: [] });
-      map.get(id)!.tasks.push(t);
+    for (const task of shown) {
+      const id = task.pipe!.id;
+      if (!map.has(id)) map.set(id, { id, label: task.pipe!.name, hint: task.space.kind === "team" ? task.space.name : "", tasks: [] });
+      map.get(id)!.tasks.push(task);
     }
     return [...map.values()];
   });
@@ -45,24 +46,24 @@
 <div class="page">
   <div class="page-header">
     <div class="grow">
-      <h1><Icon name="checklist" size={26} />Mes tâches</h1>
-      <div class="subtitle">Tout ce qui vous est attribué et reste à faire, tous pipes confondus.</div>
+      <h1><Icon name="checklist" size={26} />{t("My tasks")}</h1>
+      <div class="subtitle">{t("Everything assigned to you and still to do, across all pipes.")}</div>
     </div>
-    <a class="btn neutral" href="/next"><Icon name="target" size={18} />Prochaine action</a>
+    <a class="btn neutral" href="/next"><Icon name="target" size={18} />{t("Next action")}</a>
   </div>
 
   <div class="toolbar">
-    <input class="input" placeholder="Filtrer…" bind:value={filter} />
-    <div class="seg" role="group" aria-label="Regrouper">
-      <button class:active={by === "state"} onclick={() => setBy("state")}>Par état</button>
-      <button class:active={by === "pipe"} onclick={() => setBy("pipe")}>Par pipe</button>
+    <input class="input" placeholder={t("Filter…")} bind:value={filter} />
+    <div class="seg" role="group" aria-label={t("Group")}>
+      <button class:active={by === "state"} onclick={() => setBy("state")}>{t("By state")}</button>
+      <button class:active={by === "pipe"} onclick={() => setBy("pipe")}>{t("By pipe")}</button>
     </div>
   </div>
 
   {#if !tasks}
-    <div class="muted">Chargement…</div>
+    <div class="muted">{t("Loading…")}</div>
   {:else if !tasks.length}
-    <div class="empty">Rien à faire pour l'instant. Profitez-en !</div>
+    <div class="empty">{t("Nothing to do for now. Enjoy!")}</div>
   {:else}
     {#each groups.filter((g) => g.tasks.length || by === "state") as g (g.id)}
       <div class="section">
@@ -71,9 +72,9 @@
           {#if g.hint}<span class="small muted hint-inline">{g.hint}</span>{/if}
         </div>
         {#if g.tasks.length}
-          <div class="list">{#each g.tasks as t (t.id)}<TaskRow task={t} showLocation={by === "state"} />{/each}</div>
+          <div class="list">{#each g.tasks as task (task.id)}<TaskRow task={task} showLocation={by === "state"} />{/each}</div>
         {:else}
-          <div class="small muted">Aucune.</div>
+          <div class="small muted">{t("None.")}</div>
         {/if}
       </div>
     {/each}

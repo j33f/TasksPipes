@@ -3,6 +3,7 @@
   import type { OutlineDoc } from "../lib/types";
   import Icon from "./Icon.svelte";
   import { app } from "../lib/app.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   let { onselect, autofocus = false }: { onselect: (doc: OutlineDoc) => void; autofocus?: boolean } = $props();
 
@@ -37,17 +38,17 @@
 </script>
 
 {#if app.isGuest}
-  <div class="hint">Outline n'est pas accessible aux comptes invités par e-mail.</div>
+  <div class="hint">{t("Outline is not available to accounts invited by e-mail.")}</div>
 {:else}
 <div class="picker">
   <!-- svelte-ignore a11y_autofocus -->
-  <input class="input" placeholder="Rechercher un document Outline ou coller son URL…" bind:value={q} {autofocus}
+  <input class="input" placeholder={t("Search an Outline document or paste its URL…")} bind:value={q} {autofocus}
     oninput={search} onfocus={() => { open = true; search(); }} onblur={() => setTimeout(() => (open = false), 200)} />
   {#if open}
     <div class="picker-results">
-      {#if loading && !results.length}<div class="menu-item muted">Recherche…</div>{/if}
+      {#if loading && !results.length}<div class="menu-item muted">{t("Searching…")}</div>{/if}
       {#if error}<div class="menu-item error-text">{error}</div>{/if}
-      {#if !loading && !error && !results.length}<div class="menu-item muted">Aucun document</div>{/if}
+      {#if !loading && !error && !results.length}<div class="menu-item muted">{t("No document")}</div>{/if}
       {#each results as d (d.id)}
         <button class="menu-item" onmousedown={(e) => { e.preventDefault(); pick(d); }}>
           <Icon name="doc" size={16} /><span class="ellipsis">{d.title}</span>

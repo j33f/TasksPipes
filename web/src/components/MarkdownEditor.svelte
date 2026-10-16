@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { t } from "../lib/i18n.svelte";
   import Markdown from "./Markdown.svelte";
 
-  let { value = $bindable(""), placeholder = "Écrivez en Markdown…", rows = 6, autofocus = false }: {
+  let { value = $bindable(""), placeholder = t("Write in Markdown…"), rows = 6, autofocus = false }: {
     value?: string;
     placeholder?: string;
     rows?: number;
@@ -13,8 +14,8 @@
 
 <div class="md-editor">
   <div class="md-tabs">
-    <button type="button" class="md-tab" class:active={tab === "write"} onclick={() => (tab = "write")}>Écrire</button>
-    <button type="button" class="md-tab" class:active={tab === "preview"} onclick={() => (tab = "preview")}>Aperçu</button>
+    <button type="button" class="md-tab" class:active={tab === "write"} onclick={() => (tab = "write")}>{t("Write")}</button>
+    <button type="button" class="md-tab" class:active={tab === "preview"} onclick={() => (tab = "preview")}>{t("Preview")}</button>
     <span class="spacer"></span>
     <a class="muted small hint-link" href="https://www.markdownguide.org/cheat-sheet/" target="_blank" rel="noreferrer">Markdown</a>
   </div>
@@ -23,7 +24,7 @@
     <textarea class="input" {rows} {placeholder} {autofocus} bind:value></textarea>
   {:else}
     <div class="md-preview">
-      {#if value}<Markdown source={value} />{:else}<span class="muted small">Rien à prévisualiser</span>{/if}
+      {#if value}<Markdown source={value} />{:else}<span class="muted small">{t("Nothing to preview")}</span>{/if}
     </div>
   {/if}
 </div>

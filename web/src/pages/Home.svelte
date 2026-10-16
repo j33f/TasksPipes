@@ -6,6 +6,7 @@
   import SpaceIcon from "../components/SpaceIcon.svelte";
   import Icon from "../components/Icon.svelte";
   import NewTaskModal from "../components/NewTaskModal.svelte";
+  import { t, tn } from "../lib/i18n.svelte";
 
   let data = $state<{ assigned: Task[]; sent: Task[]; due: Task[] } | null>(null);
   let creating = $state(false);
@@ -16,83 +17,83 @@
   });
 
   const hour = new Date().getHours();
-  const greeting = hour < 18 ? "Bonjour" : "Bonsoir";
+  const greeting = $derived(hour < 18 ? t("Hello") : t("Good evening"));
 </script>
 
 <div class="page">
   <div class="page-header">
     <div class="grow">
       <h1>{greeting} {app.me?.user.name.split(" ")[0]}</h1>
-      <div class="subtitle">Vos tâches, vos pipes et ceux des autres.</div>
+      <div class="subtitle">{t("Your tasks, your pipes and other people's.")}</div>
     </div>
-    <button class="btn" onclick={() => (creating = true)}><Icon name="plus" size={18} />Nouvelle tâche</button>
+    <button class="btn" onclick={() => (creating = true)}><Icon name="plus" size={18} />{t("New task")}</button>
   </div>
 
   {#if app.isGuest && !app.me?.user.totp}
     <button class="callout warning secure" onclick={() => (app.accountOpen = true)}>
       <Icon name="shield" />
-      <span><strong>Sécurisez votre compte</strong> : activez la double authentification (Google Authenticator) en plus du lien par e-mail.</span>
+      <span>{t("Secure your account: turn on two-factor authentication (Google Authenticator) besides the e-mail link.")}</span>
     </button>
   {/if}
 
   {#if app.personalSpace?.incomingCount}
     <a class="callout info incoming" href={`/spaces/${app.me?.personalSpaceId}?tab=incoming`}>
       <Icon name="inbox" />
-      <span><strong>{app.personalSpace.incomingCount} tâche{app.personalSpace.incomingCount > 1 ? "s" : ""}</strong> en attente dans votre incoming.</span>
+      <span>{tn(app.personalSpace.incomingCount, "{n} task waiting in your incoming.", "{n} tasks waiting in your incoming.")}</span>
     </a>
   {/if}
-  {#each app.myTeams.filter((t) => t.incomingCount) as t (t.id)}
-    <a class="callout incoming" href={`/spaces/${t.id}?tab=incoming`}>
-      <SpaceIcon space={t} size={20} />
-      <span><strong>{t.incomingCount}</strong> en attente dans l'incoming de <strong>{t.name}</strong>.</span>
+  {#each app.myTeams.filter((x) => x.incomingCount) as x (x.id)}
+    <a class="callout incoming" href={`/spaces/${x.id}?tab=incoming`}>
+      <SpaceIcon space={x} size={20} />
+      <span>{t("{n} waiting in the incoming of {name}.", { n: x.incomingCount ?? 0, name: x.name })}</span>
     </a>
   {/each}
 
   {#if data}
     {#if data.due.length}
       <div class="section">
-        <div class="section-title"><Icon name="calendar" />Échéances des 7 prochains jours</div>
-        <div class="list">{#each data.due as t (t.id)}<TaskRow task={t} />{/each}</div>
+        <div class="section-title"><Icon name="calendar" />{t("Due in the next 7 days")}</div>
+        <div class="list">{#each data.due as x (x.id)}<TaskRow task={x} />{/each}</div>
       </div>
     {/if}
 
     <div class="section">
       <div class="section-title">
-        <Icon name="checklist" />Mes tâches
+        <Icon name="checklist" />{t("My tasks")}
         <span class="spacer"></span>
-        <a class="btn ghost small" href="/next"><Icon name="target" size={16} />Prochaine action</a>
-        <a class="btn ghost small" href="/tasks">Tout voir</a>
+        <a class="btn ghost small" href="/next"><Icon name="target" size={16} />{t("Next action")}</a>
+        <a class="btn ghost small" href="/tasks">{t("See all")}</a>
       </div>
       {#if data.assigned.length}
-        <div class="list">{#each data.assigned as t (t.id)}<TaskRow task={t} />{/each}</div>
+        <div class="list">{#each data.assigned as x (x.id)}<TaskRow task={x} />{/each}</div>
       {:else}
-        <div class="empty">Aucune tâche active à votre nom.</div>
+        <div class="empty">{t("No open task in your name.")}</div>
       {/if}
     </div>
 
     <div class="section">
-      <div class="section-title"><Icon name="send" />Envoyées, en attente de réponse</div>
+      <div class="section-title"><Icon name="send" />{t("Sent, waiting for an answer")}</div>
       {#if data.sent.length}
-        <div class="list">{#each data.sent as t (t.id)}<TaskRow task={t} />{/each}</div>
+        <div class="list">{#each data.sent as x (x.id)}<TaskRow task={x} />{/each}</div>
       {:else}
-        <div class="empty">Aucune tâche envoyée en attente.</div>
+        <div class="empty">{t("No sent task waiting.")}</div>
       {/if}
     </div>
   {/if}
 
   <div class="section">
-    <div class="section-title"><Icon name="users" />Mes équipes</div>
+    <div class="section-title"><Icon name="users" />{t("My teams")}</div>
     <div class="grid">
-      {#each app.myTeams as t (t.id)}
-        <a class="card row" href={`/spaces/${t.id}`}>
-          <SpaceIcon space={t} size={32} />
+      {#each app.myTeams as x (x.id)}
+        <a class="card row" href={`/spaces/${x.id}`}>
+          <SpaceIcon space={x} size={32} />
           <div>
-            <strong>{t.name}</strong>
-            <div class="muted small">{t.memberCount} membre{t.memberCount > 1 ? "s" : ""} · {t.pipeCount} pipe{t.pipeCount > 1 ? "s" : ""}</div>
+            <strong>{x.name}</strong>
+            <div class="muted small">{tn(x.memberCount, "{n} member", "{n} members")} · {tn(x.pipeCount, "{n} pipe", "{n} pipes")}</div>
           </div>
         </a>
       {:else}
-        <div class="empty">Vous ne faites partie d'aucune équipe. Créez-en une depuis la barre latérale.</div>
+        <div class="empty">{t("You are not in any team. Create one from the sidebar.")}</div>
       {/each}
     </div>
   </div>

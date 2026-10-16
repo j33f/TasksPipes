@@ -1,6 +1,7 @@
 import pg from "pg";
 import type { FastifyBaseLogger } from "fastify";
 import { config } from "./config.js";
+import { tr, type Locale } from "./i18n.js";
 import { STATUSES, allPipeTypes, resolveStage, setCustomTypes, type PipeType, type TaskType } from "./pipeTypes.js";
 
 // Return DATE columns as plain "YYYY-MM-DD" strings and bigint counts as numbers.
@@ -232,6 +233,15 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS outline_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS users_outline_idx ON users(outline_url, outline_id) WHERE outline_id IS NOT NULL;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS outline_url text;
 
+-- Display preferences of the account (NULL: follow the browser / the system).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locale text CHECK (locale IN ('en', 'fr'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS theme text CHECK (theme IN ('light', 'dark'));
+
+-- Calendar subscription link: hash of the token (lookup) and the token encrypted (shown again to its owner).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_token text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_token_hash text;
+CREATE UNIQUE INDEX IF NOT EXISTS users_calendar_idx ON users(calendar_token_hash) WHERE calendar_token_hash IS NOT NULL;
+
 -- Who invited whom: the two accounts see each other.
 CREATE TABLE IF NOT EXISTS invitations (
   inviter_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -288,14 +298,17 @@ UPDATE tasks t SET assignee_id = NULL FROM spaces s
 WHERE s.id = t.space_id AND s.kind = 'user' AND t.assignee_id IS NOT NULL;
 `;
 
-/** Creates the default "classic" pipe of personal spaces that lack one (all of them, or only `spaceId`). */
-export async function ensureDefaultPipes(db: Queryable = pool, spaceId: string | null = null) {
+/**
+ * Creates the default "classic" pipe of personal spaces that lack one (all of them, or only `spaceId`),
+ * named in the given language.
+ */
+export async function ensureDefaultPipes(db: Queryable = pool, spaceId: string | null = null, lang: Locale = config.defaultLocale) {
   await db.query(
     `INSERT INTO pipes (space_id, name, kind, is_default, created_by, position)
-     SELECT s.id, 'Perso', 'general', true, s.user_id, 0 FROM spaces s
+     SELECT s.id, $2, 'general', true, s.user_id, 0 FROM spaces s
      WHERE s.kind = 'user' AND ($1::uuid IS NULL OR s.id = $1)
        AND NOT EXISTS (SELECT 1 FROM pipes p WHERE p.space_id = s.id AND p.is_default)`,
-    [spaceId]
+    [spaceId, tr(lang, "Personal")]
   );
 }
 

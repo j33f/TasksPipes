@@ -1,3 +1,4 @@
+import { prefs, t } from "./i18n.svelte";
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -11,13 +12,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const res = await fetch(path, {
     method,
     credentials: "same-origin",
-    headers: body !== undefined ? { "Content-Type": "application/json" } : {},
+    // The server answers (errors, catalog…) in the language of the page.
+    headers: body !== undefined ? { "Content-Type": "application/json", "X-Locale": prefs.lang } : { "X-Locale": prefs.lang },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith("/api/auth")) window.dispatchEvent(new Event("tp:unauthorized"));
-    throw new ApiError(res.status, json.error || `Erreur ${res.status}`);
+    throw new ApiError(res.status, json.error || t("Error {n}", { n: res.status }));
   }
   return json as T;
 }
@@ -29,13 +31,14 @@ async function upload<T>(path: string, file: File): Promise<T> {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/octet-stream",
+      "X-Locale": prefs.lang,
       "X-File-Name": encodeURIComponent(file.name),
       "X-File-Type": file.type || "application/octet-stream",
     },
     body: file,
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, json.error || (res.status === 413 ? "Fichier trop volumineux" : `Erreur ${res.status}`));
+  if (!res.ok) throw new ApiError(res.status, json.error || (res.status === 413 ? t("File too large") : t("Error {n}", { n: res.status })));
   return json as T;
 }
 

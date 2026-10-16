@@ -15,7 +15,7 @@ class AppState {
 
   /** Account invited by e-mail: no Outline access, may enable TOTP. */
   isGuest = $derived(this.me?.user.kind === "email");
-  /** "Mon compte" dialog, opened from the sidebar or the dashboard. */
+  /** "My account" dialog, opened from the sidebar or the dashboard. */
   accountOpen = $state(false);
   /** Tasks waiting in my incoming and in my teams' ones. */
   pendingCount = $derived(
@@ -64,7 +64,7 @@ class AppState {
 
   /** Category of a task type: its own, or that of the first built-in pipe type offering it. */
   taskTypeGroup(t: TaskType): string {
-    return t.group ?? this.pipeTypes.find((p) => !p.custom && p.taskTypes.includes(t.id))?.group ?? "Général";
+    return t.group ?? this.pipeTypes.find((p) => !p.custom && p.taskTypes.includes(t.id))?.group ?? this.pipeType("general")?.group ?? "General";
   }
 
   /** Reloads pipe and task types (after a change in the designer). */

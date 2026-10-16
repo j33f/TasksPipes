@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   let { value = $bindable(null), excludeId = null, includeSelf = true }: {
     value?: string | null;
@@ -13,13 +14,13 @@
 </script>
 
 <select class="input" bind:value>
-  <option value={null}>Choisir un destinataire…</option>
+  <option value={null}>{t("Choose a recipient…")}</option>
   {#if teams.length}
-    <optgroup label="Équipes">
+    <optgroup label={t("Teams")}>
       {#each teams as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
     </optgroup>
   {/if}
-  <optgroup label="Personnes">
-    {#each people as s (s.id)}<option value={s.id}>{s.id === me ? `${s.name} (moi)` : s.name}</option>{/each}
+  <optgroup label={t("People")}>
+    {#each people as s (s.id)}<option value={s.id}>{s.id === me ? t("{name} (me)", { name: s.name }) : s.name}</option>{/each}
   </optgroup>
 </select>

@@ -29,6 +29,7 @@
   import Icon from "./Icon.svelte";
   import DocPicker from "./DocPicker.svelte";
   import UserSelect from "./UserSelect.svelte";
+  import { intlLocale, t } from "../lib/i18n.svelte";
 
   let { type, values, files = [], editable = true, onchange, onupload, ondeletefile }: {
     type: TaskType;
@@ -42,8 +43,10 @@
   } = $props();
 
   const wide = (f: Field) => ["textarea", "multiselect", "docs", "files", "rncp"].includes(f.type);
-  const money = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
-  const num = new Intl.NumberFormat("fr-FR");
+  const money = $derived(new Intl.NumberFormat(intlLocale(), { style: "currency", currency: "EUR" }));
+  const num = $derived(new Intl.NumberFormat(intlLocale()));
+  /** How a stored choice reads in the current language. */
+  const optionLabel = (f: Field, o: string) => f.optionLabels?.[f.options?.indexOf(o) ?? -1] ?? o;
 
   const isEmpty = (f: Field) =>
     f.type === "files" ? !files.some((x) => x.field === f.id) : values[f.id] === undefined || values[f.id] === null;
@@ -91,7 +94,7 @@
     const list = [...(input.files ?? [])];
     input.value = "";
     const tooBig = list.filter((x) => x.size > MAX_FILE_SIZE);
-    if (tooBig.length) app.toast(`Trop volumineux (50 Mo max) : ${tooBig.map((x) => x.name).join(", ")}`, "error");
+    if (tooBig.length) app.toast(t("Too large (50 MB max): {files}", { files: tooBig.map((x) => x.name).join(", ") }), "error");
     const ok = list.filter((x) => x.size <= MAX_FILE_SIZE);
     if (ok.length) onupload(f.id, ok);
   }
@@ -100,7 +103,7 @@
 </script>
 
 {#if !shown.length}
-  {#if !editable}<p class="muted small">Aucune information renseignée.</p>{/if}
+  {#if !editable}<p class="muted small">{t("No information filled in.")}</p>{/if}
 {:else}
   <div class="fields">
     {#each shown as f (f.id)}
@@ -117,13 +120,13 @@
                   <Icon name="doc" size={16} />
                   {#if file.id}
                     <a href={`/api/files/${file.id}`} target="_blank" rel="noreferrer" class="ellipsis">{file.name}</a>
-                    <a class="muted dl" href={`/api/files/${file.id}?download`} title="Télécharger" aria-label="Télécharger"><Icon name="arrow" size={14} /></a>
+                    <a class="muted dl" href={`/api/files/${file.id}?download`} title={t("Download")} aria-label={t("Download")}><Icon name="arrow" size={14} /></a>
                   {:else}
                     <span class="ellipsis">{file.name}</span>
                   {/if}
                   <span class="muted small">{formatSize(file.size)}</span>
                   {#if editable}
-                    <button type="button" class="btn ghost icon small" title="Retirer" onclick={() => ondeletefile(file)}><Icon name="close" size={14} /></button>
+                    <button type="button" class="btn ghost icon small" title={t("Remove")} onclick={() => ondeletefile(file)}><Icon name="close" size={14} /></button>
                   {/if}
                 </li>
               {/each}
@@ -131,7 +134,7 @@
           {/if}
           {#if editable}
             <label class="btn neutral small upload">
-              <Icon name="plus" size={16} />Ajouter des fichiers
+              <Icon name="plus" size={16} />{t("Add files")}
               <input type="file" multiple onchange={(e) => pickFiles(f, e.currentTarget as HTMLInputElement)} />
             </label>
           {/if}
@@ -143,7 +146,7 @@
               {#each docs as d (d.id)}
                 <span class="doc-link">
                   <Icon name="doc" size={16} /><a href={d.url ?? "#"} target="_blank" rel="noreferrer"><span>{d.title}</span></a>
-                  {#if editable}<button type="button" class="x" title="Retirer" onclick={() => removeDoc(f, d.id)}><Icon name="close" size={12} /></button>{/if}
+                  {#if editable}<button type="button" class="x" title={t("Remove")} onclick={() => removeDoc(f, d.id)}><Icon name="close" size={12} /></button>{/if}
                 </span>
               {/each}
             </div>
@@ -155,8 +158,9 @@
             {#if f.type === "money"}{money.format(v as number)}
             {:else if f.type === "number"}{num.format(v as number)}
             {:else if f.type === "date"}{formatDate(v as string)}
-            {:else if f.type === "checkbox"}Oui
-            {:else if f.type === "multiselect"}{(v as string[]).join(", ")}
+            {:else if f.type === "checkbox"}{t("Yes")}
+            {:else if f.type === "multiselect"}{(v as string[]).map((o) => optionLabel(f, o)).join(", ")}
+            {:else if f.type === "select"}{optionLabel(f, v as string)}
             {:else if f.type === "user"}{userName(v)}
             {:else if f.type === "url"}<a href={v as string} target="_blank" rel="noreferrer">{v}</a>
             {:else if f.type === "email"}<a href={`mailto:${v}`}>{v}</a>
@@ -183,26 +187,26 @@
         {:else if f.type === "select"}
           <select class="input" value={(v as string) ?? ""} onchange={(e) => onchange(f.id, e.currentTarget.value || null)}>
             <option value="">—</option>
-            {#each f.options ?? [] as o (o)}<option value={o}>{o}</option>{/each}
+            {#each f.options ?? [] as o (o)}<option value={o}>{optionLabel(f, o)}</option>{/each}
           </select>
         {:else if f.type === "multiselect"}
           <div class="chips">
             {#each f.options ?? [] as o (o)}
-              <button type="button" class="chip" class:on={((v as string[] | undefined) ?? []).includes(o)} onclick={() => toggleOption(f, o)}>{o}</button>
+              <button type="button" class="chip" class:on={((v as string[] | undefined) ?? []).includes(o)} onclick={() => toggleOption(f, o)}>{optionLabel(f, o)}</button>
             {/each}
           </div>
         {:else if f.type === "checkbox"}
-          <label class="check"><input type="checkbox" checked={v === true} onchange={(e) => onchange(f.id, e.currentTarget.checked || null)} />Oui</label>
+          <label class="check"><input type="checkbox" checked={v === true} onchange={(e) => onchange(f.id, e.currentTarget.checked || null)} />{t("Yes")}</label>
         {:else if f.type === "user"}
           <UserSelect value={(v as string) ?? null} placeholder="—" onchange={(id) => onchange(f.id, id)} />
         {:else if f.type === "rncp"}
           {@const r = (v as RncpValue | undefined) ?? { code: null, title: null }}
           <div class="rncp">
-            <input class="input code" placeholder="RNCP37873 ou RS5487" value={r.code ?? ""} onchange={(e) => commitRncp(f, "code", e.currentTarget.value)} />
-            <input class="input" placeholder="Intitulé de la certification" value={r.title ?? ""} onchange={(e) => commitRncp(f, "title", e.currentTarget.value)} />
+            <input class="input code" placeholder={t("RNCP37873 or RS5487")} value={r.code ?? ""} onchange={(e) => commitRncp(f, "code", e.currentTarget.value)} />
+            <input class="input" placeholder={t("Name of the qualification")} value={r.title ?? ""} onchange={(e) => commitRncp(f, "title", e.currentTarget.value)} />
           </div>
           {#if rncpUrl(r.code)}
-            <a class="small" href={rncpUrl(r.code)} target="_blank" rel="noreferrer">Voir la fiche {r.code} sur France Compétences</a>
+            <a class="small" href={rncpUrl(r.code)} target="_blank" rel="noreferrer">{t("See {code} on France Compétences", { code: r.code ?? "" })}</a>
           {/if}
         {:else}
           <input class="input" type={f.type === "email" ? "email" : f.type === "url" ? "url" : f.type === "phone" ? "tel" : "text"}

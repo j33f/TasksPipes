@@ -16,6 +16,7 @@
   import RefuseDialog from "./RefuseDialog.svelte";
   import AcceptDialog from "./AcceptDialog.svelte";
   import Checklist from "./Checklist.svelte";
+  import { t, tn } from "../lib/i18n.svelte";
 
   let { id, onclose }: { id: string; onclose: () => void } = $props();
 
@@ -39,11 +40,11 @@
 
   async function load() {
     try {
-      const t = await api.get<TaskDetail>(`/tasks/${id}`);
-      task = t;
-      title = t.title;
-      if (t.permissions.manage) {
-        const space = await api.get<{ pipes: Pipe[]; members: UserRef[] }>(`/spaces/${t.space.id}`);
+      const detail = await api.get<TaskDetail>(`/tasks/${id}`);
+      task = detail;
+      title = detail.title;
+      if (detail.permissions.manage) {
+        const space = await api.get<{ pipes: Pipe[]; members: UserRef[] }>(`/spaces/${detail.space.id}`);
         pipes = space.pipes;
         members = space.members;
       }
@@ -101,11 +102,11 @@
   async function uploadFiles(field: string, files: File[]) {
     await run(async () => {
       for (const file of files) await api.upload(`/tasks/${id}/files?field=${encodeURIComponent(field)}`, file);
-    }, files.length > 1 ? `${files.length} fichiers ajoutés` : "Fichier ajouté");
+    }, tn(files.length, "File added", "{n} files added"));
   }
 
   function deleteFile(file: FieldFile) {
-    if (file.id && confirm(`Retirer « ${file.name} » ?`)) run(() => api.del(`/files/${file.id}`), "Fichier retiré");
+    if (file.id && confirm(t("Remove “{name}”?", { name: file.name }))) run(() => api.del(`/files/${file.id}`), t("File removed"));
   }
 
   const taskType = $derived(app.taskType(task?.taskType));
@@ -113,7 +114,7 @@
   const typeChoices = $derived.by(() => {
     if (!task) return [];
     const list = app.taskTypesFor(task.pipe?.kind);
-    return taskType && !list.some((t) => t.id === taskType.id) ? [...list, taskType] : list;
+    return taskType && !list.some((x) => x.id === taskType.id) ? [...list, taskType] : list;
   });
 
   function saveTitle() {
@@ -127,7 +128,7 @@
 
   function linkDoc(doc: DocRef | null) {
     pickingDoc = false;
-    patch({ outlineDoc: doc }, doc ? "Document lié" : "Document délié");
+    patch({ outlineDoc: doc }, doc ? t("Document linked") : t("Document unlinked"));
   }
 
   async function startCreateDoc() {
@@ -141,7 +142,7 @@
   }
 
   async function createDoc() {
-    await run(() => api.post(`/tasks/${id}/outline-document`, { collectionId }), "Document créé dans Outline");
+    await run(() => api.post(`/tasks/${id}/outline-document`, { collectionId }), t("Document created in Outline"));
     creatingDoc = false;
   }
 
@@ -160,7 +161,7 @@
   {#if loadError}
     <div class="pad"><div class="callout danger">{loadError}</div></div>
   {:else if !task}
-    <div class="pad muted">Chargement…</div>
+    <div class="pad muted">{t("Loading…")}</div>
   {:else}
     <div class="task-detail">
       <section class="task-main">
@@ -169,7 +170,7 @@
           <span>›</span>
           {#if task.pipe}
             <a href={`/pipes/${task.pipe.id}`} onclick={onclose}>{task.pipe.name}</a>
-            {#if task.pipe.visibility === "open"}<span class="badge open">Open</span>{/if}
+            {#if task.pipe.visibility === "open"}<span class="badge open">{t("Open")}</span>{/if}
           {:else}
             <a href={`/spaces/${task.space.id}?tab=incoming`} onclick={onclose}>Incoming</a>
           {/if}
@@ -180,12 +181,12 @@
           <div class="callout info">
             <Icon name="inbox" />
             <div class="grow">
-              <strong>{task.sender.name}</strong> a déposé cette tâche dans l'incoming de {task.space.name}.
+              {t("{name} put this task in the incoming of {space}.", { name: task.sender.name, space: task.space.name })}
               {#if perms?.manage}
                 <div class="row" style="margin-top:8px">
-                  <button class="btn small" onclick={() => (dialog = "accept")}><Icon name="check" size={16} />Accepter</button>
+                  <button class="btn small" onclick={() => (dialog = "accept")}><Icon name="check" size={16} />{t("Accept")}</button>
                   {#if perms.refuse}
-                    <button class="btn small danger" onclick={() => (dialog = "refuse")}><Icon name="return" size={16} />Refuser</button>
+                    <button class="btn small danger" onclick={() => (dialog = "refuse")}><Icon name="return" size={16} />{t("Refuse")}</button>
                   {/if}
                 </div>
               {/if}
@@ -194,24 +195,24 @@
         {/if}
 
         <input class="task-title-input" bind:value={title} onblur={saveTitle} readonly={!perms?.editContent}
-          onkeydown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()} aria-label="Titre" />
+          onkeydown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()} aria-label={t("Title")} />
 
         {#if editingDescription}
           <MarkdownEditor bind:value={descriptionDraft} rows={10} autofocus />
           <div class="row" style="margin-top:8px; justify-content:flex-end">
-            <button class="btn neutral small" onclick={() => (editingDescription = false)}>Annuler</button>
-            <button class="btn small" disabled={busy} onclick={saveDescription}>Enregistrer</button>
+            <button class="btn neutral small" onclick={() => (editingDescription = false)}>{t("Cancel")}</button>
+            <button class="btn small" disabled={busy} onclick={saveDescription}>{t("Save")}</button>
           </div>
         {:else}
           <div class="description">
             {#if task.description}
               <Markdown source={task.description} />
             {:else}
-              <p class="muted">Aucune description.</p>
+              <p class="muted">{t("No description.")}</p>
             {/if}
             {#if perms?.editContent}
               <button class="btn ghost small" onclick={() => { descriptionDraft = task!.description; editingDescription = true; }}>
-                <Icon name="edit" size={16} />Modifier la description
+                <Icon name="edit" size={16} />{t("Edit the description")}
               </button>
             {/if}
           </div>
@@ -221,7 +222,7 @@
 
         {#if task.items.length || perms?.editContent}
           <div class="infos">
-            <div class="section-title"><Icon name="checklist" />Sous-tâches</div>
+            <div class="section-title"><Icon name="checklist" />{t("Sub-tasks")}</div>
             <Checklist items={task.items} editable={Boolean(perms?.editContent)}
               onadd={items.add} ontoggle={items.toggle} onrename={items.rename} ondelete={items.remove} onmove={items.move} />
           </div>
@@ -236,7 +237,7 @@
         {/if}
 
         <div class="timeline">
-          <div class="section-title"><Icon name="history" />Historique</div>
+          <div class="section-title"><Icon name="history" />{t("History")}</div>
           {#each task.events as e (e.id)}
             <div class="event" class:refused={e.type === "refused"}>
               <span class="event-icon"><Icon name={eventIcon(e.type)} size={14} /></span>
@@ -252,7 +253,7 @@
                 {/if}
                 {#if e.comment}
                   <div class="e-comment">
-                    {#if e.type === "refused"}<div class="small muted">Raison du refus</div>{/if}
+                    {#if e.type === "refused"}<div class="small muted">{t("Reason for refusing")}</div>{/if}
                     <Markdown source={e.comment} compact />
                   </div>
                 {/if}
@@ -263,10 +264,10 @@
           {#if perms?.comment}
             <form class="comment-form" onsubmit={postComment}>
               {#key commentKey}
-                <MarkdownEditor bind:value={comment} rows={3} placeholder="Ajouter un commentaire (Markdown)…" />
+                <MarkdownEditor bind:value={comment} rows={3} placeholder={t("Add a comment (Markdown)…")} />
               {/key}
               <div class="row" style="justify-content:flex-end; margin-top:8px">
-                <button class="btn small" disabled={busy || !comment.trim()}>Commenter</button>
+                <button class="btn small" disabled={busy || !comment.trim()}>{t("Comment")}</button>
               </div>
             </form>
           {/if}
@@ -276,12 +277,12 @@
       <aside class="task-side">
         {#if perms?.manage && !app.pipeType(task.pipe?.kind)?.teamOnly}
           <div class="row wrap" style="margin-bottom:20px">
-            <button class="btn neutral small" onclick={() => (dialog = "send")}><Icon name="send" size={16} />Envoyer à…</button>
+            <button class="btn neutral small" onclick={() => (dialog = "send")}><Icon name="send" size={16} />{t("Send to…")}</button>
           </div>
         {/if}
 
         <div class="prop">
-          <span class="label-text">État</span>
+          <span class="label-text">{t("State")}</span>
           {#if perms?.manage && task.pipe}
             <select class="input" value={task.stage} disabled={busy}
               onchange={(e) => move(task!.pipe!.id, (e.currentTarget as HTMLSelectElement).value)}>
@@ -289,14 +290,14 @@
             </select>
           {:else}
             <div class="value">
-              {task.inIncoming ? "En attente (incoming)" : app.columnOf(task)?.label ?? STATUSES.find((s) => s.id === task!.status)?.label}
+              {task.inIncoming ? t("Waiting (incoming)") : app.columnOf(task)?.label ?? t(STATUSES.find((s) => s.id === task!.status)?.label ?? "")}
             </div>
           {/if}
         </div>
 
         {#if perms?.manage && task.pipe}
           <div class="prop">
-            <span class="label-text">Pipe</span>
+            <span class="label-text">{t("Pipe")}</span>
             <select class="input" value={task.pipe.id} disabled={busy}
               onchange={(e) => move((e.currentTarget as HTMLSelectElement).value)}>
               {#each pipes.filter((p) => !p.archived || p.id === task!.pipe!.id) as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
@@ -305,11 +306,11 @@
         {/if}
 
         <div class="prop">
-          <span class="label-text">Type de tâche</span>
+          <span class="label-text">{t("Task type")}</span>
           {#if perms?.editContent && typeChoices.length > 1}
             <select class="input" value={task.taskType} disabled={busy}
               onchange={(e) => patch({ taskType: (e.currentTarget as HTMLSelectElement).value })}>
-              {#each typeChoices as t (t.id)}<option value={t.id}>{t.label}</option>{/each}
+              {#each typeChoices as tt (tt.id)}<option value={tt.id}>{tt.label}</option>{/each}
             </select>
           {:else}
             <div class="value"><Icon name={iconOf(taskType?.icon)} size={16} />{taskType?.label ?? task.taskType}</div>
@@ -317,20 +318,20 @@
         </div>
 
         <div class="prop">
-          <span class="label-text">Propriétaire</span>
+          <span class="label-text">{t("Owner")}</span>
           {#if perms?.manage && task.space.kind === "team"}
-            <UserSelect value={task.assignee?.id ?? null} users={members} placeholder="Non assignée"
+            <UserSelect value={task.assignee?.id ?? null} users={members} placeholder={t("Unassigned")}
               onchange={(v) => patch({ assigneeId: v })} />
           {:else}
-            <div class="value">{#if task.assignee}<Avatar user={task.assignee} size={20} />{task.assignee.name}{:else}<span class="muted">Non assignée</span>{/if}</div>
+            <div class="value">{#if task.assignee}<Avatar user={task.assignee} size={20} />{task.assignee.name}{:else}<span class="muted">{t("Unassigned")}</span>{/if}</div>
             {#if task.space.kind === "user" && perms?.manage}
-              <div class="hint">Tâche personnelle. Pour la confier à quelqu'un, utilisez « Envoyer à… ».</div>
+              <div class="hint">{t("Personal task. To hand it to someone, use “Send to…”.")}</div>
             {/if}
           {/if}
         </div>
 
         <div class="prop">
-          <span class="label-text">Échéance</span>
+          <span class="label-text">{t("Due date")}</span>
           {#if perms?.manage}
             <input class="input due {due}" type="date" value={task.dueDate ?? ""}
               onchange={(e) => patch({ dueDate: (e.currentTarget as HTMLInputElement).value || null })} />
@@ -340,32 +341,32 @@
         </div>
 
         <div class="prop">
-          <span class="label-text">Document Outline</span>
+          <span class="label-text">{t("Outline document")}</span>
           {#if task.outlineDoc}
             <div class="value">
               <a class="doc-link" href={task.outlineDoc.url ?? "#"} target="_blank" rel="noreferrer">
                 <Icon name="doc" size={16} /><span>{task.outlineDoc.title}</span>
               </a>
               {#if perms?.manage}
-                <button class="btn ghost icon small" title="Délier" onclick={() => linkDoc(null)}><Icon name="unlink" size={16} /></button>
+                <button class="btn ghost icon small" title={t("Unlink")} onclick={() => linkDoc(null)}><Icon name="unlink" size={16} /></button>
               {/if}
             </div>
           {:else if perms?.manage && !app.isGuest}
             {#if pickingDoc}
               <DocPicker onselect={linkDoc} autofocus />
-              <button class="btn ghost small" onclick={() => (pickingDoc = false)}>Annuler</button>
+              <button class="btn ghost small" onclick={() => (pickingDoc = false)}>{t("Cancel")}</button>
             {:else if creatingDoc}
               <select class="input" bind:value={collectionId}>
                 {#each collections as c (c.id)}<option value={c.id}>{c.name}</option>{/each}
               </select>
               <div class="row" style="margin-top:6px">
-                <button class="btn small" disabled={!collectionId || busy} onclick={createDoc}>Créer</button>
-                <button class="btn ghost small" onclick={() => (creatingDoc = false)}>Annuler</button>
+                <button class="btn small" disabled={!collectionId || busy} onclick={createDoc}>{t("Create")}</button>
+                <button class="btn ghost small" onclick={() => (creatingDoc = false)}>{t("Cancel")}</button>
               </div>
             {:else}
               <div class="row wrap">
-                <button class="btn neutral small" onclick={() => (pickingDoc = true)}>Lier un document</button>
-                <button class="btn ghost small" onclick={startCreateDoc}>Créer dans Outline</button>
+                <button class="btn neutral small" onclick={() => (pickingDoc = true)}>{t("Link a document")}</button>
+                <button class="btn ghost small" onclick={startCreateDoc}>{t("Create in Outline")}</button>
               </div>
             {/if}
           {:else}
@@ -374,11 +375,11 @@
         </div>
 
         <div class="prop">
-          <span class="label-text">Auteur·rice</span>
+          <span class="label-text">{t("Author")}</span>
           <div class="value"><Avatar user={task.author} size={20} />{task.author.name}</div>
         </div>
         <div class="prop">
-          <span class="label-text">Créée</span>
+          <span class="label-text">{t("Created")}</span>
           <div class="value">{formatDateTime(task.createdAt)}</div>
         </div>
       </aside>

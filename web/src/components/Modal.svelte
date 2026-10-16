@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import Icon from "./Icon.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   let { title, onclose, large = false, children }: {
     title?: string;
@@ -19,7 +20,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="modal-backdrop" onmousedown={(e) => e.target === e.currentTarget && onclose()}>
   <div class="modal" class:large role="dialog" aria-modal="true" aria-label={title}>
-    <button class="btn ghost icon small modal-close" onclick={onclose} aria-label="Fermer">
+    <button class="btn ghost icon small modal-close" onclick={onclose} aria-label={t("Close")}>
       <Icon name="close" size={18} />
     </button>
     {#if title}<div class="modal-title">{title}</div>{/if}

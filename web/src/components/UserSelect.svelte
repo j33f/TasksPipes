@@ -2,8 +2,9 @@
   import { app } from "../lib/app.svelte";
 
   import type { UserRef } from "../lib/types";
+  import { t } from "../lib/i18n.svelte";
 
-  let { value = $bindable(null), placeholder = "Personne", exclude = [], users, onchange }: {
+  let { value = $bindable(null), placeholder = t("Person"), exclude = [], users, onchange }: {
     value?: string | null;
     placeholder?: string;
     exclude?: string[];

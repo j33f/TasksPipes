@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from "../lib/i18n.svelte";
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
   import { openTaskCount } from "../lib/constants";
@@ -32,14 +33,14 @@
 
   const visible = $derived(
     (pipe?.tasks ?? []).filter(
-      (t) =>
-        (!filter.trim() || t.title.toLowerCase().includes(filter.trim().toLowerCase())) &&
-        (!mineOnly || t.assignee?.id === app.me?.user.id)
+      (x) =>
+        (!filter.trim() || x.title.toLowerCase().includes(filter.trim().toLowerCase())) &&
+        (!mineOnly || x.assignee?.id === app.me?.user.id)
     )
   );
   const boardColumns = $derived(app.columnsFor(pipe?.kind));
   const columns = $derived(
-    Object.fromEntries(boardColumns.map((c) => [c.id, visible.filter((t) => t.stage === c.id)])) as Record<string, Task[]>
+    Object.fromEntries(boardColumns.map((c) => [c.id, visible.filter((x) => x.stage === c.id)])) as Record<string, Task[]>
   );
 
   function ondragover(e: DragEvent, stage: string) {
@@ -92,7 +93,7 @@
   async function setArchived(archived: boolean) {
     try {
       await api.patch(`/pipes/${id}`, { archived });
-      app.toast(archived ? "Pipe archivé" : "Pipe désarchivé");
+      app.toast(archived ? t("Pipe archived") : t("Pipe unarchived"));
       app.refresh();
     } catch (err) {
       app.toast(errorMessage(err), "error");
@@ -102,8 +103,8 @@
   async function ondrop(e: DragEvent) {
     e.preventDefault();
     if (!pipe || !draggedId || !drop) return;
-    const task = pipe.tasks.find((t) => t.id === draggedId)!;
-    const siblings = columns[drop.stage].filter((t) => t.id !== draggedId);
+    const task = pipe.tasks.find((x) => x.id === draggedId)!;
+    const siblings = columns[drop.stage].filter((x) => x.id !== draggedId);
     const prev = siblings[drop.index - 1];
     const next = siblings[drop.index];
     const position = prev && next ? (prev.position + next.position) / 2 : prev ? prev.position + 1 : next ? next.position - 1 : 1;
@@ -112,7 +113,7 @@
     drop = null;
     if (task.stage === stage && task.position === position) return;
     // Optimistic update, then reconcile with the server.
-    pipe.tasks = pipe.tasks.map((t) => (t.id === task.id ? { ...t, stage, position } : t)).sort((a, b) => a.position - b.position);
+    pipe.tasks = pipe.tasks.map((x) => (x.id === task.id ? { ...x, stage, position } : x)).sort((a, b) => a.position - b.position);
     try {
       await api.post(`/tasks/${task.id}/move`, { pipeId: pipe.id, stage, position });
     } catch (err) {
@@ -129,61 +130,61 @@
     <div class="page-header">
       <div class="grow">
         <div class="breadcrumb">
-          <a href={`/spaces/${pipe.space.id}`}><SpaceIcon space={pipe.space} size={16} />{pipe.space.id === app.me?.personalSpaceId ? "Mon espace" : pipe.space.name}</a>
-          <span>›</span><span>Pipe</span>
+          <a href={`/spaces/${pipe.space.id}`}><SpaceIcon space={pipe.space} size={16} />{pipe.space.id === app.me?.personalSpaceId ? t("My space") : pipe.space.name}</a>
+          <span>›</span><span>{t("Pipe")}</span>
         </div>
         <h1>
           <IconPicker icon={pipe.icon} color={pipe.color} kind={pipe.kind} editable={pipe.canManage} size={28}
             onchange={(next) => save(next)} />
           {#if pipe.canManage}
-            <input class="title-input" value={pipe.name} maxlength="120" aria-label="Nom du pipe" onblur={rename} onkeydown={titleKeydown} />
+            <input class="title-input" value={pipe.name} maxlength="120" aria-label={t("Pipe name")} onblur={rename} onkeydown={titleKeydown} />
           {:else}
             {pipe.name}
           {/if}
-          {#if pipe.archived}<span class="badge"><Icon name="archive" size={12} />Archivé</span>{/if}
+          {#if pipe.archived}<span class="badge"><Icon name="archive" size={12} />{t("Archived")}</span>{/if}
           {#if app.pipeType(pipe.kind)}<span class="badge">{app.pipeType(pipe.kind)?.label}</span>{/if}
           {#if pipe.visibility === "open"}
-            <span class="badge open"><Icon name="globe" size={12} />Open</span>
+            <span class="badge open"><Icon name="globe" size={12} />{t("Open")}</span>
           {:else}
-            <span class="badge">{#if pipe.space.kind === "team"}<Icon name="users" size={12} />Équipe{:else}<Icon name="lock" size={12} />Perso{/if}</span>
+            <span class="badge">{#if pipe.space.kind === "team"}<Icon name="users" size={12} />{t("Team")}{:else}<Icon name="lock" size={12} />{t("Personal")}{/if}</span>
           {/if}
         </h1>
         {#if pipe.description}<div class="description"><Markdown source={pipe.description} compact /></div>{/if}
         {#if pipe.archived}
           <div class="callout row archived">
             <Icon name="archive" />
-            <span class="grow">Ce pipe est archivé : il n'apparaît plus dans les listes et n'accepte plus de nouvelles tâches.</span>
-            {#if pipe.canManage}<button class="btn small neutral" onclick={() => setArchived(false)}>Désarchiver</button>{/if}
+            <span class="grow">{t("This pipe is archived: it no longer shows in lists and takes no new tasks.")}</span>
+            {#if pipe.canManage}<button class="btn small neutral" onclick={() => setArchived(false)}>{t("Unarchive")}</button>{/if}
           </div>
         {/if}
         {#if finished && !pipe.archived && !pipe.isDefault && pipe.canManage}
           <div class="callout row archived">
             <Icon name="check" />
-            <span class="grow">Toutes les tâches de ce pipe sont terminées ou abandonnées.</span>
-            <button class="btn small" onclick={() => setArchived(true)}><Icon name="archive" size={16} />Archiver le pipe</button>
+            <span class="grow">{t("All the tasks of this pipe are done or dropped.")}</span>
+            <button class="btn small" onclick={() => setArchived(true)}><Icon name="archive" size={16} />{t("Archive the pipe")}</button>
           </div>
         {/if}
         {#if !pipe.canManage}
-          <div class="subtitle">Pipe open de {pipe.space.name} : vous pouvez y ajouter des tâches et commenter ; seuls ses membres les font avancer.</div>
+          <div class="subtitle">{t("Open pipe of {name}: you can add tasks and comment; only its members move them forward.", { name: pipe.space.name })}</div>
         {/if}
       </div>
       <div class="row wrap">
-        <input class="input filter" placeholder="Filtrer…" bind:value={filter} />
+        <input class="input filter" placeholder={t("Filter…")} bind:value={filter} />
         {#if pipe.space.kind === "team"}
           <button class="btn neutral" class:active-toggle={mineOnly} onclick={() => (mineOnly = !mineOnly)}>
-            <Icon name="user" size={16} />Les miennes
+            <Icon name="user" size={16} />{t("Mine")}
           </button>
         {/if}
         <button class="btn neutral icon" class:active-toggle={app.isPinned(pipe.id)}
-          title={app.isPinned(pipe.id) ? "Désépingler du menu" : "Épingler dans le menu"}
+          title={app.isPinned(pipe.id) ? t("Unpin from the menu") : t("Pin to the menu")}
           onclick={() => app.setPinned(pipe!.id, !app.isPinned(pipe!.id)).catch((err) => app.toast(errorMessage(err), "error"))}>
           <Icon name="pin" />
         </button>
         {#if pipe.canManage}
-          <button class="btn neutral icon" title="Modifier le pipe" onclick={() => (editing = true)}><Icon name="settings" /></button>
+          <button class="btn neutral icon" title={t("Edit the pipe")} onclick={() => (editing = true)}><Icon name="settings" /></button>
         {/if}
         {#if pipe.canAddTasks}
-          <button class="btn" onclick={() => (newTaskStage = "")}><Icon name="plus" size={18} />Nouvelle tâche</button>
+          <button class="btn" onclick={() => (newTaskStage = "")}><Icon name="plus" size={18} />{t("New task")}</button>
         {/if}
       </div>
     </div>
@@ -199,15 +200,15 @@
           </header>
           <div class="column-body" role="list" ondragover={(e) => ondragover(e, s.id)} {ondrop}
             ondragleave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) drop = null; }}>
-            {#each tasks.filter((t) => t.id !== draggedId) as t, i (t.id)}
+            {#each tasks.filter((x) => x.id !== draggedId) as x, i (x.id)}
               {#if drop?.stage === s.id && drop.index === i}<div class="drop-indicator"></div>{/if}
-              <TaskCard task={t} draggable={pipe.canManage}
-                ondragstart={(e) => { e.dataTransfer?.setData("text/plain", t.id); setTimeout(() => (draggedId = t.id)); }}
+              <TaskCard task={x} draggable={pipe.canManage}
+                ondragstart={(e) => { e.dataTransfer?.setData("text/plain", x.id); setTimeout(() => (draggedId = x.id)); }}
                 ondragend={() => { draggedId = null; drop = null; }} />
             {/each}
-            {#if drop?.stage === s.id && drop.index >= tasks.filter((t) => t.id !== draggedId).length}<div class="drop-indicator"></div>{/if}
+            {#if drop?.stage === s.id && drop.index >= tasks.filter((x) => x.id !== draggedId).length}<div class="drop-indicator"></div>{/if}
             {#if pipe.canAddTasks}
-              <button class="btn ghost small add" onclick={() => (newTaskStage = s.id)}><Icon name="plus" size={16} />Ajouter</button>
+              <button class="btn ghost small add" onclick={() => (newTaskStage = s.id)}><Icon name="plus" size={16} />{t("Add")}</button>
             {/if}
           </div>
         </section>

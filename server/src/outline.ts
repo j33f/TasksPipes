@@ -1,11 +1,13 @@
 import dns from "node:dns/promises";
 import net from "node:net";
 import { config } from "./config.js";
+import type { Params } from "./errors.js";
 
 export class OutlineError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    public params?: Params
   ) {
     super(message);
   }
@@ -57,8 +59,8 @@ async function assertPublicHost(instance: string) {
   if (config.outlineAllowPrivate) return;
   const host = new URL(instance).hostname.replace(/^\[|\]$/g, "");
   const addresses = net.isIP(host) ? [host] : (await dns.lookup(host, { all: true }).catch(() => [])).map((a) => a.address);
-  if (!addresses.length) throw new OutlineError(400, `Serveur introuvable : ${host}`);
-  if (addresses.some(isPrivateIp)) throw new OutlineError(400, "Ce serveur Outline n'est pas autorisé (adresse interne).");
+  if (!addresses.length) throw new OutlineError(400, "Server not found: {host}", { host });
+  if (addresses.some(isPrivateIp)) throw new OutlineError(400, "This Outline server is not allowed (internal address).");
 }
 
 const hostAllowed = (host: string) =>
@@ -73,13 +75,13 @@ export async function normalizeOutlineUrl(input: unknown): Promise<string> {
   try {
     u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
   } catch {
-    throw new OutlineError(400, "Adresse de serveur Outline invalide");
+    throw new OutlineError(400, "Invalid Outline server address");
   }
   const url = `${u.origin}${u.pathname.replace(/\/+$/, "")}`;
   if (isDefault(url) || isDefault(u.origin)) return config.outlineUrl;
-  if (u.protocol !== "https:" && !(config.outlineAllowPrivate && u.protocol === "http:")) throw new OutlineError(400, "Le serveur Outline doit être en https://");
-  if (u.username || u.password) throw new OutlineError(400, "Adresse de serveur Outline invalide");
-  if (!hostAllowed(u.hostname)) throw new OutlineError(400, "Ce serveur Outline n'est pas autorisé ici.");
+  if (u.protocol !== "https:" && !(config.outlineAllowPrivate && u.protocol === "http:")) throw new OutlineError(400, "The Outline server must use https://");
+  if (u.username || u.password) throw new OutlineError(400, "Invalid Outline server address");
+  if (!hostAllowed(u.hostname)) throw new OutlineError(400, "This Outline server is not allowed here.");
   await assertPublicHost(url);
   return url;
 }
@@ -100,7 +102,7 @@ export async function outlineApi<T = any>(token: string, method: string, body: o
     redirect: "error",
     signal: AbortSignal.timeout(15_000),
   }).catch((err: Error & { cause?: { message?: string } }) => {
-    throw new OutlineError(502, `Serveur Outline injoignable : ${err.cause?.message ?? err.message}`);
+    throw new OutlineError(502, "Outline server unreachable: {cause}", { cause: err.cause?.message ?? err.message });
   });
   const json = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string; error?: string; data: T };
   if (!res.ok || json.ok === false) {

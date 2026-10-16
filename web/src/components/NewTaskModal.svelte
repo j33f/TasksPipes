@@ -12,6 +12,7 @@
   import TaskFields, { type FieldFile } from "./TaskFields.svelte";
   import Checklist from "./Checklist.svelte";
   import type { ChecklistItem } from "../lib/types";
+  import { t } from "../lib/i18n.svelte";
 
   let { pipe = null, stage: initialStage = null, spaceId: initialSpaceId = null, onclose }: {
     /** Create directly in this pipe… */
@@ -29,7 +30,7 @@
   let stage = $state<string | null>(untrack(() => initialStage ?? (pipe ? app.columnsFor(pipe.kind)[0]?.id : null) ?? null));
 
   // Task type: those of the pipe type, or any of them when sending to an incoming bucket.
-  const typeChoices = $derived(pipe ? app.taskTypesFor(pipe.kind) : app.taskTypes.filter((t) => app.usable(t)));
+  const typeChoices = $derived(pipe ? app.taskTypesFor(pipe.kind) : app.taskTypes.filter((tt) => app.usable(tt)));
   // Default: the pipe type's main task type, except in checklist processes (with starter tasks) where plain tasks prevail.
   let taskTypeId = $state(
     untrack(() => (pipe && !app.pipeType(pipe.kind)?.templates.length ? app.taskTypesFor(pipe.kind)[1]?.id : null) ?? "task")
@@ -81,7 +82,7 @@
           app.toast(`${p.name} : ${errorMessage(err)}`, "error")
         );
       }
-      app.toast(sendingToOther ? "Tâche envoyée" : "Tâche créée");
+      app.toast(sendingToOther ? t("Task sent") : t("Task created"));
       app.refresh();
       onclose();
       if (!sendingToOther) app.openTask(id);
@@ -93,32 +94,32 @@
   }
 </script>
 
-<Modal title={pipe ? `Nouvelle tâche · ${pipe.name}` : "Nouvelle tâche"} large={Boolean(taskType?.fields.length)} {onclose}>
+<Modal title={pipe ? `${t("New task")} · ${pipe.name}` : t("New task")} large={Boolean(taskType?.fields.length)} {onclose}>
   <form onsubmit={submit}>
     {#if typeChoices.length > 1}
       <div class="field">
-        <span class="label-text">Type de tâche</span>
+        <span class="label-text">{t("Task type")}</span>
         <div class="types">
-          {#each typeChoices as t (t.id)}
-            <button type="button" class="type-card" class:selected={taskTypeId === t.id} title={t.description} onclick={() => (taskTypeId = t.id)}>
-              <Icon name={iconOf(t.icon)} size={16} />{t.label}
+          {#each typeChoices as tt (tt.id)}
+            <button type="button" class="type-card" class:selected={taskTypeId === tt.id} title={tt.description} onclick={() => (taskTypeId = tt.id)}>
+              <Icon name={iconOf(tt.icon)} size={16} />{tt.label}
             </button>
           {/each}
         </div>
       </div>
     {/if}
     <div class="field">
-      <label for="nt-title">Titre</label>
+      <label for="nt-title">{t("Title")}</label>
       <!-- svelte-ignore a11y_autofocus -->
       <input id="nt-title" class="input" bind:value={title} autofocus required maxlength="300" />
     </div>
     <div class="field">
-      <span class="label-text">Description</span>
+      <span class="label-text">{t("Description")}</span>
       <MarkdownEditor bind:value={description} rows={5} />
     </div>
 
     <div class="field">
-      <span class="label-text">Sous-tâches</span>
+      <span class="label-text">{t("Sub-tasks")}</span>
       <Checklist {items}
         onadd={(text) => { items = [...items, { id: `new-${Math.random()}`, text, done: false, position: Math.max(0, ...items.map((i) => i.position)) + 1 }]; }}
         ontoggle={(item) => (item.done = !item.done)}
@@ -137,14 +138,14 @@
 
     {#if pipe}
       <div class="field">
-        <label for="nt-status">Colonne</label>
+        <label for="nt-status">{t("Column")}</label>
         <select id="nt-status" class="input" bind:value={stage}>
           {#each columns as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
         </select>
       </div>
     {:else}
       <div class="field">
-        <label for="nt-dest">Incoming de destination</label>
+        <label for="nt-dest">{t("Destination incoming")}</label>
         <SpaceSelect bind:value={spaceId} />
       </div>
     {/if}
@@ -152,23 +153,23 @@
     <div class="grid2">
       {#if isTeam}
         <div class="field">
-          <label for="nt-owner">Propriétaire</label>
-          <UserSelect bind:value={assigneeId} users={members} placeholder="Non assignée" />
+          <label for="nt-owner">{t("Owner")}</label>
+          <UserSelect bind:value={assigneeId} users={members} placeholder={t("Unassigned")} />
         </div>
       {/if}
       <div class="field">
-        <label for="nt-due">Échéance</label>
+        <label for="nt-due">{t("Due date")}</label>
         <input id="nt-due" class="input" type="date" bind:value={dueDate} />
       </div>
     </div>
 
     {#if !app.isGuest}
     <div class="field">
-      <span class="label-text">Document Outline lié</span>
+      <span class="label-text">{t("Linked Outline document")}</span>
       {#if outlineDoc}
         <div class="row">
           <span class="doc-link"><Icon name="doc" size={16} /><span>{outlineDoc.title}</span></span>
-          <button type="button" class="btn ghost small" onclick={() => (outlineDoc = null)}>Retirer</button>
+          <button type="button" class="btn ghost small" onclick={() => (outlineDoc = null)}>{t("Remove")}</button>
         </div>
       {:else}
         <DocPicker onselect={(d) => (outlineDoc = d)} />
@@ -178,16 +179,16 @@
 
     {#if sendingToOther}
       <div class="field">
-        <span class="label-text">Message au destinataire (optionnel)</span>
+        <span class="label-text">{t("Message to the recipient (optional)")}</span>
         <MarkdownEditor bind:value={comment} rows={3} />
       </div>
     {/if}
 
     {#if error}<div class="error-text">{error}</div>{/if}
     <div class="modal-actions">
-      <button type="button" class="btn neutral" onclick={onclose}>Annuler</button>
+      <button type="button" class="btn neutral" onclick={onclose}>{t("Cancel")}</button>
       <button class="btn" disabled={busy || !title.trim() || (!pipe && !spaceId)}>
-        {sendingToOther ? "Envoyer" : "Créer"}
+        {sendingToOther ? t("Send") : t("Create")}
       </button>
     </div>
   </form>

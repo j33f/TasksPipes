@@ -8,11 +8,13 @@ import {
 } from "./pipeTypes.js";
 import { validatePipeType, validateTaskType } from "./designer.js";
 import { cleanFields } from "./fields.js";
+import { LOCALES, localeOf, localize, localizePipeType, localizeTaskType, tr, type Locale } from "./i18n.js";
 import QRCode from "qrcode";
 import { INVITE_LINK_DAYS, createLoginLink, decrypt, encrypt, ensurePersonalSpace } from "./auth.js";
 import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
 import { sendLinkMail } from "./mail.js";
 import { notifySpace } from "./realtime.js";
+import { calendarUrl } from "./calendar.js";
 
 export const STATUSES = ["backlog", "ready", "started", "ongoing", "blocked", "abandoned", "done"] as const;
 type Status = (typeof STATUSES)[number];
@@ -27,7 +29,7 @@ type Req = FastifyRequest<{ Params: Record<string, string>; Body: Body; Querystr
 // Input helpers
 
 function uuid(value: unknown, label: string): string {
-  if (typeof value !== "string" || !UUID.test(value)) throw bad(`${label} invalide`);
+  if (typeof value !== "string" || !UUID.test(value)) throw bad("{label} is invalid", { label });
   return value;
 }
 const optUuid = (value: unknown, label: string) =>
@@ -35,20 +37,20 @@ const optUuid = (value: unknown, label: string) =>
 
 function text(value: unknown, label: string, { required = false, max = 100_000 } = {}): string {
   const v = typeof value === "string" ? value.trim() : "";
-  if (required && !v) throw bad(`${label} requis`);
-  if (v.length > max) throw bad(`${label} trop long`);
+  if (required && !v) throw bad("{label} is required", { label });
+  if (v.length > max) throw bad("{label} is too long", { label });
   return v;
 }
 
 function dateOrNull(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw bad("Date d'échéance invalide");
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw bad("Invalid due date");
   return value;
 }
 
 function status(value: unknown, fallback: Status = "backlog"): Status {
   if (value === undefined || value === null) return fallback;
-  if (!STATUSES.includes(value as Status)) throw bad("Statut invalide");
+  if (!STATUSES.includes(value as Status)) throw bad("Invalid status");
   return value as Status;
 }
 
@@ -61,10 +63,10 @@ interface DocRef {
 function docOrNull(doc: unknown): DocRef | null {
   if (!doc) return null;
   const d = doc as Partial<DocRef>;
-  if (typeof d.id !== "string" || !d.id) throw bad("Document Outline invalide");
+  if (typeof d.id !== "string" || !d.id) throw bad("Invalid Outline document");
   return {
     id: d.id.slice(0, 200),
-    title: String(d.title || "Sans titre").slice(0, 500),
+    title: String(d.title || "Untitled").slice(0, 500),
     url: absoluteOutlineUrl(String(d.url || "")),
   };
 }
@@ -72,7 +74,7 @@ function docOrNull(doc: unknown): DocRef | null {
 const color = (v: unknown) => (typeof v === "string" && v ? v.slice(0, 20) : null);
 function taskType(value: unknown) {
   const t = taskTypeById(value === undefined || value === null || value === "" ? "task" : value);
-  if (!t) throw bad("Type de tâche invalide");
+  if (!t) throw bad("Invalid task type");
   return t;
 }
 
@@ -82,14 +84,14 @@ const icon = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice
 function pipeKind(value: unknown, userId: string, current?: string): string {
   if (value === undefined || value === null || value === "") return DEFAULT_PIPE_TYPE;
   const t = pipeTypeById(value);
-  if (!t || (value !== current && !usableBy(t, userId))) throw bad("Type de pipe invalide");
+  if (!t || (value !== current && !usableBy(t, userId))) throw bad("Invalid pipe type");
   return t.id;
 }
 
 /** Someone else's private task type is usable only where a pipe type offers it, or on a task that already has it. */
 function assertTaskTypeUsable(type: TaskType, userId: string, pipeKindId: string | null, current?: string) {
   if (type.id === current || usableBy(type, userId) || pipeTypeById(pipeKindId)?.taskTypes.includes(type.id)) return;
-  throw bad("Type de tâche invalide");
+  throw bad("Invalid task type");
 }
 
 // ---------------------------------------------------------------------------
@@ -217,10 +219,10 @@ async function taskPermissions(t: Row, userId: string): Promise<TaskPermissions>
 }
 
 async function loadTaskFor(id: string, userId: string, need?: keyof TaskPermissions) {
-  const t = await getTaskRow(uuid(id, "Tâche"));
-  if (!t) throw notFound("Tâche introuvable");
+  const t = await getTaskRow(uuid(id, "Task"));
+  if (!t) throw notFound("Task not found");
   const perms = await taskPermissions(t, userId);
-  if (!perms.view) throw notFound("Tâche introuvable");
+  if (!perms.view) throw notFound("Task not found");
   if (need && !perms[need]) throw forbidden();
   return { t, perms };
 }
@@ -234,9 +236,9 @@ async function loadPipeFor(id: unknown, userId: string) {
     `SELECT p.*, u.name AS created_by_name FROM pipes p LEFT JOIN users u ON u.id = p.created_by WHERE p.id = $1`,
     [uuid(id, "Pipe")]
   );
-  if (!p) throw notFound("Pipe introuvable");
+  if (!p) throw notFound("Pipe not found");
   const role = await memberRole(p.space_id, userId);
-  if (!role && (p.visibility !== "open" || !(await spaceVisible(p.space_id, userId)))) throw notFound("Pipe introuvable");
+  if (!role && (p.visibility !== "open" || !(await spaceVisible(p.space_id, userId)))) throw notFound("Pipe not found");
   return { p, role };
 }
 
@@ -300,7 +302,19 @@ async function nextPosition(db: Queryable, spaceId: string, pipeId: string | nul
   return r!.p;
 }
 
-async function getEvents(taskId: string) {
+/** Catalog names recorded in an event's details (type, fields), shown in `lang`. */
+function localizeDetails(lang: Locale, d: Row): Row {
+  const l = (v: unknown) => (typeof v === "string" ? localize(lang, v) : v);
+  return {
+    ...d,
+    ...(d.taskType ? { taskType: { from: l(d.taskType.from), to: l(d.taskType.to) } } : {}),
+    ...(Array.isArray(d.fields) ? { fields: d.fields.map(l) } : {}),
+    ...(d.field ? { field: l(d.field) } : {}),
+  };
+}
+
+/** History of a task; column, type and field names recorded with it are shown in `lang`. */
+async function getEvents(taskId: string, lang: Locale) {
   const { rows } = await query(
     `SELECT e.*, a.name AS actor_name, a.avatar_url AS actor_avatar,
             COALESCE(fsu.name, fs.name) AS from_space_name, COALESCE(tsu.name, ts.name) AS to_space_name,
@@ -328,7 +342,7 @@ async function getEvents(taskId: string) {
         }
       : null,
     status: e[`${p}_status`],
-    stage: e[`${p}_stage`],
+    stage: e[`${p}_stage`] && localize(lang, e[`${p}_stage`]),
     assignee: e[`${p}_assignee_id`] ? { id: e[`${p}_assignee_id`], name: e[`${p}_assignee_name`] } : null,
     dueDate: e[`${p}_due_date`],
     doc: e[`${p}_doc`],
@@ -337,7 +351,7 @@ async function getEvents(taskId: string) {
     id: e.id,
     type: e.type,
     comment: e.comment,
-    details: e.details,
+    details: e.details && localizeDetails(lang, e.details),
     createdAt: e.created_at,
     actor: { id: e.actor_id, name: e.actor_name, avatarUrl: e.actor_avatar },
     from: side(e, "from"),
@@ -358,7 +372,7 @@ async function getItems(taskId: string) {
 
 async function ensureUser(id: string | null, db?: Queryable): Promise<string | null> {
   if (!id) return null;
-  if (!(await one(`SELECT id FROM users WHERE id = $1`, [uuid(id, "Utilisateur")], db))) throw bad("Utilisateur inconnu");
+  if (!(await one(`SELECT id FROM users WHERE id = $1`, [uuid(id, "User")], db))) throw bad("Unknown user");
   return id;
 }
 
@@ -375,8 +389,8 @@ async function checkAssignee(spaceId: string, assigneeId: string | null, db?: Qu
   const s = await one(`SELECT kind FROM spaces WHERE id = $1`, [spaceId], db);
   throw bad(
     s?.kind === "team"
-      ? "Le ou la propriétaire doit être membre de l'équipe"
-      : "Une tâche d'un espace personnel appartient à sa ou son titulaire : envoyez-la plutôt à quelqu'un."
+      ? "The owner must be a member of the team"
+      : "A task in a personal space belongs to its holder: send it to someone instead."
   );
 }
 
@@ -384,28 +398,28 @@ async function assertKindAllowed(kind: string, spaceId: string) {
   if (!pipeTypeById(kind)?.teamOnly) return;
   const s = await one(`SELECT kind FROM spaces WHERE id = $1`, [spaceId]);
   if (s?.kind !== "team") {
-    throw bad(`Un pipe « ${pipeTypeById(kind)!.label} » se crée dans un espace d'équipe (par exemple l'équipe PSH), pas dans un espace personnel.`);
+    throw bad("A “{type}” pipe is created in a team space (the PSH team for instance), not in a personal space.", { type: pipeTypeById(kind)!.label });
   }
 }
 
 /** Tasks of a pipe reserved to a team never leave its space (no sending, no move to another space). */
 function assertStaysInSpace(t: Row, targetSpaceId: string) {
   if (pipeTypeById(t.pipe_kind)?.teamOnly && targetSpaceId !== t.space_id) {
-    throw bad("Cette tâche contient des données confidentielles : elle ne peut pas quitter son espace.");
+    throw bad("This task holds confidential data: it cannot leave its space.");
   }
 }
 
 async function requireTeamAdmin(spaceId: string, userId: string) {
-  const s = await getSpace(uuid(spaceId, "Espace"), userId);
-  if (!s) throw notFound("Espace introuvable");
-  if (s.kind !== "team") throw bad("Les espaces personnels ne peuvent pas être modifiés");
-  if (s.my_role !== "admin") throw forbidden("Seuls les administrateurs de l'équipe peuvent faire cela");
+  const s = await getSpace(uuid(spaceId, "Space"), userId);
+  if (!s) throw notFound("Space not found");
+  if (s.kind !== "team") throw bad("Personal spaces cannot be changed");
+  if (s.my_role !== "admin") throw forbidden("Only the team's admins can do this");
   return s;
 }
 
 async function assertAdminRemains(db: Queryable, spaceId: string) {
   const r = await one(`SELECT count(*) AS n FROM space_members WHERE space_id = $1 AND role = 'admin'`, [spaceId], db);
-  if (r!.n < 1) throw bad("L'équipe doit garder au moins un administrateur");
+  if (r!.n < 1) throw bad("The team must keep at least one admin");
 }
 
 const presentDoc = (d: OutlineDocument, instance: string) => ({
@@ -421,7 +435,7 @@ const presentDoc = (d: OutlineDocument, instance: string) => ({
 
 export async function apiRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (req) => {
-    if (!req.user) throw new HttpError(401, "Non authentifié");
+    if (!req.user) throw new HttpError(401, "Not signed in");
   });
   const me = (req: FastifyRequest) => req.user!.id;
 
@@ -433,21 +447,31 @@ export async function apiRoutes(app: FastifyInstance) {
 
   // ----- My account (e-mail accounts: name and TOTP) -------------------------
 
+  // Display preferences (language, theme: null follows the browser), and the name of e-mail accounts.
   app.patch("/me", async (req: Req) => {
-    if (req.user!.kind !== "email") throw bad("Le nom d'un compte Outline se change dans Outline");
-    const name = text(req.body?.name, "Nom", { required: true, max: 120 });
-    await query(`UPDATE users SET name = $2, updated_at = now() WHERE id = $1`, [me(req), name]);
+    const b = req.body || {};
+    const u = req.user!;
+    let name = u.name;
+    if ("name" in b) {
+      if (u.kind !== "email") throw bad("The name of an Outline account is changed in Outline");
+      name = text(b.name, "Name", { required: true, max: 120 });
+    }
+    const locale = "locale" in b ? (b.locale === null ? null : LOCALES.includes(b.locale) ? b.locale : bad("Invalid language")) : u.locale;
+    const theme = "theme" in b ? (b.theme === null ? null : ["light", "dark"].includes(b.theme) ? b.theme : bad("Invalid theme")) : u.theme;
+    if (locale instanceof HttpError) throw locale;
+    if (theme instanceof HttpError) throw theme;
+    await query(`UPDATE users SET name = $2, locale = $3, theme = $4, updated_at = now() WHERE id = $1`, [me(req), name, locale, theme]);
     return { ok: true };
   });
 
   const requireEmailAccount = (req: Req) => {
-    if (req.user!.kind !== "email") throw bad("La double authentification concerne les comptes invités par e-mail ; un compte Outline la règle dans Outline.");
+    if (req.user!.kind !== "email") throw bad("Two-factor authentication is for accounts invited by e-mail; an Outline account sets it up in Outline.");
   };
 
   // Step 1: a new secret, kept aside until a first code confirms the app is set up.
   app.post("/me/totp/setup", async (req: Req) => {
     requireEmailAccount(req);
-    if (req.user!.totp) throw bad("La double authentification est déjà active");
+    if (req.user!.totp) throw bad("Two-factor authentication is already on");
     const secret = newSecret();
     await query(`UPDATE users SET totp_pending = $2 WHERE id = $1`, [me(req), encrypt(secret)]);
     const url = otpauthUrl(secret, req.user!.email ?? req.user!.name);
@@ -458,9 +482,9 @@ export async function apiRoutes(app: FastifyInstance) {
     requireEmailAccount(req);
     const u = await one(`SELECT totp_pending FROM users WHERE id = $1`, [me(req)]);
     const secret = decrypt(u?.totp_pending);
-    if (!secret) throw bad("Recommencez la configuration");
+    if (!secret) throw bad("Start the setup again");
     const step = verifyTotp(secret, String(req.body?.code || ""));
-    if (step === null) throw bad("Code incorrect : vérifiez l'heure de votre téléphone et réessayez.");
+    if (step === null) throw bad("Wrong code: check your phone's clock and try again.");
     await query(`UPDATE users SET totp_secret = totp_pending, totp_pending = NULL, totp_last_step = $2 WHERE id = $1`, [me(req), step]);
     return { ok: true };
   });
@@ -471,11 +495,18 @@ export async function apiRoutes(app: FastifyInstance) {
     const secret = decrypt(u?.totp_secret);
     if (!secret) return { ok: true };
     if (verifyTotp(secret, String(req.body?.code || ""), u!.totp_last_step === null ? null : Number(u!.totp_last_step)) === null) {
-      throw bad("Code incorrect");
+      throw bad("Wrong code");
     }
     await query(`UPDATE users SET totp_secret = NULL, totp_pending = NULL, totp_last_step = NULL WHERE id = $1`, [me(req)]);
     return { ok: true };
   });
+
+  // ----- Calendar subscription (tasks with a due date) ------------------------
+
+  app.get("/me/calendar", async (req) => ({ url: await calendarUrl(me(req)) }));
+
+  // A new link: calendars subscribed with the old one stop receiving tasks.
+  app.post("/me/calendar/reset", async (req) => ({ url: await calendarUrl(me(req), { reset: true }) }));
 
   // ----- Invitations by e-mail ------------------------------------------------
 
@@ -495,37 +526,38 @@ export async function apiRoutes(app: FastifyInstance) {
   /** E-mails an invitation (a sign-in link); without e-mail configured, returns the link to pass on by hand. */
   async function sendInvitation(req: Req, invitee: Row) {
     const link = await createLoginLink(invitee.id, INVITE_LINK_DAYS * 24 * 60);
-    const sent = await sendLinkMail(invitee.email, `${req.user!.name} vous invite sur TasksPipes`, [
-      `Bonjour ${invitee.name},`,
-      `${req.user!.name} vous invite à partager des tâches avec lui ou elle sur TasksPipes.`,
-      `Ce lien vous connecte directement ; il est valable ${INVITE_LINK_DAYS} jours et ne sert qu'une fois. ` +
-        "Ensuite, demandez un nouveau lien depuis la page de connexion avec votre adresse e-mail.",
-    ], { label: "Rejoindre TasksPipes", url: link });
+    // In the invitee's language if known, else the inviter's.
+    const lang: Locale = invitee.locale ?? localeOf(req);
+    const sent = await sendLinkMail(lang, invitee.email, tr(lang, "{name} invites you to TasksPipes", { name: req.user!.name }), [
+      tr(lang, "Hello {name},", { name: invitee.name }),
+      tr(lang, "{name} invites you to share tasks with them on TasksPipes.", { name: req.user!.name }),
+      tr(lang, "This link signs you in directly; it is valid for {days} days and works only once. Afterwards, ask for a new link from the sign-in page with your e-mail address.", { days: INVITE_LINK_DAYS }),
+    ], { label: tr(lang, "Join TasksPipes"), url: link });
     return sent ? { sent: true } : { sent: false, link };
   }
 
   app.post("/invitations", async (req: Req) => {
     const uid = me(req);
     const email = text(req.body?.email, "E-mail", { required: true, max: 254 }).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw bad("Adresse e-mail invalide");
-    if (email === req.user!.email?.toLowerCase()) throw bad("C'est votre propre adresse");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw bad("Invalid e-mail address");
+    if (email === req.user!.email?.toLowerCase()) throw bad("That is your own address");
     if (await one(`SELECT 1 FROM users WHERE auth_kind = 'outline' AND lower(email) = $1`, [email])) {
-      throw bad("Cette personne a un compte Outline : elle peut se connecter avec Outline.");
+      throw bad("This person has an Outline account: they can sign in with Outline.");
     }
-    const name = text(req.body?.name, "Nom", { max: 120 }) || email.split("@")[0];
-    const teamId = optUuid(req.body?.teamId, "Équipe");
+    const name = text(req.body?.name, "Name", { max: 120 }) || email.split("@")[0];
+    const teamId = optUuid(req.body?.teamId, "Team");
     if (teamId) await requireTeamAdmin(teamId, uid);
 
     const { invitee, created } = await tx(async (client) => {
-      let invitee = await one(`SELECT id, name, email FROM users WHERE auth_kind = 'email' AND lower(email) = $1`, [email], client);
+      let invitee = await one(`SELECT id, name, email, locale FROM users WHERE auth_kind = 'email' AND lower(email) = $1`, [email], client);
       const created = !invitee;
       if (!invitee) {
         invitee = await one(
-          `INSERT INTO users (id, name, email, auth_kind) VALUES (gen_uuidv7(), $1, $2, 'email') RETURNING id, name, email`,
+          `INSERT INTO users (id, name, email, auth_kind) VALUES (gen_uuidv7(), $1, $2, 'email') RETURNING id, name, email, locale`,
           [name, email],
           client
         );
-        await ensurePersonalSpace(client, invitee!.id);
+        await ensurePersonalSpace(client, invitee!.id, localeOf(req));
       }
       await client.query(`INSERT INTO invitations (inviter_id, invitee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [uid, invitee!.id]);
       if (teamId) {
@@ -541,11 +573,11 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.post("/invitations/:id/resend", async (req: Req) => {
     const invitee = await one(
-      `SELECT u.id, u.name, u.email FROM invitations i JOIN users u ON u.id = i.invitee_id
+      `SELECT u.id, u.name, u.email, u.locale FROM invitations i JOIN users u ON u.id = i.invitee_id
        WHERE i.inviter_id = $1 AND i.invitee_id = $2 AND u.auth_kind = 'email'`,
-      [me(req), uuid(req.params.id, "Personne")]
+      [me(req), uuid(req.params.id, "Person")]
     );
-    if (!invitee) throw notFound("Invitation introuvable");
+    if (!invitee) throw notFound("Invitation not found");
     return sendInvitation(req, invitee);
   });
 
@@ -644,7 +676,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.post("/spaces", async (req: Req) => {
     const uid = me(req);
-    const name = text(req.body?.name, "Nom", { required: true, max: 120 });
+    const name = text(req.body?.name, "Name", { required: true, max: 120 });
     const description = text(req.body?.description, "Description");
     const members: { userId: string; role?: string }[] = Array.isArray(req.body?.members) ? req.body.members : [];
     const id = await tx(async (client) => {
@@ -669,8 +701,8 @@ export async function apiRoutes(app: FastifyInstance) {
   });
 
   app.get("/spaces/:id", async (req: Req) => {
-    const s = await getSpace(uuid(req.params.id, "Espace"), me(req));
-    if (!s) throw notFound("Espace introuvable");
+    const s = await getSpace(uuid(req.params.id, "Space"), me(req));
+    if (!s) throw notFound("Space not found");
     const isMember = Boolean(s.my_role);
     const [members, pipes, incoming] = await Promise.all([
       query(
@@ -709,7 +741,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const b = req.body || {};
     await query(`UPDATE spaces SET name = $2, description = $3, color = $4 WHERE id = $1`, [
       s.id,
-      "name" in b ? text(b.name, "Nom", { required: true, max: 120 }) : s.name,
+      "name" in b ? text(b.name, "Name", { required: true, max: 120 }) : s.name,
       "description" in b ? text(b.description, "Description") : s.description,
       "color" in b ? color(b.color) : s.color,
     ]);
@@ -719,17 +751,17 @@ export async function apiRoutes(app: FastifyInstance) {
   app.delete("/spaces/:id", async (req: Req) => {
     const s = await requireTeamAdmin(req.params.id, me(req));
     const n = await one(`SELECT count(*) AS n FROM tasks WHERE space_id = $1`, [s.id]);
-    if (n!.n > 0) throw bad("L'équipe contient encore des tâches : déplacez-les ou envoyez-les avant de la supprimer.");
+    if (n!.n > 0) throw bad("The team still holds tasks: move or send them before deleting it.");
     await query(`DELETE FROM spaces WHERE id = $1`, [s.id]);
     return { ok: true };
   });
 
   app.post("/spaces/:id/members", async (req: Req) => {
     const s = await requireTeamAdmin(req.params.id, me(req));
-    const userId = await ensureUser(optUuid(req.body?.userId, "Utilisateur"));
-    if (!userId) throw bad("Utilisateur requis");
+    const userId = await ensureUser(optUuid(req.body?.userId, "User"));
+    if (!userId) throw bad("A user is required");
     // Only people one can see: someone invited by e-mail joins a team through whoever invited them.
-    if (!(await one(`SELECT user_visible($1, $2) AS ok`, [me(req), userId]))?.ok) throw bad("Utilisateur inconnu");
+    if (!(await one(`SELECT user_visible($1, $2) AS ok`, [me(req), userId]))?.ok) throw bad("Unknown user");
     await query(
       `INSERT INTO space_members (space_id, user_id, role, added_by) VALUES ($1, $2, $3, $4)
        ON CONFLICT (space_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
@@ -744,7 +776,7 @@ export async function apiRoutes(app: FastifyInstance) {
     await tx(async (client) => {
       await client.query(`UPDATE space_members SET role = $3 WHERE space_id = $1 AND user_id = $2`, [
         s.id,
-        uuid(req.params.userId, "Utilisateur"),
+        uuid(req.params.userId, "User"),
         role,
       ]);
       await assertAdminRemains(client, s.id);
@@ -753,12 +785,12 @@ export async function apiRoutes(app: FastifyInstance) {
   });
 
   app.delete("/spaces/:id/members/:userId", async (req: Req) => {
-    const spaceId = uuid(req.params.id, "Espace");
-    const userId = uuid(req.params.userId, "Utilisateur");
+    const spaceId = uuid(req.params.id, "Space");
+    const userId = uuid(req.params.userId, "User");
     if (userId !== me(req)) await requireTeamAdmin(spaceId, me(req));
     else {
       const s = await getSpace(spaceId, me(req));
-      if (!s || s.kind !== "team") throw bad("Impossible de quitter cet espace");
+      if (!s || s.kind !== "team") throw bad("This space cannot be left");
     }
     await tx(async (client) => {
       await client.query(`DELETE FROM space_members WHERE space_id = $1 AND user_id = $2`, [spaceId, userId]);
@@ -769,7 +801,14 @@ export async function apiRoutes(app: FastifyInstance) {
 
   // ----- Pipes --------------------------------------------------------------
 
-  app.get("/catalog", async () => ({ pipeTypes: allPipeTypes(), taskTypes: allTaskTypes() }));
+  // In the language of the page; select options keep their stored values (see localizeTaskType).
+  app.get("/catalog", async (req) => {
+    const lang = localeOf(req);
+    return {
+      pipeTypes: allPipeTypes().map((p) => localizePipeType(lang, p)),
+      taskTypes: allTaskTypes().map((t) => localizeTaskType(lang, t)),
+    };
+  });
 
   // ----- Designer: pipe and task types made by users -----------------------
 
@@ -787,15 +826,15 @@ export async function apiRoutes(app: FastifyInstance) {
   const CATALOG_KINDS = { "pipe-types": "pipe", "task-types": "task" } as const;
   const catalogKind = (v: string) => {
     const k = CATALOG_KINDS[v as keyof typeof CATALOG_KINDS];
-    if (!k) throw notFound("Introuvable");
+    if (!k) throw notFound("Not found");
     return k;
   };
 
   /** A type made with the designer, which only its author may change. */
   async function loadCustomType(kind: "pipe" | "task", id: string, userId: string) {
     const row = await one(`SELECT * FROM custom_types WHERE id = $1 AND kind = $2`, [id, kind]);
-    if (!row) throw notFound(kind === "pipe" ? "Type de pipe introuvable (les types intégrés se dupliquent)" : "Type de tâche introuvable (les types intégrés se dupliquent)");
-    if (row.created_by !== userId) throw forbidden("Seul·e l'auteur·rice de ce modèle peut le modifier : dupliquez-le pour en faire votre version.");
+    if (!row) throw notFound(kind === "pipe" ? "Pipe type not found (built-in types can be duplicated)" : "Task type not found (built-in types can be duplicated)");
+    if (row.created_by !== userId) throw forbidden("Only the author of this model can change it: duplicate it to make your own version.");
     return row;
   }
 
@@ -820,7 +859,7 @@ export async function apiRoutes(app: FastifyInstance) {
           `SELECT count(*)::int AS n FROM pipes p JOIN spaces s ON s.id = p.space_id WHERE p.kind = $1 AND s.kind = 'user'`,
           [row.id]
         );
-        if (personal!.n) throw bad(`${personal!.n} pipe(s) de ce type sont dans des espaces personnels : il ne peut pas être réservé à une équipe.`);
+        if (personal!.n) throw bad("{n} pipe(s) of this type are in personal spaces: it cannot be reserved to a team.", { n: personal!.n });
       }
       await tx(async (client) => {
         await client.query(`UPDATE custom_types SET definition = $2, updated_at = now() WHERE id = $1`, [row.id, JSON.stringify(definition)]);
@@ -842,12 +881,12 @@ export async function apiRoutes(app: FastifyInstance) {
     const row = await loadCustomType(kind, String(req.params.id), me(req));
     if (kind === "pipe") {
       const used = await one(`SELECT count(*)::int AS n FROM pipes WHERE kind = $1`, [row.id]);
-      if (used!.n) throw bad(`${used!.n} pipe(s) utilisent ce type (archivés compris) : il ne peut pas être supprimé.`);
+      if (used!.n) throw bad("{n} pipe(s) use this type (archived ones included): it cannot be deleted.", { n: used!.n });
     } else {
       const used = await one(`SELECT count(*)::int AS n FROM tasks WHERE task_type = $1`, [row.id]);
-      if (used!.n) throw bad(`${used!.n} tâche(s) utilisent ce type : il ne peut pas être supprimé.`);
+      if (used!.n) throw bad("{n} task(s) use this type: it cannot be deleted.", { n: used!.n });
       const inPipes = allPipeTypes().filter((p) => p.taskTypes.includes(row.id));
-      if (inPipes.length) throw bad(`Ce type est proposé dans : ${inPipes.map((p) => `« ${p.label} »`).join(", ")}. Retirez-le d'abord de ces types de pipes.`);
+      if (inPipes.length) throw bad("This type is offered in: {types}. Remove it from these pipe types first.", { types: inPipes.map((p) => `“${p.label}”`).join(", ") });
     }
     await query(`DELETE FROM custom_types WHERE id = $1`, [row.id]);
     await loadCustomTypes();
@@ -903,7 +942,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.post("/spaces/:id/pipes", async (req: Req) => {
     const uid = me(req);
-    const spaceId = uuid(req.params.id, "Espace");
+    const spaceId = uuid(req.params.id, "Space");
     if (!(await memberRole(spaceId, uid))) throw forbidden();
     const kind = pipeKind(req.body?.kind, me(req));
     await assertKindAllowed(kind, spaceId);
@@ -914,7 +953,7 @@ export async function apiRoutes(app: FastifyInstance) {
          RETURNING id`,
         [
           spaceId,
-          text(req.body?.name, "Nom", { required: true, max: 120 }),
+          text(req.body?.name, "Name", { required: true, max: 120 }),
           text(req.body?.description, "Description"),
           req.body?.visibility === "open" && !pipeTypeById(kind)!.confidential ? "open" : "private",
           kind,
@@ -931,7 +970,7 @@ export async function apiRoutes(app: FastifyInstance) {
           const { rows } = await client.query(
             `INSERT INTO tasks (title, space_id, pipe_id, status, stage, position, author_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-            [title, spaceId, row!.id, first.status, first.id, i + 1, uid]
+            [localize(localeOf(req), title), spaceId, row!.id, first.status, first.id, i + 1, uid]
           );
           const t = await getTaskRow(rows[0].id, client);
           await recordEvent(client, t!.id, uid, "created", null, snapshot(t!));
@@ -965,11 +1004,11 @@ export async function apiRoutes(app: FastifyInstance) {
     if (!role) throw forbidden();
     const b = req.body || {};
     if (b.archived && !p.archived_at) {
-      if (p.is_default) throw bad("Le pipe par défaut de l'espace personnel ne peut pas être archivé");
+      if (p.is_default) throw bad("The default pipe of a personal space cannot be archived");
       // Like a task, a pipe is closed once its work is over: no task left in progress.
       const open = await one(`SELECT count(*) AS n FROM tasks WHERE pipe_id = $1 AND status NOT IN ('done','abandoned')`, [p.id]);
       if (open!.n > 0) {
-        throw bad(`Ce pipe a encore ${open!.n} tâche${open!.n > 1 ? "s" : ""} en cours : terminez-les, abandonnez-les ou déplacez-les avant de l'archiver.`);
+        throw bad("This pipe still has {n} open task(s): finish, drop or move them before archiving it.", { n: open!.n });
       }
     }
     const kind = "kind" in b ? pipeKind(b.kind, me(req), p.kind) : p.kind;
@@ -982,7 +1021,7 @@ export async function apiRoutes(app: FastifyInstance) {
        WHERE id = $1`,
       [
         p.id,
-        "name" in b ? text(b.name, "Nom", { required: true, max: 120 }) : p.name,
+        "name" in b ? text(b.name, "Name", { required: true, max: 120 }) : p.name,
         "description" in b ? text(b.description, "Description") : p.description,
         // A confidential type (sensitive personal data) is never open.
         pipeTypeById(kind)?.confidential ? "private" : "visibility" in b ? (b.visibility === "open" ? "open" : "private") : p.visibility,
@@ -1007,9 +1046,9 @@ export async function apiRoutes(app: FastifyInstance) {
   app.delete("/pipes/:id", async (req: Req) => {
     const { p, role } = await loadPipeFor(req.params.id, me(req));
     if (!role) throw forbidden();
-    if (p.is_default) throw bad("Le pipe par défaut de l'espace personnel ne peut pas être supprimé");
+    if (p.is_default) throw bad("The default pipe of a personal space cannot be deleted");
     const n = await one(`SELECT count(*) AS n FROM tasks WHERE pipe_id = $1`, [p.id]);
-    if (n!.n > 0) throw bad("Ce pipe contient encore des tâches : déplacez-les avant de le supprimer.");
+    if (n!.n > 0) throw bad("This pipe still holds tasks: move them before deleting it.");
     await query(`DELETE FROM pipes WHERE id = $1`, [p.id]);
     return { ok: true };
   });
@@ -1019,17 +1058,17 @@ export async function apiRoutes(app: FastifyInstance) {
   app.post("/tasks", async (req: Req) => {
     const uid = me(req);
     const b = req.body || {};
-    const title = text(b.title, "Titre", { required: true, max: 300 });
+    const title = text(b.title, "Title", { required: true, max: 300 });
     const description = text(b.description, "Description");
     const dueDate = dateOrNull(b.dueDate);
     const doc = docOrNull(b.outlineDoc);
-    const comment = text(b.comment, "Commentaire") || null;
+    const comment = text(b.comment, "Comment") || null;
     const type = taskType(b.taskType);
     const { values } = cleanFields(type, b.fields ?? {});
-    if (b.items !== undefined && !Array.isArray(b.items)) throw bad("Sous-tâches invalides");
+    if (b.items !== undefined && !Array.isArray(b.items)) throw bad("Invalid sub-tasks");
     const items = ((b.items ?? []) as unknown[])
       .map((x) => (typeof x === "object" && x ? x : { text: x }) as { text?: unknown; done?: unknown })
-      .map((x) => ({ text: text(x.text, "Sous-tâche", { max: 500 }), done: x.done === true }))
+      .map((x) => ({ text: text(x.text, "Sub-task", { max: 500 }), done: x.done === true }))
       .filter((x) => x.text)
       .slice(0, MAX_ITEMS);
     let st = status(b.status);
@@ -1041,7 +1080,7 @@ export async function apiRoutes(app: FastifyInstance) {
     if (b.pipeId) {
       // Creating straight into a pipe: own pipe, or someone else's open pipe.
       const { p } = await loadPipeFor(b.pipeId, uid);
-      if (p.archived_at) throw bad("Ce pipe est archivé");
+      if (p.archived_at) throw bad("This pipe is archived");
       spaceId = p.space_id;
       pipeId = p.id;
       const c = resolveStage(p.kind, b.stage, b.status === undefined ? null : st);
@@ -1051,11 +1090,11 @@ export async function apiRoutes(app: FastifyInstance) {
     } else {
       assertTaskTypeUsable(type, uid, null);
       // Otherwise the task is sent to a space's incoming bucket.
-      spaceId = uuid(b.spaceId, "Espace");
-      if (!(await spaceVisible(spaceId, uid))) throw notFound("Espace introuvable");
+      spaceId = uuid(b.spaceId, "Space");
+      if (!(await spaceVisible(spaceId, uid))) throw notFound("Space not found");
       senderId = uid;
     }
-    const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Propriétaire")));
+    const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Owner")));
 
     const id = await tx(async (client) => {
       const position = await nextPosition(client, spaceId, pipeId, stage);
@@ -1087,7 +1126,7 @@ export async function apiRoutes(app: FastifyInstance) {
   app.get("/tasks/:id", async (req: Req) => {
     const { t, perms } = await loadTaskFor(req.params.id, me(req));
     const [events, files, items] = await Promise.all([
-      getEvents(t.id),
+      getEvents(t.id, localeOf(req)),
       query(
         `SELECT f.id, f.field, f.name, f.mime, f.size, f.created_at, u.name AS uploaded_by_name
          FROM task_files f JOIN users u ON u.id = f.uploaded_by WHERE f.task_id = $1 ORDER BY f.created_at`,
@@ -1112,10 +1151,10 @@ export async function apiRoutes(app: FastifyInstance) {
     const b = req.body || {};
     if (["assigneeId", "dueDate", "outlineDoc", "status", "stage"].some((k) => k in b) && !perms.manage) throw forbidden();
 
-    const title = "title" in b ? text(b.title, "Titre", { required: true, max: 300 }) : t.title;
+    const title = "title" in b ? text(b.title, "Title", { required: true, max: 300 }) : t.title;
     const description = "description" in b ? text(b.description, "Description") : t.description;
     const assigneeId =
-      "assigneeId" in b ? await checkAssignee(t.space_id, await ensureUser(optUuid(b.assigneeId, "Propriétaire"))) : t.assignee_id;
+      "assigneeId" in b ? await checkAssignee(t.space_id, await ensureUser(optUuid(b.assigneeId, "Owner"))) : t.assignee_id;
     const dueDate = "dueDate" in b ? dateOrNull(b.dueDate) : t.due_date;
     let st: Status = "status" in b ? status(b.status) : t.status;
     let stage: string | null = t.stage;
@@ -1125,7 +1164,7 @@ export async function apiRoutes(app: FastifyInstance) {
       stage = c.id;
     }
     const doc = "outlineDoc" in b ? docOrNull(b.outlineDoc) : snapshot(t).doc;
-    const comment = text(b.comment, "Commentaire") || null;
+    const comment = text(b.comment, "Comment") || null;
     // Task type and its fields (field values are merged; null clears one).
     const type = "taskType" in b ? taskType(b.taskType) : taskType(t.task_type);
     assertTaskTypeUsable(type, uid, t.pipe_kind, t.task_type);
@@ -1166,13 +1205,13 @@ export async function apiRoutes(app: FastifyInstance) {
     const { t } = await loadTaskFor(req.params.id, uid, "manage");
     const b = req.body || {};
     const { p } = await loadPipeFor(b.pipeId, uid);
-    if (p.archived_at && p.id !== t.pipe_id) throw bad("Ce pipe est archivé");
+    if (p.archived_at && p.id !== t.pipe_id) throw bad("This pipe is archived");
     assertStaysInSpace(t, p.space_id);
     // Target column: the one asked for, else the one matching the asked status, else the current column
     // when the pipe type stays the same, else the first one matching the current status.
     const wanted = b.stage ?? (b.status === undefined && p.kind === t.pipe_kind ? t.stage : null);
     const c = resolveStage(p.kind, wanted, b.status === undefined ? t.status : status(b.status));
-    const comment = text(b.comment, "Commentaire") || null;
+    const comment = text(b.comment, "Comment") || null;
     await tx(async (client) => {
       const position =
         typeof b.position === "number" && Number.isFinite(b.position)
@@ -1199,13 +1238,13 @@ export async function apiRoutes(app: FastifyInstance) {
   app.post("/tasks/:id/send", async (req: Req) => {
     const uid = me(req);
     const { t } = await loadTaskFor(req.params.id, uid, "manage");
-    const spaceId = uuid(req.body?.spaceId, "Destinataire");
-    if (!(await spaceVisible(spaceId, uid))) throw notFound("Destinataire introuvable");
-    if (spaceId === t.space_id && !t.pipe_id) throw bad("La tâche est déjà dans cet incoming");
+    const spaceId = uuid(req.body?.spaceId, "Recipient");
+    if (!(await spaceVisible(spaceId, uid))) throw notFound("Recipient not found");
+    if (spaceId === t.space_id && !t.pipe_id) throw bad("The task is already in this incoming");
     assertStaysInSpace(t, spaceId);
-    const comment = text(req.body?.comment, "Commentaire") || null;
+    const comment = text(req.body?.comment, "Comment") || null;
     // Sending to a team may name its owner there; sending to a person makes it theirs.
-    const requested = await ensureUser(optUuid(req.body?.assigneeId, "Propriétaire"));
+    const requested = await ensureUser(optUuid(req.body?.assigneeId, "Owner"));
     const assigneeId = requested ? await checkAssignee(spaceId, requested) : await keptAssignee(spaceId, t.assignee_id);
     await tx(async (client) => {
       const position = await nextPosition(client, spaceId, null, null);
@@ -1226,8 +1265,8 @@ export async function apiRoutes(app: FastifyInstance) {
   app.post("/tasks/:id/refuse", async (req: Req) => {
     const uid = me(req);
     const { t, perms } = await loadTaskFor(req.params.id, uid);
-    if (!perms.refuse) throw forbidden("Seule une tâche reçue dans votre incoming peut être refusée");
-    const reason = text(req.body?.reason, "Raison du refus", { required: true });
+    if (!perms.refuse) throw forbidden("Only a task received in your incoming can be refused");
+    const reason = text(req.body?.reason, "Reason for refusing", { required: true });
     const target = await personalSpaceId(t.sender_id);
     await tx(async (client) => {
       // Back to the incoming bucket of the person who sent it.
@@ -1247,7 +1286,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.post("/tasks/:id/comments", async (req: Req) => {
     const { t } = await loadTaskFor(req.params.id, me(req), "comment");
-    const body = text(req.body?.body, "Commentaire", { required: true });
+    const body = text(req.body?.body, "Comment", { required: true });
     await tx(async (client) => {
       const s = snapshot(t);
       await recordEvent(client, t.id, me(req), "comment", s, s, body);
@@ -1260,9 +1299,9 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.post("/tasks/:id/items", async (req: Req) => {
     const { t } = await loadTaskFor(req.params.id, me(req), "editContent");
-    const label = text(req.body?.text, "Sous-tâche", { required: true, max: 500 });
+    const label = text(req.body?.text, "Sub-task", { required: true, max: 500 });
     const count = await one(`SELECT count(*)::int AS n FROM task_items WHERE task_id = $1`, [t.id]);
-    if (count!.n >= MAX_ITEMS) throw bad(`${MAX_ITEMS} sous-tâches au maximum`);
+    if (count!.n >= MAX_ITEMS) throw bad("{n} sub-tasks at most", { n: MAX_ITEMS });
     const row = await tx(async (client) => {
       const r = await one(
         `INSERT INTO task_items (task_id, text, position)
@@ -1278,14 +1317,14 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.patch("/items/:id", async (req: Req) => {
     const uid = me(req);
-    const item = await one(`SELECT * FROM task_items WHERE id = $1`, [uuid(req.params.id, "Sous-tâche")]);
-    if (!item) throw notFound("Sous-tâche introuvable");
+    const item = await one(`SELECT * FROM task_items WHERE id = $1`, [uuid(req.params.id, "Sub-task")]);
+    if (!item) throw notFound("Sub-task not found");
     const { t } = await loadTaskFor(item.task_id, uid, "editContent");
     const b = req.body || {};
-    const label = "text" in b ? text(b.text, "Sous-tâche", { required: true, max: 500 }) : item.text;
-    if ("done" in b && typeof b.done !== "boolean") throw bad("Sous-tâche : état invalide");
+    const label = "text" in b ? text(b.text, "Sub-task", { required: true, max: 500 }) : item.text;
+    if ("done" in b && typeof b.done !== "boolean") throw bad("Sub-task: invalid state");
     const done = "done" in b ? b.done : item.done;
-    if ("position" in b && !Number.isFinite(b.position)) throw bad("Position invalide");
+    if ("position" in b && !Number.isFinite(b.position)) throw bad("Invalid position");
     const position = "position" in b ? b.position : item.position;
     await tx(async (client) => {
       await client.query(
@@ -1306,8 +1345,8 @@ export async function apiRoutes(app: FastifyInstance) {
   });
 
   app.delete("/items/:id", async (req: Req) => {
-    const item = await one(`SELECT id, task_id FROM task_items WHERE id = $1`, [uuid(req.params.id, "Sous-tâche")]);
-    if (!item) throw notFound("Sous-tâche introuvable");
+    const item = await one(`SELECT id, task_id FROM task_items WHERE id = $1`, [uuid(req.params.id, "Sub-task")]);
+    if (!item) throw notFound("Sub-task not found");
     await loadTaskFor(item.task_id, me(req), "editContent");
     await query(`DELETE FROM task_items WHERE id = $1`, [item.id]);
     return { ok: true };
@@ -1323,10 +1362,10 @@ export async function apiRoutes(app: FastifyInstance) {
     const uid = me(req);
     const { t } = await loadTaskFor(req.params.id, uid, "editContent");
     const field = taskType(t.task_type).fields.find((f) => f.id === req.query.field && f.type === "files");
-    if (!field) throw bad("Ce champ n'accepte pas de fichiers");
+    if (!field) throw bad("This field does not take files");
     const content = req.body as unknown as Buffer;
-    if (!Buffer.isBuffer(content) || !content.length) throw bad("Fichier vide");
-    const name = text(decodeURIComponent(String(req.headers["x-file-name"] || "")), "Nom du fichier", { required: true, max: 255 });
+    if (!Buffer.isBuffer(content) || !content.length) throw bad("Empty file");
+    const name = text(decodeURIComponent(String(req.headers["x-file-name"] || "")), "File name", { required: true, max: 255 });
     const mime = String(req.headers["x-file-type"] || "application/octet-stream").slice(0, 120);
     const id = await tx(async (client) => {
       const row = await one(
@@ -1343,8 +1382,8 @@ export async function apiRoutes(app: FastifyInstance) {
   });
 
   app.get("/files/:id", async (req: Req, reply) => {
-    const f = await one(`SELECT * FROM task_files WHERE id = $1`, [uuid(req.params.id, "Fichier")]);
-    if (!f) throw notFound("Fichier introuvable");
+    const f = await one(`SELECT * FROM task_files WHERE id = $1`, [uuid(req.params.id, "File")]);
+    if (!f) throw notFound("File not found");
     await loadTaskFor(f.task_id, me(req));
     // Images and PDFs open in the browser; everything else is downloaded.
     const inline = /^(image\/(png|jpeg|gif|webp)|application\/pdf|text\/plain)$/.test(f.mime) && req.query.download === undefined;
@@ -1360,8 +1399,8 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.delete("/files/:id", async (req: Req) => {
     const uid = me(req);
-    const f = await one(`SELECT id, task_id, name, field FROM task_files WHERE id = $1`, [uuid(req.params.id, "Fichier")]);
-    if (!f) throw notFound("Fichier introuvable");
+    const f = await one(`SELECT id, task_id, name, field FROM task_files WHERE id = $1`, [uuid(req.params.id, "File")]);
+    if (!f) throw notFound("File not found");
     const { t } = await loadTaskFor(f.task_id, uid, "editContent");
     const label = taskType(t.task_type).fields.find((x) => x.id === f.field)?.label ?? f.field;
     await tx(async (client) => {
@@ -1401,7 +1440,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const collectionId = text(req.body?.collectionId, "Collection", { required: true, max: 100 });
     const { data } = await req.outline<OutlineDocument>("documents.create", {
       title: t.title,
-      text: `${t.description || ""}\n\n---\n[Tâche TasksPipes #${t.number}](${config.appUrl}/?task=${t.id})`,
+      text: `${t.description || ""}\n\n---\n[${tr(localeOf(req), "TasksPipes task #{n}", { n: t.number })}](${config.appUrl}/?task=${t.id})`,
       collectionId,
       publish: true,
     });

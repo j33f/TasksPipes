@@ -2,6 +2,7 @@
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
   import { navigate, router } from "../lib/router.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   // The token is posted on a click, so that mail scanners following the link do not use it up.
   const token = router.params.get("token") ?? "";
@@ -49,30 +50,30 @@
   <div class="login-box">
     <svg width="40" height="40" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><rect x="7" y="8" width="5" height="16" rx="2" fill="var(--background)"/><rect x="14" y="8" width="5" height="11" rx="2" fill="var(--background)" opacity=".75"/><rect x="21" y="8" width="5" height="7" rx="2" fill="var(--background)" opacity=".5"/></svg>
     {#if step === "link"}
-      <h1>Connexion à TasksPipes</h1>
+      <h1>{t("Sign in to TasksPipes")}</h1>
       {#if app.me}
-        <p class="muted">Vous êtes connecté·e en tant que {app.me.user.name} : continuer vous connectera avec le compte de ce lien.</p>
+        <p class="muted">{t("You are signed in as {name}: continuing will sign you in with the account of this link.", { name: app.me.user.name })}</p>
       {:else}
-        <p class="muted">Vous allez être connecté·e avec le compte associé à ce lien.</p>
+        <p class="muted">{t("You will be signed in with the account of this link.")}</p>
       {/if}
       {#if error}<div class="callout danger">{error}</div>{/if}
       {#if !token}
-        <div class="callout danger">Lien incomplet.</div>
+        <div class="callout danger">{t("Incomplete link.")}</div>
       {:else}
-        <button class="btn full" disabled={busy} onclick={signIn}>Continuer</button>
+        <button class="btn full" disabled={busy} onclick={signIn}>{t("Continue")}</button>
       {/if}
-      <p class="small"><a href="/login">Demander un nouveau lien</a></p>
+      <p class="small"><a href="/login">{t("Ask for a new link")}</a></p>
     {:else}
-      <h1>Double authentification</h1>
-      <p class="muted">Saisissez le code à 6 chiffres affiché par votre application (Google Authenticator…).</p>
+      <h1>{t("Two-factor authentication")}</h1>
+      <p class="muted">{t("Enter the 6-digit code shown by your app (Google Authenticator…).")}</p>
       {#if error}<div class="callout danger">{error}</div>{/if}
       <form onsubmit={verify}>
         <div class="field">
           <!-- svelte-ignore a11y_autofocus -->
           <input class="input code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456"
-            bind:value={code} autofocus aria-label="Code" />
+            bind:value={code} autofocus aria-label={t("Code")} />
         </div>
-        <button class="btn full" disabled={busy || code.replace(/\s/g, "").length !== 6}>Valider</button>
+        <button class="btn full" disabled={busy || code.replace(/\s/g, "").length !== 6}>{t("Confirm")}</button>
       </form>
     {/if}
   </div>

@@ -3,6 +3,7 @@
   import { PALETTE, PIPE_ICONS } from "../lib/constants";
   import Icon from "./Icon.svelte";
   import PipeIcon from "./PipeIcon.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   /** Outline-style picker: the pipe's icon is a button opening colours, icons and an emoji field. */
   let { icon, color, kind, editable = true, size = 24, onchange }: {
@@ -33,7 +34,7 @@
 <svelte:window onmousedown={(e) => open && root && !root.contains(e.target as Node) && (open = false)} />
 
 <div class="icon-picker" bind:this={root}>
-  <button type="button" class="trigger" class:editable disabled={!editable} title={editable ? "Changer l'icône et la couleur" : undefined}
+  <button type="button" class="trigger" class:editable disabled={!editable} title={editable ? t("Change the icon and colour") : undefined}
     onclick={() => (open = !open)}>
     <PipeIcon pipe={{ icon, kind, color }} {size} />
   </button>
@@ -43,7 +44,7 @@
         {#each PALETTE as c (c)}
           <button type="button" class="swatch" class:selected={color === c} style="background:{c}" aria-label={c} onclick={() => pick({ color: c })}></button>
         {/each}
-        <label class="swatch custom" class:selected={!!color && !PALETTE.includes(color)} title="Couleur personnalisée"
+        <label class="swatch custom" class:selected={!!color && !PALETTE.includes(color)} title={t("Custom colour")}
           style="background:{color && !PALETTE.includes(color) ? color : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'}">
           <input type="color" value={color ?? "#2BC2FF"} onchange={(e) => pick({ color: (e.currentTarget as HTMLInputElement).value })} />
         </label>
@@ -55,12 +56,12 @@
         {/each}
       </div>
       <div class="row emoji-row">
-        <input class="input" placeholder="Ou un emoji : 🎓" bind:value={emoji} maxlength="16"
+        <input class="input" placeholder={t("Or an emoji: 🎓")} bind:value={emoji} maxlength="16"
           onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); useEmoji(); } }} />
         <button type="button" class="btn small neutral" disabled={!emoji.trim()} onclick={useEmoji}>OK</button>
       </div>
       {#if icon}
-        <button type="button" class="btn ghost small reset" onclick={() => pick({ icon: null })}>Revenir à l'icône du type</button>
+        <button type="button" class="btn ghost small reset" onclick={() => pick({ icon: null })}>{t("Back to the type's icon")}</button>
       {/if}
     </div>
   {/if}

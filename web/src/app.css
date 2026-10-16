@@ -51,8 +51,9 @@
   color-scheme: light;
 }
 
+/* Dark theme: by the system preference unless the profile forces one (data-theme on <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #111319;
     --background-secondary: #1f232e;
     --background-tertiary: #2a2f3e;
@@ -81,6 +82,36 @@
     --code-border: rgba(255, 255, 255, 0.1);
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --background: #111319;
+  --background-secondary: #1f232e;
+  --background-tertiary: #2a2f3e;
+  --text: #e6e6e6;
+  --text-secondary: #8292a8;
+  --placeholder: hsl(215 17% 30% / 1);
+  --link: #137ffb;
+  --divider: #262a35;
+  --sidebar-background: #08090c;
+  --sidebar-hover: #15171e;
+  --sidebar-active: #1d2029;
+  --sidebar-text: var(--slate);
+  --input-border: var(--slate-dark);
+  --list-hover: rgba(255, 255, 255, 0.06);
+  --button-neutral-bg: #111319;
+  --button-neutral-hover: #1d2029;
+  --button-neutral-text: #ffffff;
+  --button-neutral-border: var(--slate-dark);
+  --modal-backdrop: rgba(0, 0, 0, 0.5);
+  --modal-background: #181c25;
+  --modal-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 8px 16px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.08);
+  --menu-shadow: 0 0 0 1px rgb(34 40 52), 0 8px 16px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.08);
+  --card-background: #181c25;
+  --card-shadow: 0 0 0 1px rgb(255 255 255 / 6%);
+  --code-background: #1d202a;
+  --code-border: rgba(255, 255, 255, 0.1);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }

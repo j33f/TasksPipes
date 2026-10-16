@@ -13,6 +13,7 @@
   import { navigate } from "../lib/router.svelte";
   import { openTaskCount } from "../lib/constants";
   import type { SidebarPipe } from "../lib/types";
+  import { t, tn } from "../lib/i18n.svelte";
 
   let { open, onclose }: { open: boolean; onclose: () => void } = $props();
 
@@ -25,7 +26,7 @@
   const personalId = $derived(app.me?.personalSpaceId);
   const myIncoming = $derived(app.personalSpace?.incomingCount ?? 0);
 
-  // Foldable entries ("Mes pipes", each team, "Personnes"…), like Outline collections; remembered per browser.
+  // Foldable entries ("My pipes", each team, "People"…), like Outline collections; remembered per browser.
   const legacyMyPipes = () => { try { return localStorage.getItem("tp:myPipesOpen") === "1"; } catch { return false; } };
   const DEFAULT_OPEN: Record<string, boolean> = { myPipes: legacyMyPipes(), people: false, otherTeams: false };
   const readFolds = (): Record<string, boolean> => {
@@ -85,11 +86,11 @@
   }
 
   function remove(pipe: SidebarPipe) {
-    if (!confirm(`Supprimer le pipe « ${pipe.name} » ?`)) return (menu = null);
+    if (!confirm(t("Delete the pipe “{name}”?", { name: pipe.name }))) return (menu = null);
     run(async () => {
       await api.del(`/pipes/${pipe.id}`);
       if (router.path === `/pipes/${pipe.id}`) navigate(`/spaces/${pipe.spaceId}`);
-    }, "Pipe supprimé");
+    }, t("Pipe deleted"));
   }
 </script>
 
@@ -106,15 +107,15 @@
 
   <div class="sidebar-scroll">
     <div class="sidebar-section first">
-      <div class="sidebar-section-title"><span>Moi</span></div>
+      <div class="sidebar-section-title"><span>{t("Me")}</span></div>
       <a class="sidebar-link" class:active={router.path === "/"} href="/">
-        <Icon name="home" /><span class="label">Mon tableau de bord</span>
+        <Icon name="home" /><span class="label">{t("My dashboard")}</span>
       </a>
       <a class="sidebar-link" class:active={router.path === "/tasks"} href="/tasks">
-        <Icon name="checklist" /><span class="label">Mes tâches</span>
+        <Icon name="checklist" /><span class="label">{t("My tasks")}</span>
       </a>
       <a class="sidebar-link" class:active={router.path === "/next"} href="/next">
-        <Icon name="target" /><span class="label">Prochaine action</span>
+        <Icon name="target" /><span class="label">{t("Next action")}</span>
       </a>
       <a class="sidebar-link" class:active={isActive(`/spaces/${personalId}?tab=incoming`)} href={`/spaces/${personalId}?tab=incoming`}>
         <Icon name="inbox" /><span class="label">Incoming</span>
@@ -123,10 +124,10 @@
       <div class="sidebar-link has-disclosure hover-actions" class:active={isActive(`/spaces/${personalId}`)}>
         {@render disclosure("myPipes")}
         <a class="row-link" href={`/spaces/${personalId}`}>
-          <Icon name="pipe" /><span class="label">Mes pipes</span>
+          <Icon name="pipe" /><span class="label">{t("My pipes")}</span>
         </a>
         <span class="actions">
-          <a class="act" title="Nouveau pipe" href={`/spaces/${personalId}?newPipe=1`}><Icon name="plus" size={16} /></a>
+          <a class="act" title={t("New pipe")} href={`/spaces/${personalId}?newPipe=1`}><Icon name="plus" size={16} /></a>
         </span>
       </div>
       {#if isOpen("myPipes")}
@@ -138,7 +139,7 @@
 
     {#if app.sidebar.pinned.length}
       <div class="sidebar-section">
-        <div class="sidebar-section-title"><span>Épinglés</span></div>
+        <div class="sidebar-section-title"><span>{t("Pinned")}</span></div>
         {#each app.sidebar.pinned as p (p.id)}
           {@render pipeLink(p, p.spaceId === personalId ? null : (p.spaceName ?? null), false)}
         {/each}
@@ -146,13 +147,13 @@
     {/if}
 
     <div class="sidebar-search">
-      <input class="input" placeholder="Filtrer les équipes et personnes…" bind:value={filter} />
+      <input class="input" placeholder={t("Filter teams and people…")} bind:value={filter} />
     </div>
 
     <div class="sidebar-section">
       <div class="sidebar-section-title">
-        <span>Mes équipes</span>
-        <button class="btn ghost icon small" title="Nouvelle équipe" onclick={() => (showNewTeam = true)}>
+        <span>{t("My teams")}</span>
+        <button class="btn ghost icon small" title={t("New team")} onclick={() => (showNewTeam = true)}>
           <Icon name="plus" size={16} />
         </button>
       </div>
@@ -162,10 +163,10 @@
           {#if pipes.length}{@render disclosure(`team:${s.id}`)}{:else}<span class="disclosure-space"></span>{/if}
           <a class="row-link" href={`/spaces/${s.id}`}>
             <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
-            {#if s.incomingCount}<span class="count" title="En attente dans l'incoming">{s.incomingCount}</span>{/if}
+            {#if s.incomingCount}<span class="count" title={t("Waiting in the incoming")}>{s.incomingCount}</span>{/if}
           </a>
           <span class="actions">
-            <a class="act" title="Nouveau pipe" href={`/spaces/${s.id}?newPipe=1`}><Icon name="plus" size={16} /></a>
+            <a class="act" title={t("New pipe")} href={`/spaces/${s.id}?newPipe=1`}><Icon name="plus" size={16} /></a>
           </span>
         </div>
         {#if isOpen(`team:${s.id}`)}
@@ -173,7 +174,7 @@
         {/if}
       {:else}
         <button class="sidebar-link muted" onclick={() => (showNewTeam = true)}>
-          <Icon name="plus" /><span class="label">Créer une équipe</span>
+          <Icon name="plus" /><span class="label">{t("Create a team")}</span>
         </button>
       {/each}
     </div>
@@ -181,7 +182,7 @@
     {#if app.otherTeams.length}
       {@const others = app.otherTeams.filter((s) => matches(s.name))}
       <div class="sidebar-section">
-        {@render foldTitle("otherTeams", "Autres équipes", others.length)}
+        {@render foldTitle("otherTeams", t("Other teams"), others.length)}
         {#if isOpen("otherTeams")}
           {#each others as s (s.id)}
             <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} href={`/spaces/${s.id}`}>
@@ -195,13 +196,13 @@
     {#if app.people.length}
       {@const people = app.people.filter((s) => matches(s.name))}
       <div class="sidebar-section">
-        {@render foldTitle("people", "Personnes", people.length, () => (showInvite = true), "Inviter par e-mail")}
+        {@render foldTitle("people", t("People"), people.length, () => (showInvite = true), t("Invite by e-mail"))}
         {#if isOpen("people")}
           {#each people as s (s.id)}
             <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}
-              href={`/spaces/${s.id}`} title={s.active ? s.name : `${s.name} (ne s'est pas encore connecté·e)`}>
+              href={`/spaces/${s.id}`} title={s.active ? s.name : t("{name} (has not signed in yet)", { name: s.name })}>
               <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
-              {#if s.guest}<span class="guest" title="Invité·e par e-mail"><Icon name="mail" size={14} /></span>{/if}
+              {#if s.guest}<span class="guest" title={t("Invited by e-mail")}><Icon name="mail" size={14} /></span>{/if}
               {#if s.pipeCount}<span class="count neutral">{s.pipeCount}</span>{/if}
             </a>
           {/each}
@@ -211,18 +212,18 @@
 
     <div class="sidebar-section">
       <a class="sidebar-link" class:active={router.path === "/designer"} href="/designer">
-        <Icon name="clipboard" /><span class="label">Modèles</span>
+        <Icon name="clipboard" /><span class="label">{t("Models")}</span>
       </a>
     </div>
   </div>
 
   <div class="sidebar-footer">
     <div class="sidebar-link user">
-      <button class="account" title="Mon compte, invitations" onclick={() => (app.accountOpen = true)}>
+      <button class="account" title={t("My account, invitations")} onclick={() => (app.accountOpen = true)}>
         <Avatar user={app.me?.user} size={24} />
         <span class="label">{app.me?.user.name}</span>
       </button>
-      <button class="btn ghost icon small" title="Se déconnecter" onclick={() => app.logout()}>
+      <button class="btn ghost icon small" title={t("Sign out")} onclick={() => app.logout()}>
         <Icon name="logout" size={18} />
       </button>
     </div>
@@ -231,7 +232,7 @@
 
 {#snippet disclosure(key: string)}
   <button class="disclosure" class:open={isOpen(key)} aria-expanded={isOpen(key)}
-    title={isOpen(key) ? "Replier" : "Déplier"} onclick={() => toggle(key)}><Icon name="chevron" size={14} /></button>
+    title={isOpen(key) ? t("Fold") : t("Unfold")} onclick={() => toggle(key)}><Icon name="chevron" size={14} /></button>
 {/snippet}
 
 {#snippet foldTitle(key: string, label: string, count: number, onadd?: () => void, addTitle?: string)}
@@ -252,7 +253,7 @@
     <div class="sidebar-link pipe-link" class:nested>
       <PipeIcon pipe={p} size={18} />
       <!-- svelte-ignore a11y_autofocus -->
-      <input class="rename" value={p.name} maxlength="120" aria-label="Nom du pipe" autofocus
+      <input class="rename" value={p.name} maxlength="120" aria-label={t("Pipe name")} autofocus
         onfocus={(e) => (e.currentTarget as HTMLInputElement).select()} onblur={(e) => rename(p, e)} onkeydown={renameKeydown} />
     </div>
   {:else}
@@ -263,8 +264,8 @@
         <span class="label">{p.name}{#if spaceName}<span class="space-name"> · {spaceName}</span>{/if}</span>
       </a>
       <span class="actions">
-        <button class="act" title="Nouvelle tâche" onclick={() => (newTaskPipe = p)}><Icon name="plus" size={16} /></button>
-        <button class="act" title="Plus d'actions" data-menu-trigger onclick={(e) => openMenu(e, p)}><Icon name="more" size={16} /></button>
+        <button class="act" title={t("New task")} onclick={() => (newTaskPipe = p)}><Icon name="plus" size={16} /></button>
+        <button class="act" title={t("More actions")} data-menu-trigger onclick={(e) => openMenu(e, p)}><Icon name="more" size={16} /></button>
       </span>
     </div>
   {/if}
@@ -277,22 +278,22 @@
   {@const pinned = app.isPinned(p.id)}
   {@const open = openTaskCount(p.counts)}
   <div class="pipe-menu" style={menu.style} bind:this={menuEl} role="menu">
-    <button class="menu-item" role="menuitem" onclick={() => { menu = null; newTaskPipe = p; }}><Icon name="plus" size={16} />Nouvelle tâche</button>
+    <button class="menu-item" role="menuitem" onclick={() => { menu = null; newTaskPipe = p; }}><Icon name="plus" size={16} />{t("New task")}</button>
     {#if p.canManage}
-      <button class="menu-item" role="menuitem" onclick={() => { menu = null; renamingId = p.id; }}><Icon name="edit" size={16} />Renommer</button>
-      <button class="menu-item" role="menuitem" onclick={() => { menu = null; editing = p; }}><Icon name="settings" size={16} />Icône, couleur, type…</button>
+      <button class="menu-item" role="menuitem" onclick={() => { menu = null; renamingId = p.id; }}><Icon name="edit" size={16} />{t("Rename")}</button>
+      <button class="menu-item" role="menuitem" onclick={() => { menu = null; editing = p; }}><Icon name="settings" size={16} />{t("Icon, colour, type…")}</button>
     {/if}
-    <button class="menu-item" role="menuitem" onclick={() => run(() => app.setPinned(p.id, !pinned), pinned ? "Désépinglé" : "Épinglé")}>
-      <Icon name="pin" size={16} />{pinned ? "Désépingler" : "Épingler"}
+    <button class="menu-item" role="menuitem" onclick={() => run(() => app.setPinned(p.id, !pinned), pinned ? t("Pipe unpinned") : t("Pipe pinned"))}>
+      <Icon name="pin" size={16} />{pinned ? t("Unpin") : t("Pin")}
     </button>
     {#if p.canManage && !p.isDefault}
       <div class="menu-sep"></div>
       <button class="menu-item" role="menuitem" disabled={open > 0}
-        title={open > 0 ? `Encore ${open} tâche${open > 1 ? "s" : ""} en cours : à terminer ou abandonner avant d'archiver` : undefined}
-        onclick={() => run(() => api.patch(`/pipes/${p.id}`, { archived: true }), "Pipe archivé")}>
-        <Icon name="archive" size={16} />Archiver
+        title={open > 0 ? tn(open, "Still {n} open task: finish or drop it before archiving", "Still {n} open tasks: finish or drop them before archiving") : undefined}
+        onclick={() => run(() => api.patch(`/pipes/${p.id}`, { archived: true }), t("Pipe archived"))}>
+        <Icon name="archive" size={16} />{t("Archive")}
       </button>
-      <button class="menu-item danger" role="menuitem" onclick={() => remove(p)}><Icon name="trash" size={16} />Supprimer</button>
+      <button class="menu-item danger" role="menuitem" onclick={() => remove(p)}><Icon name="trash" size={16} />{t("Delete")}</button>
     {/if}
   </div>
 {/if}

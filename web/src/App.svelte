@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { prefs, t, tn } from "./lib/i18n.svelte";
   import { app } from "./lib/app.svelte";
   import { live } from "./lib/realtime.svelte";
   import { interceptLinks, navigate, router } from "./lib/router.svelte";
@@ -35,6 +36,29 @@
       clearInterval(timer);
       live.stop();
     };
+  });
+
+  // Language and theme on <html> (the stylesheet follows data-theme, else the system).
+  $effect(() => {
+    document.documentElement.lang = prefs.lang;
+    if (prefs.theme) document.documentElement.dataset.theme = prefs.theme;
+    else delete document.documentElement.dataset.theme;
+  });
+
+  // Once signed in, the profile's choices prevail (they follow the person from one browser to another).
+  $effect(() => {
+    const user = app.me?.user;
+    if (user) untrack(() => prefs.set({ locale: user.locale, theme: user.theme }));
+  });
+
+  // Pipe and task types come translated by the server: reload them when the language changes.
+  let catalogLang = prefs.lang;
+  $effect(() => {
+    const lang = prefs.lang;
+    if (lang !== catalogLang && app.me) {
+      catalogLang = lang;
+      untrack(() => app.loadCatalog().catch(() => {}));
+    }
   });
 
   // Pending tasks: in the tab title and, where supported, on the installed app's icon.
@@ -83,7 +107,7 @@
     <main class="main">
       <div class="mobile-bar">
         <button class="btn ghost icon menu-btn" onclick={() => (navOpen = !navOpen)}
-          aria-label={app.pendingCount ? `Menu, ${app.pendingCount} tâche(s) en attente` : "Menu"}>
+          aria-label={app.pendingCount ? tn(app.pendingCount, "Menu, {n} task waiting", "Menu, {n} tasks waiting") : t("Menu")}>
           <Icon name="menu" />
           {#if app.pendingCount}
             {#key live.arrivals}<span class="pastille" class:pulse={live.arrivals > 0}>{app.pendingCount > 99 ? "99+" : app.pendingCount}</span>{/key}
@@ -104,7 +128,7 @@
       {:else if route.name === "pipe"}
         {#key route.id}<PipePage id={route.id} />{/key}
       {:else}
-        <div class="page"><h1>Page introuvable</h1><p><a href="/">Retour à l'accueil</a></p></div>
+        <div class="page"><h1>{t("Page not found")}</h1><p><a href="/">{t("Back to the dashboard")}</a></p></div>
       {/if}
     </main>
   </div>

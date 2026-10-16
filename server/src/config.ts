@@ -32,6 +32,8 @@ export const config = {
   sessionDays: Number(process.env.SESSION_DAYS || 30),
   secureCookies: appUrl.startsWith("https://"),
   webDir: process.env.WEB_DIR || "",
+  /** Language when neither the page nor the browser gives one ("en" or "fr"). */
+  defaultLocale: (process.env.DEFAULT_LOCALE === "fr" ? "fr" : "en") as "en" | "fr",
   /** Sending e-mails (invitations, sign-in links). Without SMTP_HOST, nothing is sent. */
   smtp: {
     host: process.env.SMTP_HOST || "",

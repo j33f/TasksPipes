@@ -4,6 +4,7 @@
   import { app } from "../lib/app.svelte";
   import type { Pipe, Task } from "../lib/types";
   import Modal from "./Modal.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   let { task, pipes, onclose, ondone }: { task: Task; pipes: Pipe[]; onclose: () => void; ondone?: () => void } = $props();
 
@@ -23,7 +24,7 @@
     busy = true;
     try {
       await api.post(`/tasks/${task.id}/move`, { pipeId, stage, comment });
-      app.toast("Tâche acceptée");
+      app.toast(t("Task accepted"));
       app.refresh();
       ondone?.();
       onclose();
@@ -35,32 +36,32 @@
   }
 </script>
 
-<Modal title="Accepter la tâche" {onclose}>
+<Modal title={t("Accept the task")} {onclose}>
   {#if !pipes.length}
-    <div class="callout warning">Cet espace n'a encore aucun pipe : créez-en un pour y ranger la tâche.</div>
-    <div class="modal-actions"><a class="btn" href={`/spaces/${task.space.id}?newPipe=1`} onclick={onclose}>Créer un pipe</a></div>
+    <div class="callout warning">{t("This space has no pipe yet: create one to put the task in.")}</div>
+    <div class="modal-actions"><a class="btn" href={`/spaces/${task.space.id}?newPipe=1`} onclick={onclose}>{t("Create a pipe")}</a></div>
   {:else}
     <form onsubmit={submit}>
       <div class="field">
-        <label for="acc-pipe">Pipe</label>
+        <label for="acc-pipe">{t("Pipe")}</label>
         <select id="acc-pipe" class="input" bind:value={pipeId}>
           {#each pipes as p (p.id)}<option value={p.id}>{p.name}{p.visibility === "open" ? " (open)" : ""}</option>{/each}
         </select>
       </div>
       <div class="field">
-        <label for="acc-status">Colonne</label>
+        <label for="acc-status">{t("Column")}</label>
         <select id="acc-status" class="input" bind:value={stage}>
           {#each columns as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
         </select>
       </div>
       <div class="field">
-        <label for="acc-comment">Commentaire (optionnel)</label>
+        <label for="acc-comment">{t("Comment (optional)")}</label>
         <input id="acc-comment" class="input" bind:value={comment} />
       </div>
       {#if error}<div class="error-text">{error}</div>{/if}
       <div class="modal-actions">
-        <button type="button" class="btn neutral" onclick={onclose}>Annuler</button>
-        <button class="btn" disabled={!pipeId || busy}>Accepter</button>
+        <button type="button" class="btn neutral" onclick={onclose}>{t("Cancel")}</button>
+        <button class="btn" disabled={!pipeId || busy}>{t("Accept")}</button>
       </div>
     </form>
   {/if}

@@ -7,6 +7,7 @@
   import Modal from "./Modal.svelte";
   import Icon, { iconOf } from "./Icon.svelte";
   import IconPicker from "./IconPicker.svelte";
+  import { t, tn } from "../lib/i18n.svelte";
 
   /** `editing`: a custom type to change; otherwise a new type, starting from `base` if given. */
   let { editing = null, base = null, onclose, onsaved }: {
@@ -19,24 +20,25 @@
   type DraftColumn = { id?: string; key: number; label: string; status: Status; color: string };
   let key = 0;
 
-  function fromType(t: PipeType | null, copy: boolean) {
+  // Labels of a built-in type come in the current language: a copy keeps them in that language.
+  function fromType(src: PipeType | null, copy: boolean) {
     return {
-      label: t ? (copy ? `${t.label} (copie)` : t.label) : "",
-      group: t?.custom ? t.group : "",
+      label: src ? (copy ? t("{name} (copy)", { name: src.label }) : src.label) : "",
+      group: src?.custom ? src.group : "",
       // A new model starts private; its author makes it public when ready.
-      visibility: copy || !t ? ("private" as const) : (t.visibility ?? "public"),
-      description: t?.description ?? "",
-      icon: t?.icon ?? "pipe",
-      color: t?.color ?? PALETTE[4],
-      columns: (t?.columns ?? [
-        { id: "", label: "À faire", status: "backlog" as Status, color: "#66778F" },
-        { id: "", label: "En cours", status: "ongoing" as Status, color: "#0366d6" },
-        { id: "", label: "Terminé", status: "done" as Status, color: "#3ad984" },
+      visibility: copy || !src ? ("private" as const) : (src.visibility ?? "public"),
+      description: src?.description ?? "",
+      icon: src?.icon ?? "pipe",
+      color: src?.color ?? PALETTE[4],
+      columns: (src?.columns ?? [
+        { id: "", label: t("To do"), status: "backlog" as Status, color: "#66778F" },
+        { id: "", label: t("In progress"), status: "ongoing" as Status, color: "#0366d6" },
+        { id: "", label: t("Done"), status: "done" as Status, color: "#3ad984" },
       ]).map((c): DraftColumn => ({ ...c, id: c.id || undefined, key: key++ })),
-      taskTypes: [...(t?.taskTypes ?? [])],
-      confidential: Boolean(t?.confidential),
-      teamOnly: Boolean(t?.teamOnly),
-      templates: (t?.templates ?? []).join("\n"),
+      taskTypes: [...(src?.taskTypes ?? [])],
+      confidential: Boolean(src?.confidential),
+      teamOnly: Boolean(src?.teamOnly),
+      templates: (src?.templates ?? []).join("\n"),
     };
   }
 
@@ -45,10 +47,10 @@
   let busy = $state(false);
   let error = $state("");
 
-  const choosable = $derived(app.pipeTypes.filter((t) => app.usable(t)));
-  const groups = $derived([...new Set(choosable.map((t) => t.group))]);
+  const choosable = $derived(app.pipeTypes.filter((pt) => app.usable(pt)));
+  const groups = $derived([...new Set(choosable.map((pt) => pt.group))]);
   // Others' private task types stay listed only if this type already offers them.
-  const offered = $derived(app.taskTypes.filter((t) => t.id !== "task" && (app.usable(t) || draft.taskTypes.includes(t.id))));
+  const offered = $derived(app.taskTypes.filter((tt) => tt.id !== "task" && (app.usable(tt) || draft.taskTypes.includes(tt.id))));
 
   function startFrom(id: string) {
     baseId = id;
@@ -71,12 +73,12 @@
     const body = {
       ...draft,
       columns: draft.columns.map(({ id, label, status, color }) => ({ id, label, status, color })),
-      templates: draft.templates.split("\n").map((t) => t.trim()).filter(Boolean),
+      templates: draft.templates.split("\n").map((line) => line.trim()).filter(Boolean),
     };
     try {
       if (editing) await api.put(`/catalog/pipe-types/${editing.id}`, body);
       else await api.post(`/catalog/pipe-types`, body);
-      app.toast(editing ? "Type de pipe enregistré" : "Type de pipe créé");
+      app.toast(editing ? t("Pipe type saved") : t("Pipe type created"));
       await app.loadCatalog();
       onsaved();
       onclose();
@@ -94,13 +96,13 @@
 
 {#snippet visibilityField()}
   <div class="field">
-    <span class="label-text">Visibilité du modèle</span>
+    <span class="label-text">{t("Visibility of the model")}</span>
     <div class="radio-cards">
       <button type="button" class="radio-card" class:selected={draft.visibility === "private"} onclick={() => (draft.visibility = "private")}>
-        <strong><Icon name="lock" size={16} />Privé</strong><span>Vous seul·e pouvez l'utiliser et le voir dans Modèles</span>
+        <strong><Icon name="lock" size={16} />{t("Private")}</strong><span>{t("Only you can use it and see it in Models")}</span>
       </button>
       <button type="button" class="radio-card" class:selected={draft.visibility === "public"} onclick={() => (draft.visibility = "public")}>
-        <strong><Icon name="globe" size={16} />Public</strong><span>Proposé à tout le monde, qui peut aussi le dupliquer</span>
+        <strong><Icon name="globe" size={16} />{t("Public")}</strong><span>{t("Offered to everyone, who can also duplicate it")}</span>
       </button>
     </div>
   </div>
@@ -108,76 +110,74 @@
 
 <Modal large {onclose}>
   <form class="editor" onsubmit={submit}>
-    <div class="modal-title">{editing ? `Modifier « ${editing.label} »` : "Nouveau type de pipe"}</div>
+    <div class="modal-title">{editing ? t("Edit “{name}”", { name: editing.label }) : t("New pipe type")}</div>
 
     {#if !editing}
       <div class="field">
-        <label for="pte-base">Partir de</label>
+        <label for="pte-base">{t("Start from")}</label>
         <select id="pte-base" class="input" value={baseId} onchange={(e) => startFrom((e.currentTarget as HTMLSelectElement).value)}>
-          <option value="">Un type vierge</option>
+          <option value="">{t("A blank type")}</option>
           {#each groups as g (g)}
             <optgroup label={g}>
-              {#each choosable.filter((t) => t.group === g) as t (t.id)}<option value={t.id}>{t.label}</option>{/each}
+              {#each choosable.filter((pt) => pt.group === g) as pt (pt.id)}<option value={pt.id}>{pt.label}</option>{/each}
             </optgroup>
           {/each}
         </select>
-        <div class="hint">Le type choisi est copié : vous pouvez tout changer, l'original n'est pas modifié.</div>
+        <div class="hint">{t("The chosen type is copied: you can change everything, the original stays as it is.")}</div>
       </div>
     {/if}
 
     <div class="grid2">
       <div class="field">
-        <label for="pte-name">Nom, icône et couleur</label>
+        <label for="pte-name">{t("Name, icon and colour")}</label>
         <div class="row">
           <IconPicker icon={draft.icon} color={draft.color} kind="general"
             onchange={(next) => { draft.icon = next.icon ?? "pipe"; draft.color = next.color ?? draft.color; }} />
-          <input id="pte-name" class="input" bind:value={draft.label} required maxlength="60" placeholder="Ex. : Alternance" />
+          <input id="pte-name" class="input" bind:value={draft.label} required maxlength="60" placeholder={t("E.g.: Work-study")} />
         </div>
       </div>
       <div class="field">
-        <label for="pte-group">Catégorie</label>
-        <input id="pte-group" class="input" bind:value={draft.group} maxlength="40" list="pte-groups" placeholder="Modèles personnalisés" />
+        <label for="pte-group">{t("Category")}</label>
+        <input id="pte-group" class="input" bind:value={draft.group} maxlength="40" list="pte-groups" placeholder={t("Custom models")} />
         <datalist id="pte-groups">{#each groups as g (g)}<option value={g}></option>{/each}</datalist>
       </div>
     </div>
     {@render visibilityField()}
     <div class="field">
-      <label for="pte-desc">Description</label>
-      <input id="pte-desc" class="input" bind:value={draft.description} maxlength="500" placeholder="À quoi sert ce type de pipe ?" />
+      <label for="pte-desc">{t("Description")}</label>
+      <input id="pte-desc" class="input" bind:value={draft.description} maxlength="500" placeholder={t("What is this type of pipe for?")} />
     </div>
 
     <div class="field">
-      <span class="label-text">Colonnes</span>
+      <span class="label-text">{t("Columns")}</span>
       <div class="hint top">
-        L'état dit comment la colonne compte dans l'application (tâches en cours, bloquées, terminées…).
-        Il faut au moins une colonne « Terminé ».
+        {t("The state tells how the column counts in the app (tasks in progress, blocked, done…). At least one “Done” column is needed.")}
       </div>
       <div class="rows">
         {#each draft.columns as c, i (c.key)}
           <div class="col-row">
-            <label class="dot" style="background:{c.color}" title="Couleur">
+            <label class="dot" style="background:{c.color}" title={t("Colour")}>
               <input type="color" bind:value={c.color} />
             </label>
-            <input class="input" bind:value={c.label} required maxlength="40" placeholder="Nom de la colonne" />
-            <select class="input status" bind:value={c.status} title="État">
-              {#each STATUSES as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
+            <input class="input" bind:value={c.label} required maxlength="40" placeholder={t("Column name")} />
+            <select class="input status" bind:value={c.status} title={t("State")}>
+              {#each STATUSES as s (s.id)}<option value={s.id}>{t(s.label)}</option>{/each}
             </select>
-            <button type="button" class="btn ghost icon small" title="Monter" disabled={i === 0}
+            <button type="button" class="btn ghost icon small" title={t("Move up")} disabled={i === 0}
               onclick={() => (draft.columns = moved(draft.columns, i, -1))}><span class="up"><Icon name="chevron" size={14} /></span></button>
-            <button type="button" class="btn ghost icon small" title="Descendre" disabled={i === draft.columns.length - 1}
+            <button type="button" class="btn ghost icon small" title={t("Move down")} disabled={i === draft.columns.length - 1}
               onclick={() => (draft.columns = moved(draft.columns, i, 1))}><span class="down"><Icon name="chevron" size={14} /></span></button>
-            <button type="button" class="btn ghost icon small" title="Retirer" disabled={draft.columns.length <= 2}
+            <button type="button" class="btn ghost icon small" title={t("Remove")} disabled={draft.columns.length <= 2}
               onclick={() => (draft.columns = draft.columns.filter((x) => x !== c))}><Icon name="trash" size={14} /></button>
           </div>
         {/each}
       </div>
       <button type="button" class="btn ghost small" disabled={draft.columns.length >= 15} onclick={addColumn}>
-        <Icon name="plus" size={16} />Ajouter une colonne
+        <Icon name="plus" size={16} />{t("Add a column")}
       </button>
       {#if removedColumns.length}
         <div class="hint warn">
-          Colonne{removedColumns.length > 1 ? "s" : ""} retirée{removedColumns.length > 1 ? "s" : ""} :
-          {removedColumns.map((c) => c.label).join(", ")}. Leurs tâches iront dans la colonne la plus proche de leur état.
+          {tn(removedColumns.length, "Removed column: {names}. Its tasks will go to the column closest to their state.", "Removed columns: {names}. Their tasks will go to the column closest to their state.", { names: removedColumns.map((c) => c.label).join(", ") })}
         </div>
       {/if}
       <div class="board-preview">
@@ -188,34 +188,34 @@
     </div>
 
     <div class="field">
-      <span class="label-text">Types de tâches proposés</span>
-      <div class="hint top">La tâche simple est toujours proposée.</div>
+      <span class="label-text">{t("Offered task types")}</span>
+      <div class="hint top">{t("The plain task is always offered.")}</div>
       <div class="chips">
-        {#each offered as t (t.id)}
-          <button type="button" class="chip" class:selected={draft.taskTypes.includes(t.id)} title={t.description}
-            onclick={() => toggleTaskType(t.id)}><Icon name={iconOf(t.icon)} size={14} />{t.label}</button>
+        {#each offered as tt (tt.id)}
+          <button type="button" class="chip" class:selected={draft.taskTypes.includes(tt.id)} title={tt.description}
+            onclick={() => toggleTaskType(tt.id)}><Icon name={iconOf(tt.icon)} size={14} />{tt.label}</button>
         {/each}
       </div>
     </div>
 
     <div class="field">
-      <span class="label-text">Confidentialité</span>
+      <span class="label-text">{t("Confidentiality")}</span>
       <label class="check"><input type="checkbox" bind:checked={draft.confidential} disabled={draft.teamOnly} />
-        Confidentiel : les pipes de ce type restent toujours privés</label>
+        {t("Confidential: pipes of this type always stay private")}</label>
       <label class="check"><input type="checkbox" bind:checked={draft.teamOnly} />
-        Réservé à une équipe : seulement dans un espace d'équipe, les tâches ne peuvent pas en sortir</label>
+        {t("Reserved to a team: only in a team space, tasks cannot leave it")}</label>
     </div>
 
     <div class="field">
-      <label for="pte-templates">Tâches de départ (une par ligne)</label>
+      <label for="pte-templates">{t("Starter tasks (one per line)")}</label>
       <textarea id="pte-templates" class="input" bind:value={draft.templates} rows="4"
-        placeholder="Proposées à la création d'un pipe, dans la première colonne"></textarea>
+        placeholder={t("Offered when a pipe is created, in the first column")}></textarea>
     </div>
 
     {#if error}<div class="error-text">{error}</div>{/if}
     <div class="modal-actions">
-      <button type="button" class="btn neutral" onclick={onclose}>Annuler</button>
-      <button class="btn" disabled={busy || !draft.label.trim()}>{editing ? "Enregistrer" : "Créer le type"}</button>
+      <button type="button" class="btn neutral" onclick={onclose}>{t("Cancel")}</button>
+      <button class="btn" disabled={busy || !draft.label.trim()}>{editing ? t("Save") : t("Create the type")}</button>
     </div>
   </form>
 </Modal>

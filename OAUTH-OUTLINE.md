@@ -1,42 +1,42 @@
-# Connexion OAuth Outline pour TasksPipes
+# Outline OAuth sign-in for TasksPipes
 
-Permet aux membres de se connecter à TasksPipes avec leur compte Outline, sans coller de clé API.
+[Français](OAUTH-OUTLINE.fr.md)
 
-## 1. Créer l'application dans Outline
+Lets members sign in to TasksPipes with their Outline account, without pasting an API key.
+It works with the Outline server set in `OUTLINE_URL` only.
 
-> Réservé aux **administrateur·ices** de l'espace Outline.
+## 1. Create the application in Outline
 
-1. Se connecter à <https://ressources.diginamic.fr> avec un compte admin.
-2. Aller dans **Paramètres › Applications** (*Settings › Applications*).
-3. Cliquer sur **Nouvelle application** et renseigner :
-   - **Nom** : `TasksPipes`
-   - **URL de redirection** : `https://taskspipes.modulaweb.fr/auth/outline/callback`
-4. Enregistrer, puis ouvrir la fiche de l'application pour récupérer le **Client ID** et le **Client secret**
-   (le secret peut être régénéré depuis cette fiche).
+> Only **admins** of the Outline workspace can do this.
 
-### Points d'attention
+1. Sign in to your Outline instance with an admin account.
+2. Go to **Settings › Applications**.
+3. Click **New application** and fill in:
+   - **Name**: `TasksPipes`
+   - **Redirect URL**: `<APP_URL>/auth/outline/callback` (e.g. `https://tasks.example.com/auth/outline/callback`)
+4. Save, then open the application to copy its **Client ID** and **Client secret** (the secret can be regenerated there).
 
-- Pas de menu **Applications** : le compte n'est pas admin, ou la version d'Outline est trop ancienne pour OAuth.
-  La connexion par clé API reste alors disponible.
-- L'URL de redirection doit correspondre **exactement** (avec `https`), sinon la connexion échoue au retour vers TasksPipes.
+### Watch out
 
-## 2. Renseigner le `.env`
+- No **Applications** menu: the account is not an admin, or the Outline version is too old for OAuth.
+  API key sign-in stays available.
+- The redirect URL must match **exactly** (including `https`), otherwise sign-in fails on the way back to TasksPipes.
 
-Dans `/home/debian/TasksPipes/.env`, compléter :
+## 2. Fill in `.env`
 
 ```dotenv
 OUTLINE_OAUTH_CLIENT_ID=<client id>
 OUTLINE_OAUTH_CLIENT_SECRET=<client secret>
 ```
 
-Le secret ne doit jamais être commité ni partagé (le `.env` est déjà exclu par `.gitignore`).
+Never commit or share the secret (`.env` is already excluded by `.gitignore`).
 
-Optionnel : `ALLOW_API_KEY_LOGIN=false` pour n'autoriser que la connexion OAuth.
+Optional: `ALLOW_API_KEY_LOGIN=false` to allow OAuth sign-in only.
 
-## 3. Redémarrer l'application
+## 3. Restart the application
 
 ```bash
-cd /home/debian/TasksPipes && docker compose up -d
+docker compose up -d
 ```
 
-Le bouton de connexion via Outline apparaît sur <https://taskspipes.modulaweb.fr> dès que les deux valeurs sont renseignées.
+The "Continue with Outline" button shows on the sign-in page as soon as both values are set.

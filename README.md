@@ -1,123 +1,145 @@
 # TasksPipes
 
-Gestion de tâches multi-utilisateur·rices adossée à [Outline](https://github.com/outline/outline) :
-connexion via l'API Outline, documents Outline liés aux tâches, interface reprenant le design system d'Outline
-(tokens de `shared/styles/theme.ts`, thème clair/sombre automatique).
+[Français](README.fr.md)
 
-## Fonctionnalités
+Multi-user task management built around [Outline](https://github.com/outline/outline): sign in with your Outline
+account, link Outline documents to tasks, in an interface that follows Outline's design system (tokens from
+`shared/styles/theme.ts`, light and dark themes).
 
-- **Espaces** : chaque personne du workspace Outline a son espace personnel ; on voit aussi celui de chacun des autres.
-  On crée des **espaces d'équipe** en choisissant leurs membres ; la gouvernance se partage en promouvant d'autres membres
-  au rôle *admin* (au moins un admin est toujours conservé).
-- **Pipes** : suites de tâches en kanban étendu — *Backlog, Prêt à démarrer, Démarré, En cours, Bloqué, Terminé, Abandonné* —
-  avec glisser-déposer.
-  - **Perso** / **Équipe** (privé) : visible uniquement par la personne (espace personnel) ou par les membres de l'équipe.
-  - **Open** (public) : visible par tout le monde ; chacun·e peut y ajouter des tâches et commenter, seul·es les membres de l'espace les font avancer.
-  - Chaque espace personnel a toujours un pipe **« Perso »** (tâches générales), qui ne s'archive ni ne se supprime.
-  - **Archivage** : un pipe archivé disparaît des listes, des sélecteurs et de « Mes tâches », et n'accepte plus
-    de nouvelles tâches ; il reste consultable (« Voir les pipes archivés ») et peut être désarchivé.
-  - **Types** pensés pour un centre de formation pour adultes (`server/src/pipeTypes.ts`) : tâches générales, commercial,
-    prospection, communication, ingénierie pédagogique, documentation, formateurs & planning, suivi des apprenants,
-    qualité & Qualiopi, administratif & financier, et des **processus** (recrutement / admission, rentrée,
-    examen / certification, fin de session) qui peuvent pré-remplir le backlog avec leurs tâches type.
-    Chaque type a **ses colonnes** (ex. commercial : Demande › Qualification › Devis envoyé › Négociation ›
-    En attente de financement › Gagné / Perdu) ; chaque colonne correspond à un état générique, utilisé par l'accueil,
-    les échéances et l'archivage.
-- **Types de tâches** propres à chaque type de pipe (création de cours, opportunité, candidature, indicateur Qualiopi,
-  facture…), avec leurs champs : texte, montant, liste, date, titre RNCP / RS (lien France Compétences),
-  documents Outline, et **fichiers** (syllabus, supports, QCM, TP, TD…, 50 Mo max par fichier, stockés en base).
-- **Propriétaire** : une tâche d'un espace personnel appartient à sa ou son titulaire, sans assignation possible ;
-  pour la confier à quelqu'un, on l'envoie dans son incoming. Seules les tâches d'un espace d'équipe ont un
-  propriétaire choisi parmi les membres de l'équipe, y compris au moment de les envoyer à l'équipe.
-- **Sous-tâches** : chaque tâche peut contenir une liste de cases à cocher (ajout à la volée, coller plusieurs lignes en crée
-  plusieurs, renommage, réordonnancement par glisser-déposer) ; l'avancement (3/5) s'affiche sur les cartes et les cases cochées
-  sont historisées.
-- **Mes tâches** : tout ce qui m'est attribué et reste à faire, tous pipes confondus, regroupé par état (en cours, bloquées,
-  prêtes, à venir) ou par pipe.
-- **Prochaine action** (GTD) : capture rapide dans « Perso », rappel des tâches en cours (cocher la sous-tâche suivante,
-  terminer), et suggestion de la prochaine tâche à démarrer — en retard ou à échéance proche d'abord, puis prête, déjà
-  entamée ou en attente depuis longtemps — avec « Démarrer » ou « Autre suggestion ». Au-delà de 3 tâches en cours, l'outil
-  invite à en terminer une d'abord.
-- **Modèles** (designer) : chacun peut concevoir ses types de pipes (colonnes et leur état, types de tâches proposés,
-  confidentialité, tâches de départ) et ses types de tâches (champs, avec aperçu), à partir de zéro ou d'un modèle existant.
-  Un modèle naît privé (visible et utilisable par son auteur·rice seulement), peut devenir public, et se range dans une
-  catégorie. Seul·e l'auteur·rice le modifie ; un type utilisé ne se supprime pas, et le type d'un champ enregistré ne change plus.
-- **Menu** : « Moi » (tableau de bord, mes tâches, prochaine action, incoming, mes pipes), épinglés, mes équipes et leurs
-  pipes, autres équipes et personnes (repliées), modèles.
-- **Invitations par e-mail** : on peut inviter des personnes sans compte Outline (formateurs, partenaires…). Elles se
-  connectent par un lien à usage unique reçu par e-mail (7 jours pour une invitation, 20 minutes pour un lien demandé
-  depuis la page de connexion), et peuvent ajouter une double authentification TOTP (Google Authenticator), demandée
-  ensuite à chaque connexion (5 essais par lien). Un compte invité ne voit que la ou les personnes qui l'ont invité et
-  celles qu'il a invitées ; les comptes Outline ne voient pas les comptes invités, sauf ceux qu'ils ont invités eux-mêmes.
-  Seule exception : dans une équipe, la liste de ses membres. Les comptes invités ne voient que leurs équipes et n'ont
-  pas accès à Outline.
-- **Temps réel** : une tâche envoyée ou refusée apparaît aussitôt chez son ou ses destinataires (WebSocket), avec une
-  notification « Voir ». La connexion se ferme après 5 minutes d'inactivité ou 1 minute en arrière-plan, et se rouvre
-  au retour sur la page (les données sont alors rechargées). Le nombre de tâches en attente s'affiche dans le titre de
-  l'onglet et, sur mobile, en pastille sur le bouton du menu.
-- **Incoming bucket** pour chaque personne et chaque équipe : il reçoit les tâches envoyées par d'autres.
-  Un membre peut les **accepter** (choix du pipe et de l'état) ou les **refuser en donnant une raison** : la tâche
-  revient alors dans l'incoming de la personne qui l'a envoyée.
-- **Traçabilité** : chaque changement est historisé avec l'état avant/après : emplacement (pipe ou incoming), état,
-  propriétaire, échéance, document Outline lié, ainsi que le commentaire associé.
-- **Outline** : recherche de documents (ou collage d'une URL), liaison/déliaison, création d'un document Outline depuis une tâche.
-- **Markdown** partout (descriptions, commentaires, raisons de refus, descriptions d'espace et de pipe) avec aperçu.
+The interface is available in **English and French**: the language follows the browser and can be chosen in the
+profile, as can a light or dark theme. The built-in catalog of pipe and task types is designed for French adult
+training centres (Qualiopi, RNCP, OPCO…); its labels are translated, and the designer lets you build your own types.
+
+## Features
+
+- **Spaces**: everyone in the Outline workspace has a personal space; everyone else's is visible too.
+  **Team spaces** are created by picking their members; governance is shared by promoting other members to *admin*
+  (at least one admin always remains).
+- **Pipes**: extended kanban boards with drag and drop. Each column belongs to a generic state — *Backlog, Ready to
+  start, Started, In progress, Blocked, Done, Dropped* — which the dashboard, due dates and archiving rely on.
+  - **Personal** / **Team** (private): only the person (personal space) or the team's members see it.
+  - **Open** (public): everyone sees it; anyone can add tasks and comment, only the space's members move them forward.
+  - Every personal space always has a **"Personal"** pipe (general tasks), which cannot be archived or deleted.
+  - **Archiving**: an archived pipe leaves the lists, pickers and "My tasks", and takes no new tasks; it can still be
+    viewed ("Show archived pipes") and unarchived.
+  - **Types** for an adult training centre (`server/src/pipeTypes.ts`): general tasks, sales, prospecting,
+    communication, instructional design, documentation, trainers & schedule, learner follow-up, disability follow-up
+    (reserved to a team), quality & Qualiopi, admin & finance, and **processes** (recruitment / admission, session
+    start, exams / certification, session end) that can fill the first column with their starter tasks.
+    Each type has **its own columns** (e.g. sales: Request › Needs analysis › Quote sent › Negotiation ›
+    Waiting for funding › Won / Lost).
+- **Task types** specific to each pipe type (course design, opportunity, application, Qualiopi indicator, invoice…),
+  with their fields: text, amount, choice list, date, RNCP / RS qualification (link to France Compétences), Outline
+  documents, and **files** (syllabus, materials, quizzes…, 50 MB max per file, stored in the database).
+- **Models** (designer): anyone can design pipe types (columns and their state, offered task types,
+  confidentiality, starter tasks) and task types (fields, with a live preview), from scratch or from an existing
+  model. A model starts private (seen and used by its author only), can be made public, and is filed in a category.
+  Only its author changes it; a type in use cannot be deleted, and the kind of a saved field cannot change.
+- **Owner**: a task in a personal space belongs to its holder, with no assignee; to hand it to someone, send it to
+  their incoming. Only tasks in a team space have an owner, chosen among the team's members, including when sending
+  them to the team.
+- **Sub-tasks**: every task can hold a checklist (add on the fly, paste several lines to add several, rename,
+  reorder by drag and drop); progress (3/5) shows on cards, and checking is recorded in the history.
+- **My tasks**: everything assigned to me and still to do, across all pipes, grouped by state (in progress, blocked,
+  ready, coming up) or by pipe.
+- **Next action** (GTD): quick capture into "Personal", tasks in progress (check the next sub-task, finish), and a
+  suggestion of the next task to start — late or due soon first, then ready, already begun or waiting for long — with
+  "Start" or "Another suggestion". Beyond 3 tasks in progress, it suggests finishing one first.
+- **Incoming bucket** for every person and team: it receives tasks sent by others. A member can **accept** them
+  (choosing the pipe and column) or **refuse them with a reason**: the task then goes back to the sender's incoming.
+- **Live updates**: a task sent or refused shows up at once for its recipients (WebSocket), with a "View"
+  notification. The connection closes after 5 minutes of inactivity or 1 minute in the background, and reopens when
+  the page is used again (data is then reloaded). The number of waiting tasks shows in the tab title and, on mobile,
+  as a badge on the menu button.
+- **Invitations by e-mail**: people without an Outline account (trainers, partners…) can be invited. They sign in
+  with one-time links received by e-mail (7 days for an invitation, 20 minutes for a link asked from the sign-in
+  page), and can add TOTP two-factor authentication (Google Authenticator), then asked at every sign-in (5 attempts
+  per link). An invited account only sees the people who invited it and those it invited; Outline accounts do not
+  see invited accounts, except those they invited themselves — and the member list of a team they share. Invited
+  accounts only see their own teams and have no access to Outline.
+- **Calendar subscription**: "My account" gives a personal link (iCalendar feed) to subscribe to one's tasks with a
+  due date in Google Calendar, Apple Calendar or any calendar app; it can be reset if it leaks.
+- **Several Outline servers**: the sign-in page can add other Outline servers and pick one (the list is kept in the
+  browser); sign-in then uses an API key of that server. Accounts of one server see neither the people nor the
+  teams of another.
+- **History**: every change is recorded with the state before and after: place (pipe or incoming), column, owner,
+  due date, linked Outline document, along with its comment.
+- **Outline**: document search (or paste a URL), link / unlink, create an Outline document from a task.
+- **Markdown** everywhere (descriptions, comments, refusal reasons, space and pipe descriptions) with a preview.
 
 ## Stack
 
-| Couche | Techno |
+| Layer | Technology |
 | --- | --- |
-| Front | Svelte 5 (runes) + Vite 8, TypeScript, `marked` + `DOMPurify` |
-| Back | Fastify 5 (logger pino), TypeScript, Node 24 LTS |
-| Données | PostgreSQL 17 (schéma créé au démarrage) |
-| Hébergement | Docker (image multi-étapes) + docker compose |
+| Front end | Svelte 5 (runes) + Vite, TypeScript, `marked` + `DOMPurify` |
+| Back end | Fastify 5 (pino logger), TypeScript, Node 24 LTS, WebSocket (`@fastify/websocket`) |
+| Data | PostgreSQL 17 (schema created at startup) |
+| Hosting | Docker (multi-stage image) + docker compose |
 
-## Déploiement
+## Deployment
 
-1. Copier la configuration : `cp .env.example .env`, puis renseigner au minimum `APP_URL`, `APP_SECRET`
-   (`openssl rand -hex 32`), `POSTGRES_PASSWORD` et `OUTLINE_URL`.
-2. Choisir le mode de connexion :
-   - **OAuth (recommandé)** : dans Outline, *Paramètres › Applications › Nouvelle application*, avec l'URL de
-     redirection `${APP_URL}/auth/outline/callback`. Renseigner `OUTLINE_OAUTH_CLIENT_ID` et `OUTLINE_OAUTH_CLIENT_SECRET`.
-   - **Clé API** (`ALLOW_API_KEY_LOGIN=true`) : chaque personne colle une clé API personnelle créée dans Outline.
-   - **Autres serveurs Outline** : sur la page de connexion, on peut ajouter l'adresse d'un autre serveur Outline et le
-     choisir (liste gardée dans le navigateur) ; la connexion se fait alors par clé API sur ce serveur, et le lien vers
-     la page de création de clé pointe vers lui. Les comptes d'un serveur ne voient ni les personnes ni les équipes d'un
-     autre. Seuls les serveurs publics en https sont acceptés (`OUTLINE_ALLOW_PRIVATE=true` pour un serveur interne) ;
-     `OUTLINE_ALLOWED_HOSTS` en restreint la liste. OAuth reste réservé au serveur configuré.
-   - **E-mail** (comptes invités) : renseigner `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` et `MAIL_FROM` pour envoyer
-     les invitations et les liens de connexion. Sans SMTP, une invitation affiche le lien à transmettre soi-même.
-3. `docker compose up -d --build`, puis ouvrir `APP_URL`.
+1. Copy the configuration: `cp .env.example .env`, then set at least `APP_URL`, `APP_SECRET`
+   (`openssl rand -hex 32`), `POSTGRES_PASSWORD` and `OUTLINE_URL`.
+2. Choose how people sign in:
+   - **OAuth (recommended)**: see [OAUTH-OUTLINE.md](OAUTH-OUTLINE.md).
+   - **API key** (`ALLOW_API_KEY_LOGIN=true`): everyone pastes a personal API key created in Outline.
+   - **Other Outline servers**: only public https servers are accepted (`OUTLINE_ALLOW_PRIVATE=true` for an internal
+     one); `OUTLINE_ALLOWED_HOSTS` restricts the list. OAuth stays limited to the configured server.
+   - **E-mail** (invited accounts): set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM` to send
+     invitations and sign-in links. Without SMTP, an invitation shows the link for the inviter to pass on.
+3. Optionally set `DEFAULT_LOCALE` (`en` or `fr`), used when neither the browser nor the profile gives a language
+   (e-mails, the default pipe of people imported from Outline).
+4. `docker compose up -d --build`, then open `APP_URL`.
 
-Placer l'application derrière un reverse proxy HTTPS en production : avec un `APP_URL` en `https://`, les cookies sont `Secure`.
-Les jetons Outline sont chiffrés (AES-256-GCM) en base avec `APP_SECRET`.
+Put the application behind an HTTPS reverse proxy in production: with an `https://` `APP_URL`, cookies are `Secure`.
+Outline tokens and TOTP secrets are encrypted in the database (AES-256-GCM) with `APP_SECRET`.
 
-À la première connexion, les membres du workspace Outline sont importé·es (`users.list`) pour qu'on puisse leur envoyer
-des tâches avant même qu'ils ou elles se connectent.
+On first sign-in, the members of the Outline workspace are imported (`users.list`) so that tasks can be sent to
+them before they ever sign in.
 
-## Développement
+## Development
 
 ```bash
-# Stack complète avec un faux Outline (clés API : alice-token, bob-token, carol-token)
+# Full stack with a fake Outline (API keys: alice-token, bob-token, carol-token)
 docker compose --env-file dev/.env.dev -f docker-compose.yml -f dev/docker-compose.dev.yml up --build
 
-# Ou en local (Node 24) :
+# Or locally (Node 24):
 cd server && npm install && OUTLINE_URL=… DATABASE_URL=… APP_SECRET=… npm run dev   # :3000
-cd web && npm install && npm run dev                                                 # :5173, proxy vers :3000
+cd web && npm install && npm run dev                                                 # :5173, proxied to :3000
 ```
 
-Vérifications : `npm run typecheck` (server), `npm run check` (web, svelte-check).
+Checks: `npm run typecheck` (server), `npm run check` (web, svelte-check).
 
-## Règles d'accès
+### Translations
 
-| Action | Qui |
+Texts are written in English in the code and translated with `t("…")`:
+
+- web app: `web/src/lib/i18n.svelte.ts`, French in `web/src/lib/locales/fr.ts`;
+- server (error messages, e-mails): `server/src/i18n.ts`; the server answers in the language sent by the web app
+  (`X-Locale` header), else the browser's (`Accept-Language`);
+- the built-in catalog (`server/src/pipeTypes.ts`) is written in French and translated by
+  `server/src/catalog-en.ts`; select options keep their stored (French) value and get a translated label.
+
+A missing translation shows the source text. To add a language, add a dictionary and its code to `LOCALES` on both
+sides.
+
+## Access rules
+
+| Action | Who |
 | --- | --- |
-| Voir un pipe perso, l'incoming d'un espace | membres de l'espace |
-| Voir un pipe open, y créer une tâche, commenter | tout le monde |
-| Déplacer, changer l'état, assigner, échéance, document, envoyer | membres de l'espace qui détient la tâche |
-| Modifier titre/description | membres, ou l'auteur·rice d'une tâche située dans un pipe open |
-| Refuser | membres de l'espace dont l'incoming contient la tâche (sauf si on se l'est envoyée soi-même) |
-| Gérer une équipe (nom, membres, rôles, suppression) | admins de l'équipe |
-| Ajouter quelqu'un à une équipe, lui envoyer une tâche | admins de l'équipe / membres, parmi les personnes qu'on voit |
+| See a private pipe, a space's incoming | members of the space |
+| See an open pipe, add a task to it, comment | everyone who can see its space |
+| Move, change the column, assign, due date, document, send | members of the space holding the task |
+| Edit title / description | members, or the author of a task in an open pipe |
+| Refuse | members of the space whose incoming holds the task (unless they sent it themselves) |
+| Manage a team (name, members, roles, deletion) | the team's admins |
+| Add someone to a team, send them a task | team admins / members, among the people they can see |
 
-Les tâches ne se suppriment pas (pour garder l'historique) : on les passe en *Abandonné*.
+Tasks are never deleted (to keep their history): they are moved to *Dropped*.
+
+## License
+
+TasksPipes is distributed under the [Business Source License 1.1](LICENSE), like Outline: you may use, modify and
+host it, including for your own organisation, but not offer it as a commercial task management service to third
+parties. On 2030-10-16 (the Change Date), the code becomes available under the Apache License 2.0. This is a
+source-available license, not an OSI-approved open source license until that date.

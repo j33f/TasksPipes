@@ -1,4 +1,5 @@
 import { app } from "./app.svelte";
+import { t } from "./i18n.svelte";
 
 /** Closed after this long without any activity on the page, or this long after the page is hidden. */
 const IDLE_MS = 5 * 60_000;
@@ -118,12 +119,15 @@ class Live {
     this.arrivals++;
     const task = e.task;
     const where = app.spaces.find((s) => s.id === e.spaceId);
-    const team = where?.kind === "team" ? ` (équipe ${where.name})` : "";
     const message =
       e.type === "task.sent"
-        ? `${e.by} vous envoie « ${task.title} »${team}`
-        : `${e.by} a refusé « ${task.title} »${e.reason ? ` : ${e.reason.slice(0, 80)}` : ""}`;
-    app.toast(message, "info", { label: "Voir", run: () => app.openTask(task.id) });
+        ? where?.kind === "team"
+          ? t("{name} sends “{title}” to the team {team}", { name: e.by ?? "", title: task.title, team: where.name })
+          : t("{name} sends you “{title}”", { name: e.by ?? "", title: task.title })
+        : e.reason
+          ? t("{name} refused “{title}”: {reason}", { name: e.by ?? "", title: task.title, reason: e.reason.slice(0, 80) })
+          : t("{name} refused “{title}”", { name: e.by ?? "", title: task.title });
+    app.toast(message, "info", { label: t("View"), run: () => app.openTask(task.id) });
   }
 }
 

@@ -7,6 +7,7 @@
   import Avatar from "./Avatar.svelte";
   import Icon from "./Icon.svelte";
   import InviteModal from "./InviteModal.svelte";
+  import { LOCALES, prefs, t, type Locale, type Theme } from "../lib/i18n.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -19,6 +20,31 @@
   let code = $state("");
   let busy = $state(false);
   let error = $state("");
+
+  // Calendar subscription link (made on first display).
+  let calendar = $state<string | null>(null);
+  api.get<{ url: string }>("/me/calendar").then((r) => (calendar = r.url)).catch(() => {});
+  const webcal = $derived(calendar?.replace(/^https?:/, "webcal:") ?? "");
+  const googleUrl = $derived(`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}`);
+
+  async function copyCalendar() {
+    try {
+      await navigator.clipboard.writeText(calendar!);
+      app.toast(t("Link copied"));
+    } catch {
+      app.toast(t("Could not copy: select the link"), "error");
+    }
+  }
+
+  async function resetCalendar() {
+    if (!confirm(t("Make a new link? Calendars subscribed with the current one will stop showing your tasks."))) return;
+    try {
+      calendar = (await api.post<{ url: string }>("/me/calendar/reset")).url;
+      app.toast(t("New calendar link made"));
+    } catch (err) {
+      error = errorMessage(err);
+    }
+  }
 
   const loadInvitations = () => api.get<Invitation[]>("/invitations").then((r) => (invitations = r)).catch(() => {});
   loadInvitations();
@@ -39,7 +65,13 @@
   }
 
   function saveName() {
-    if (name.trim() && name !== user.name) run(() => api.patch("/me", { name }), "Nom enregistré");
+    if (name.trim() && name !== user.name) run(() => api.patch("/me", { name }), t("Name saved"));
+  }
+
+  // Applied at once in this browser, then kept in the profile.
+  function setPref(next: { locale?: Locale | null; theme?: Theme | null }) {
+    prefs.set(next);
+    api.patch("/me", next).then(() => app.init()).catch((err) => (error = errorMessage(err)));
   }
 
   async function startSetup() {
@@ -57,14 +89,14 @@
 
   async function enable(e: SubmitEvent) {
     e.preventDefault();
-    await run(() => api.post("/me/totp/enable", { code }), "Double authentification activée");
+    await run(() => api.post("/me/totp/enable", { code }), t("Two-factor authentication turned on"));
     if (!error) setup = null;
     code = "";
   }
 
   async function disable(e: SubmitEvent) {
     e.preventDefault();
-    await run(() => api.post("/me/totp/disable", { code }), "Double authentification désactivée");
+    await run(() => api.post("/me/totp/disable", { code }), t("Two-factor authentication turned off"));
     if (!error) disabling = false;
     code = "";
   }
@@ -73,79 +105,120 @@
     api
       .post<{ sent: boolean; link?: string }>(`/invitations/${i.id}/resend`)
       .then(async (r) => {
-        if (r.sent) app.toast(`Nouveau lien envoyé à ${i.email}`);
+        if (r.sent) app.toast(t("New link sent to {email}", { email: i.email ?? "" }));
         else if (r.link) {
           await navigator.clipboard.writeText(r.link).catch(() => {});
-          app.toast("E-mail non configuré : nouveau lien copié, à transmettre vous-même");
+          app.toast(t("E-mail is not set up: new link copied, pass it on yourself"));
         }
       })
       .catch((err) => app.toast(errorMessage(err), "error"));
 </script>
 
-<Modal title="Mon compte" {onclose}>
+<Modal title={t("My account")} {onclose}>
   <div class="profile">
     <Avatar {user} size={48} />
     <div class="grow">
       {#if app.isGuest}
-        <input class="input" bind:value={name} maxlength="120" onblur={saveName} aria-label="Nom"
+        <input class="input" bind:value={name} maxlength="120" onblur={saveName} aria-label={t("Name")}
           onkeydown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()} />
       {:else}
         <strong>{user.name}</strong>
       {/if}
-      <div class="small muted">{user.email ?? ""} · {app.isGuest ? "compte invité par e-mail" : "compte Outline"}</div>
+      <div class="small muted">{user.email ?? ""} · {app.isGuest ? t("account invited by e-mail") : t("Outline account")}</div>
     </div>
   </div>
 
   {#if error}<div class="error-text">{error}</div>{/if}
 
+  <div class="section">
+    <div class="section-title"><Icon name="settings" />{t("Display")}</div>
+    <div class="prefs">
+      <label class="pref">
+        <span class="label-text">{t("Language")}</span>
+        <select class="input" value={prefs.locale ?? ""}
+          onchange={(e) => setPref({ locale: ((e.currentTarget as HTMLSelectElement).value || null) as Locale | null })}>
+          <option value="">{t("Language of the browser")}</option>
+          {#each LOCALES as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+        </select>
+      </label>
+      <div class="pref">
+        <span class="label-text">{t("Theme")}</span>
+        <div class="seg" role="group" aria-label={t("Theme")}>
+          {#each [[null, "Automatic"], ["light", "Light"], ["dark", "Dark"]] as const as [value, label] (label)}
+            <button type="button" class:active={prefs.theme === value} onclick={() => setPref({ theme: value })}>{t(label)}</button>
+          {/each}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title"><Icon name="calendar" />{t("Calendar")}</div>
+    <p class="small">{t("Subscribe to your tasks with a due date in Google Calendar, Apple Calendar or any calendar app. The link is personal: keep it to yourself.")}</p>
+    {#if calendar}
+      <div class="row">
+        <input class="input cal-url" readonly value={calendar} aria-label={t("Calendar link")}
+          onfocus={(e) => (e.currentTarget as HTMLInputElement).select()} />
+        <button class="btn neutral small" onclick={copyCalendar}>{t("Copy")}</button>
+      </div>
+      <div class="row wrap cal-actions">
+        <a class="btn small" href={googleUrl} target="_blank" rel="noreferrer">{t("Add to Google Calendar")}</a>
+        <a class="btn small neutral" href={webcal}>{t("Add to Apple Calendar")}</a>
+        <span class="spacer"></span>
+        <button class="btn ghost small" onclick={resetCalendar}>{t("New link…")}</button>
+      </div>
+      <p class="hint">{t("Calendars refresh at their own pace: within the hour for Apple, up to a day for Google.")}</p>
+    {/if}
+  </div>
+
   {#if app.isGuest}
     <div class="section">
-      <div class="section-title"><Icon name="shield" />Double authentification</div>
+      <div class="section-title"><Icon name="shield" />{t("Two-factor authentication")}</div>
       {#if user.totp}
         <p class="small">
-          <span class="ok"><Icon name="check" size={14} />Active.</span>
-          À chaque connexion, après le lien reçu par e-mail, le code de votre application est demandé.
+          <span class="ok"><Icon name="check" size={14} />{t("On.")}</span>
+          {t("At each sign-in, after the link received by e-mail, the code from your app is asked for.")}
         </p>
         {#if disabling}
           <form class="row" onsubmit={disable}>
-            <input class="input code" inputmode="numeric" maxlength="7" placeholder="Code actuel" bind:value={code} aria-label="Code" />
-            <button class="btn danger small" disabled={busy}>Désactiver</button>
-            <button type="button" class="btn ghost small" onclick={() => (disabling = false)}>Annuler</button>
+            <input class="input code" inputmode="numeric" maxlength="7" placeholder={t("Current code")} bind:value={code} aria-label={t("Code")} />
+            <button class="btn danger small" disabled={busy}>{t("Turn off")}</button>
+            <button type="button" class="btn ghost small" onclick={() => (disabling = false)}>{t("Cancel")}</button>
           </form>
         {:else}
-          <button class="btn neutral small" onclick={() => (disabling = true)}>Désactiver…</button>
+          <button class="btn neutral small" onclick={() => (disabling = true)}>{t("Turn off…")}</button>
         {/if}
       {:else if setup}
         <ol class="small steps">
-          <li>Ouvrez Google Authenticator (ou une application équivalente) et scannez ce code :</li>
+          <li>{t("Open Google Authenticator (or a similar app) and scan this code:")}</li>
         </ol>
         <div class="qr-row">
-          <img src={setup.qr} alt="QR code à scanner" width="180" height="180" />
+          <img src={setup.qr} alt={t("QR code to scan")} width="180" height="180" />
           <div class="small muted">
-            Ou saisissez cette clé :
+            {t("Or type this key:")}
             <code class="secret">{setup.secret.match(/.{1,4}/g)?.join(" ")}</code>
           </div>
         </div>
-        <ol class="small steps" start="2"><li>Saisissez le code à 6 chiffres affiché :</li></ol>
+        <ol class="small steps" start="2"><li>{t("Enter the 6-digit code shown:")}</li></ol>
         <form class="row" onsubmit={enable}>
           <!-- svelte-ignore a11y_autofocus -->
           <input class="input code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123 456"
-            bind:value={code} autofocus aria-label="Code" />
-          <button class="btn small" disabled={busy || code.replace(/\s/g, "").length !== 6}>Activer</button>
-          <button type="button" class="btn ghost small" onclick={() => (setup = null)}>Annuler</button>
+            bind:value={code} autofocus aria-label={t("Code")} />
+          <button class="btn small" disabled={busy || code.replace(/\s/g, "").length !== 6}>{t("Turn on")}</button>
+          <button type="button" class="btn ghost small" onclick={() => (setup = null)}>{t("Cancel")}</button>
         </form>
       {:else}
-        <p class="small">Protégez votre compte : en plus du lien reçu par e-mail, un code de votre téléphone sera demandé à chaque connexion.</p>
-        <button class="btn small" disabled={busy} onclick={startSetup}>Activer avec Google Authenticator…</button>
+        <p class="small">{t("Protect your account: besides the link received by e-mail, a code from your phone will be asked at each sign-in.")}</p>
+        <button class="btn small" disabled={busy} onclick={startSetup}>{t("Turn on with Google Authenticator…")}</button>
       {/if}
     </div>
   {/if}
 
   <div class="section">
     <div class="section-title">
-      <Icon name="mail" />Invitations
+      <Icon name="mail" />{t("Invitations")}
       <span class="spacer"></span>
-      <button class="btn small neutral" onclick={() => (inviting = true)}><Icon name="plus" size={16} />Inviter par e-mail</button>
+      <button class="btn small neutral" onclick={() => (inviting = true)}><Icon name="plus" size={16} />{t("Invite by e-mail")}</button>
     </div>
     {#each invitations as i (i.id)}
       <div class="inv row">
@@ -153,17 +226,17 @@
           <strong>{i.name}</strong>
           <div class="small muted">
             {#if i.invitedByMe}
-              {i.email} · invité·e le {formatDate(i.createdAt)} · {i.active ? "s'est connecté·e" : "pas encore connecté·e"}
+              {i.email} · {t("invited on {date}", { date: formatDate(i.createdAt) })} · {i.active ? t("has signed in") : t("not signed in yet")}
             {:else}
-              vous a invité·e le {formatDate(i.createdAt)}
+              {t("invited you on {date}", { date: formatDate(i.createdAt) })}
             {/if}
           </div>
         </div>
-        {#if i.invitedByMe}<button class="btn ghost small" onclick={() => resend(i)}>Renvoyer un lien</button>{/if}
+        {#if i.invitedByMe}<button class="btn ghost small" onclick={() => resend(i)}>{t("Send a new link")}</button>{/if}
       </div>
     {:else}
       <div class="small muted">
-        Invitez des personnes sans compte Outline (formateurs, partenaires…) : elles se connectent avec un lien reçu par e-mail.
+        {t("Invite people without an Outline account (trainers, partners…): they sign in with a link received by e-mail.")}
       </div>
     {/each}
   </div>
@@ -181,5 +254,12 @@
   .qr-row img { border-radius: 6px; background: #fff; }
   .secret { display: block; margin-top: 6px; font-size: 14px; word-break: break-all; color: var(--text); }
   .code { max-width: 140px; font-variant-numeric: tabular-nums; letter-spacing: 0.1em; }
+  .cal-url { font-size: 13px; min-height: 30px; padding: 4px 8px; }
+  .cal-actions { margin-top: 8px; }
+  .prefs { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+  .pref .input { min-height: 32px; padding: 4px 8px; font-size: 14px; width: auto; }
+  .seg { display: inline-flex; border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; background: none; color: var(--text-secondary); font: inherit; font-size: 13px; padding: 6px 12px; cursor: pointer; }
+  .seg button.active { background: var(--background-secondary); color: var(--text); font-weight: 500; }
   .inv { padding: 8px 0; border-top: 1px solid var(--divider); }
 </style>

@@ -6,6 +6,7 @@
   import type { Task } from "../lib/types";
   import Icon, { iconOf } from "../components/Icon.svelte";
   import TaskRow from "../components/TaskRow.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   /** Beyond this many tasks in progress, finishing one is suggested before starting another. */
   const WIP_LIMIT = 3;
@@ -20,8 +21,8 @@
     api.get<Task[]>("/me/tasks").then((d) => (tasks = d));
   });
 
-  const doing = $derived((tasks ?? []).filter((t) => t.status === "started" || t.status === "ongoing"));
-  const blocked = $derived((tasks ?? []).filter((t) => t.status === "blocked"));
+  const doing = $derived((tasks ?? []).filter((task) => task.status === "started" || task.status === "ongoing"));
+  const blocked = $derived((tasks ?? []).filter((task) => task.status === "blocked"));
   const ranked = $derived(suggestions(tasks ?? []));
   const pick = $derived(ranked.find((s) => !skipped.includes(s.task.id)) ?? null);
   const defaultPipe = $derived(app.sidebar.mine.find((p) => p.isDefault));
@@ -39,19 +40,19 @@
     }
   }
 
-  function start(t: Task) {
-    const c = columnWith(t, "started", "ongoing");
-    if (c) run(() => api.patch(`/tasks/${t.id}`, { stage: c.id }), `C'est parti : « ${t.title} »`);
+  function start(task: Task) {
+    const c = columnWith(task, "started", "ongoing");
+    if (c) run(() => api.patch(`/tasks/${task.id}`, { stage: c.id }), t("Off you go: “{title}”", { title: task.title }));
   }
 
-  function finish(t: Task) {
-    const c = columnWith(t, "done");
-    if (c) run(() => api.patch(`/tasks/${t.id}`, { stage: c.id }), `« ${t.title} » terminée`);
+  function finish(task: Task) {
+    const c = columnWith(task, "done");
+    if (c) run(() => api.patch(`/tasks/${task.id}`, { stage: c.id }), t("“{title}” done", { title: task.title }));
   }
 
-  function checkNext(t: Task) {
-    const item = t.checklist.next;
-    if (item) run(() => api.patch(`/items/${item.id}`, { done: true }), `« ${item.text} » cochée`);
+  function checkNext(task: Task) {
+    const item = task.checklist.next;
+    if (item) run(() => api.patch(`/items/${item.id}`, { done: true }), t("“{item}” checked", { item: item.text }));
   }
 
   // Once every suggestion was skipped, start over.
@@ -63,107 +64,107 @@
     e.preventDefault();
     const title = capture.trim();
     if (!title || !defaultPipe) return;
-    await run(() => api.post("/tasks", { pipeId: defaultPipe.id, title }), `Notée dans ${defaultPipe.name}`);
+    await run(() => api.post("/tasks", { pipeId: defaultPipe.id, title }), t("Noted in {pipe}", { pipe: defaultPipe.name }));
     capture = "";
   }
 
-  const location = (t: Task) => `${t.space.kind === "team" ? `${t.space.name} › ` : ""}${t.pipe?.name ?? ""}`;
+  const location = (task: Task) => `${task.space.kind === "team" ? `${task.space.name} › ` : ""}${task.pipe?.name ?? ""}`;
 </script>
 
 <div class="page narrow">
   <div class="page-header">
     <div class="grow">
-      <h1><Icon name="target" size={26} />Prochaine action</h1>
-      <div class="subtitle">Une chose à la fois : on capture, on termine ce qui est en cours, puis on démarre la suivante.</div>
+      <h1><Icon name="target" size={26} />{t("Next action")}</h1>
+      <div class="subtitle">{t("One thing at a time: capture, finish what is in progress, then start the next one.")}</div>
     </div>
-    <a class="btn neutral" href="/tasks"><Icon name="checklist" size={18} />Toutes mes tâches</a>
+    <a class="btn neutral" href="/tasks"><Icon name="checklist" size={18} />{t("All my tasks")}</a>
   </div>
 
   {#if defaultPipe}
     <form class="capture" onsubmit={capt}>
       <Icon name="inbox" size={18} />
-      <input placeholder={`Une idée, un truc à faire ? Notez-le, il ira dans « ${defaultPipe.name} »…`} bind:value={capture} maxlength="300" />
-      <button class="btn small" disabled={busy || !capture.trim()}>Noter</button>
+      <input placeholder={t("An idea, something to do? Note it, it will go to “{pipe}”…", { pipe: defaultPipe.name })} bind:value={capture} maxlength="300" />
+      <button class="btn small" disabled={busy || !capture.trim()}>{t("Note")}</button>
     </form>
   {/if}
 
   {#if !tasks}
-    <div class="muted">Chargement…</div>
+    <div class="muted">{t("Loading…")}</div>
   {:else}
     {#if doing.length >= WIP_LIMIT}
       <div class="callout warning">
         <Icon name="bolt" />
-        <span>Vous avez déjà <strong>{doing.length} tâches en cours</strong>. Et si vous en terminiez une avant d'en démarrer une autre ?</span>
+        <span>{t("You already have {n} tasks in progress. How about finishing one before starting another?", { n: doing.length })}</span>
       </div>
     {/if}
 
     <div class="section">
-      <div class="section-title"><Icon name="play" />Et maintenant ?</div>
+      <div class="section-title"><Icon name="play" />{t("What now?")}</div>
       {#if pick}
-        {@const t = pick.task}
-        {@const type = t.taskType !== "task" ? app.taskType(t.taskType) : undefined}
+        {@const task = pick.task}
+        {@const type = task.taskType !== "task" ? app.taskType(task.taskType) : undefined}
         <div class="suggestion card">
           <div class="s-loc small muted">
             {#if type}<span class="row" style="gap:4px"><Icon name={iconOf(type.icon)} size={14} />{type.label}</span> ·{/if}
-            {location(t)} · {app.columnOf(t)?.label}
+            {location(task)} · {app.columnOf(task)?.label}
           </div>
-          <button class="s-title" onclick={() => app.openTask(t.id)}>{t.title}</button>
-          {#if pick.reasons.length || t.dueDate}
+          <button class="s-title" onclick={() => app.openTask(task.id)}>{task.title}</button>
+          {#if pick.reasons.length || task.dueDate}
             <div class="reasons">
-              {#if t.dueDate}<span class="chip due {dueState(t.dueDate, t.status)}"><Icon name="calendar" size={13} />{formatDate(t.dueDate)}</span>{/if}
+              {#if task.dueDate}<span class="chip due {dueState(task.dueDate, task.status)}"><Icon name="calendar" size={13} />{formatDate(task.dueDate)}</span>{/if}
               {#each pick.reasons as r (r)}<span class="chip">{r}</span>{/each}
             </div>
           {/if}
-          {#if t.checklist.next}
-            <div class="small next-item"><Icon name="checklist" size={14} />Première étape : <strong>{t.checklist.next.text}</strong></div>
+          {#if task.checklist.next}
+            <div class="small next-item"><Icon name="checklist" size={14} />{t("First step:")} <strong>{task.checklist.next.text}</strong></div>
           {/if}
           <div class="row wrap actions">
-            <button class="btn" disabled={busy} onclick={() => start(t)}><Icon name="play" size={16} />Démarrer</button>
+            <button class="btn" disabled={busy} onclick={() => start(task)}><Icon name="play" size={16} />{t("Start")}</button>
             {#if ranked.length > 1}
-              <button class="btn neutral" disabled={busy} onclick={another}><Icon name="skip" size={16} />Autre suggestion</button>
+              <button class="btn neutral" disabled={busy} onclick={another}><Icon name="skip" size={16} />{t("Another suggestion")}</button>
             {/if}
-            <button class="btn ghost" onclick={() => app.openTask(t.id)}>Ouvrir</button>
+            <button class="btn ghost" onclick={() => app.openTask(task.id)}>{t("Open task")}</button>
           </div>
         </div>
       {:else}
         <div class="empty">
-          Aucune tâche prête ou à venir à démarrer.
-          {#if doing.length}Concentrez-vous sur celles en cours !{:else}Notez ce qui vous passe par la tête ci-dessus.{/if}
+          {t("No ready or upcoming task to start.")}
+          {#if doing.length}{t("Focus on the ones in progress!")}{:else}{t("Note whatever comes to mind above.")}{/if}
         </div>
       {/if}
     </div>
 
     <div class="section">
-      <div class="section-title"><Icon name="bolt" />En cours<span class="count neutral">{doing.length}</span></div>
-      {#each doing as t (t.id)}
+      <div class="section-title"><Icon name="bolt" />{t("In progress")}<span class="count neutral">{doing.length}</span></div>
+      {#each doing as task (task.id)}
         <div class="doing card">
           <div class="d-main">
-            <button class="d-title" onclick={() => app.openTask(t.id)}>{t.title}</button>
+            <button class="d-title" onclick={() => app.openTask(task.id)}>{task.title}</button>
             <div class="small muted">
-              {location(t)} · {app.columnOf(t)?.label}
-              {#if t.dueDate} · <span class="due {dueState(t.dueDate, t.status)}">{formatDate(t.dueDate)}</span>{/if}
-              {#if t.checklist.total} · {t.checklist.done}/{t.checklist.total} sous-tâches{/if}
+              {location(task)} · {app.columnOf(task)?.label}
+              {#if task.dueDate} · <span class="due {dueState(task.dueDate, task.status)}">{formatDate(task.dueDate)}</span>{/if}
+              {#if task.checklist.total} · {t("{done}/{total} sub-tasks", { done: task.checklist.done, total: task.checklist.total })}{/if}
             </div>
-            {#if t.checklist.next}
+            {#if task.checklist.next}
               <label class="next-check">
-                <input type="checkbox" disabled={busy} onchange={() => checkNext(t)} />
-                <span>{t.checklist.next.text}</span>
+                <input type="checkbox" disabled={busy} onchange={() => checkNext(task)} />
+                <span>{task.checklist.next.text}</span>
               </label>
             {/if}
           </div>
-          {#if columnWith(t, "done")}
-            <button class="btn neutral small" disabled={busy} onclick={() => finish(t)}><Icon name="check" size={16} />Terminer</button>
+          {#if columnWith(task, "done")}
+            <button class="btn neutral small" disabled={busy} onclick={() => finish(task)}><Icon name="check" size={16} />{t("Finish")}</button>
           {/if}
         </div>
       {:else}
-        <div class="small muted">Rien en cours.</div>
+        <div class="small muted">{t("Nothing in progress.")}</div>
       {/each}
     </div>
 
     {#if blocked.length}
       <div class="section">
-        <div class="section-title"><Icon name="flag" />Bloquées : à relancer ?<span class="count neutral">{blocked.length}</span></div>
-        <div class="list">{#each blocked as t (t.id)}<TaskRow task={t} />{/each}</div>
+        <div class="section-title"><Icon name="flag" />{t("Blocked: chase them up?")}<span class="count neutral">{blocked.length}</span></div>
+        <div class="list">{#each blocked as task (task.id)}<TaskRow task={task} />{/each}</div>
       </div>
     {/if}
   {/if}

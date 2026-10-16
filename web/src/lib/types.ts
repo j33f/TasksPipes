@@ -14,7 +14,14 @@ export interface User extends UserRef {
 }
 
 export interface Me {
-  user: UserRef & { email: string | null; kind: "outline" | "email"; totp: boolean };
+  user: UserRef & {
+    email: string | null;
+    kind: "outline" | "email";
+    totp: boolean;
+    /** Chosen language and theme; null follows the browser / the system. */
+    locale: "en" | "fr" | null;
+    theme: "light" | "dark" | null;
+  };
   personalSpaceId: string;
   outlineUrl: string;
 }
@@ -184,7 +191,10 @@ export interface Field {
   id: string;
   label: string;
   type: FieldType;
+  /** Stored values of a select / multiselect field… */
   options?: string[];
+  /** …and how they read in the current language (built-in types). */
+  optionLabels?: string[];
   hint?: string;
 }
 

@@ -6,6 +6,7 @@
   import { PALETTE } from "../lib/constants";
   import type { Member, SpaceDetail } from "../lib/types";
   import Modal from "./Modal.svelte";
+  import { t } from "../lib/i18n.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import UserSelect from "./UserSelect.svelte";
   import Avatar from "./Avatar.svelte";
@@ -43,14 +44,14 @@
     return wrap(async () => {
       if (team) {
         await api.patch(`/spaces/${team.id}`, { name, description, color });
-        app.toast("Équipe mise à jour");
+        app.toast(t("Team updated"));
       } else {
         const { id } = await api.post<{ id: string }>("/spaces", {
           name, description, color,
           members: members.map((m) => ({ userId: m.id, role: m.role })),
         });
         navigate(`/spaces/${id}`);
-        app.toast("Équipe créée");
+        app.toast(t("Team created"));
       }
       app.refresh();
       onclose();
@@ -83,7 +84,7 @@
 
   const removeTeam = () =>
     wrap(async () => {
-      if (!team || !confirm(`Supprimer définitivement l'équipe « ${team.name} » ?`)) return;
+      if (!team || !confirm(t("Delete the team “{name}” for good?", { name: team.name }))) return;
       await api.del(`/spaces/${team.id}`);
       app.refresh();
       onclose();
@@ -91,19 +92,19 @@
     });
 </script>
 
-<Modal title={team ? `Paramètres de ${team.name}` : "Nouvelle équipe"} {onclose}>
+<Modal title={team ? t("Settings of {name}", { name: team.name }) : t("New team")} {onclose}>
   <form onsubmit={submit}>
     <div class="field">
-      <label for="tm-name">Nom</label>
+      <label for="tm-name">{t("Name")}</label>
       <!-- svelte-ignore a11y_autofocus -->
       <input id="tm-name" class="input" bind:value={name} required maxlength="120" autofocus={!team} />
     </div>
     <div class="field">
-      <span class="label-text">Description</span>
+      <span class="label-text">{t("Description")}</span>
       <MarkdownEditor bind:value={description} rows={3} />
     </div>
     <div class="field">
-      <span class="label-text">Couleur</span>
+      <span class="label-text">{t("Colour")}</span>
       <div class="swatches">
         {#each PALETTE as c (c)}
           <button type="button" class="swatch" class:selected={color === c} style="background:{c}" aria-label={c} onclick={() => (color = c)}></button>
@@ -112,11 +113,11 @@
     </div>
 
     <div class="field">
-      <span class="label-text">Membres et gouvernance</span>
-      <p class="hint" style="margin-top:0">Les administrateurs·rices gèrent les membres et les paramètres : partagez la gouvernance en promouvant d'autres membres.</p>
+      <span class="label-text">{t("Members and governance")}</span>
+      <p class="hint" style="margin-top:0">{t("Admins manage members and settings: share the governance by promoting other members.")}</p>
       <div class="list">
         {#if !team}
-          <div class="list-item static"><Avatar user={app.me?.user} /><span class="title">{app.me?.user.name} (vous)</span><span class="badge">Admin</span></div>
+          <div class="list-item static"><Avatar user={app.me?.user} /><span class="title">{t("{name} (you)", { name: app.me?.user.name ?? "" })}</span><span class="badge">{t("Admin")}</span></div>
         {/if}
         {#each members as m (m.id)}
           <div class="list-item static">
@@ -124,31 +125,31 @@
             <span class="title">{m.name}{m.id === meId ? " (vous)" : ""}</span>
             <select class="input role" value={m.role} disabled={busy}
               onchange={(e) => setRole(m, (e.currentTarget as HTMLSelectElement).value as "admin" | "member")}>
-              <option value="member">Membre</option>
-              <option value="admin">Admin</option>
+              <option value="member">{t("Member")}</option>
+              <option value="admin">{t("Admin")}</option>
             </select>
-            <button type="button" class="btn ghost icon small" title="Retirer" disabled={busy} onclick={() => removeMember(m)}>
+            <button type="button" class="btn ghost icon small" title={t("Remove")} disabled={busy} onclick={() => removeMember(m)}>
               <Icon name="close" size={16} />
             </button>
           </div>
         {/each}
       </div>
       <div class="row add">
-        <UserSelect bind:value={newMemberId} placeholder="Ajouter une personne…" exclude={[meId, ...members.map((m) => m.id)]} />
+        <UserSelect bind:value={newMemberId} placeholder={t("Add a person…")} exclude={[meId, ...members.map((m) => m.id)]} />
         <select class="input role" bind:value={newMemberRole}>
-          <option value="member">Membre</option>
-          <option value="admin">Admin</option>
+          <option value="member">{t("Member")}</option>
+          <option value="admin">{t("Admin")}</option>
         </select>
-        <button type="button" class="btn neutral" disabled={!newMemberId || busy} onclick={addMember}>Ajouter</button>
+        <button type="button" class="btn neutral" disabled={!newMemberId || busy} onclick={addMember}>{t("Add")}</button>
       </div>
     </div>
 
     {#if error}<div class="error-text">{error}</div>{/if}
     <div class="modal-actions">
-      {#if team}<button type="button" class="btn ghost" onclick={removeTeam}><Icon name="trash" size={16} />Supprimer</button>{/if}
+      {#if team}<button type="button" class="btn ghost" onclick={removeTeam}><Icon name="trash" size={16} />{t("Delete")}</button>{/if}
       <span class="spacer"></span>
-      <button type="button" class="btn neutral" onclick={onclose}>{team ? "Fermer" : "Annuler"}</button>
-      <button class="btn" disabled={busy || !name.trim()}>{team ? "Enregistrer" : "Créer l'équipe"}</button>
+      <button type="button" class="btn neutral" onclick={onclose}>{team ? t("Close") : t("Cancel")}</button>
+      <button class="btn" disabled={busy || !name.trim()}>{team ? t("Save") : t("Create the team")}</button>
     </div>
   </form>
 </Modal>

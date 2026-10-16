@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from "../lib/i18n.svelte";
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
   import { navigate, router, setParams } from "../lib/router.svelte";
@@ -40,7 +41,7 @@
   const archivedPipes = $derived(space?.pipes.filter((p) => p.archived) ?? []);
 
   async function leave() {
-    if (!space || !confirm(`Quitter l'équipe « ${space.name} » ?`)) return;
+    if (!space || !confirm(t("Leave the team “{name}”?", { name: space.name }))) return;
     try {
       await api.del(`/spaces/${space.id}/members/${meId}`);
       app.refresh();
@@ -61,29 +62,29 @@
       <SpaceIcon {space} size={44} />
       <div class="grow">
         <h1>
-          {isMine ? "Mon espace" : space.name}
-          <span class="badge">{space.kind === "team" ? "Équipe" : "Personnel"}</span>
+          {isMine ? t("My space") : space.name}
+          <span class="badge">{space.kind === "team" ? t("Team") : t("Personal space")}</span>
         </h1>
         {#if space.kind === "team"}
           <div class="row subtitle">
             <div class="avatar-stack">{#each space.members.slice(0, 8) as m (m.id)}<Avatar user={m} size={22} />{/each}</div>
-            <span>{space.members.length} membre{space.members.length > 1 ? "s" : ""} · admin : {space.members.filter((m) => m.role === "admin").map((m) => m.name).join(", ")}</span>
+            <span>{tn(space.members.length, "{n} member", "{n} members")} · {t("admins: {names}", { names: space.members.filter((m) => m.role === "admin").map((m) => m.name).join(", ") })}</span>
           </div>
         {:else if !isMember}
-          <div class="subtitle">Vous voyez les pipes « open » de {space.name}. Vous pouvez y ajouter des tâches ou lui en envoyer.</div>
+          <div class="subtitle">{t("You see the open pipes of {name}. You can add tasks to them or send tasks to {name}.", { name: space.name })}</div>
         {/if}
       </div>
       <div class="row wrap actions">
         {#if !isMine}
-          <button class="btn neutral" onclick={() => (showNewTask = true)}><Icon name="send" size={18} />Envoyer une tâche</button>
+          <button class="btn neutral" onclick={() => (showNewTask = true)}><Icon name="send" size={18} />{t("Send a task")}</button>
         {/if}
         {#if isMember}
-          <button class="btn" onclick={() => setParams({ newPipe: "1" })}><Icon name="plus" size={18} />Nouveau pipe</button>
+          <button class="btn" onclick={() => setParams({ newPipe: "1" })}><Icon name="plus" size={18} />{t("New pipe")}</button>
         {/if}
         {#if isAdminOfTeam}
-          <button class="btn neutral icon" title="Paramètres et membres" onclick={() => (showSettings = true)}><Icon name="settings" /></button>
+          <button class="btn neutral icon" title={t("Settings and members")} onclick={() => (showSettings = true)}><Icon name="settings" /></button>
         {:else if space.kind === "team" && isMember}
-          <button class="btn ghost" onclick={leave}>Quitter</button>
+          <button class="btn ghost" onclick={leave}>{t("Leave")}</button>
         {/if}
       </div>
     </div>
@@ -101,7 +102,7 @@
         </button>
       </div>
     {:else}
-      <div class="section-title" style="margin-top:24px"><Icon name="globe" />Pipes open</div>
+      <div class="section-title" style="margin-top:24px"><Icon name="globe" />{t("Open pipes")}</div>
     {/if}
 
     {#if tab === "pipes"}
@@ -114,60 +115,60 @@
               <h3>{p.name}</h3>
               <span class="spacer"></span>
               {#if p.archived}
-                <span class="badge"><Icon name="archive" size={12} />Archivé</span>
+                <span class="badge"><Icon name="archive" size={12} />{t("Archived")}</span>
               {:else if p.visibility === "open"}
-                <span class="badge open"><Icon name="globe" size={12} />Open</span>
+                <span class="badge open"><Icon name="globe" size={12} />{t("Open")}</span>
               {:else}
-                <span class="badge">{#if space.kind === "team"}<Icon name="users" size={12} />Équipe{:else}<Icon name="lock" size={12} />Perso{/if}</span>
+                <span class="badge">{#if space.kind === "team"}<Icon name="users" size={12} />{t("Team")}{:else}<Icon name="lock" size={12} />{t("Personal")}{/if}</span>
               {/if}
             </div>
             {#if app.pipeType(p.kind)}<div class="muted small kind">{app.pipeType(p.kind)?.label}</div>{/if}
-            <div class="desc">{p.description || "Pas de description"}</div>
+            <div class="desc">{p.description || t("No description")}</div>
             <div class="progress">
               {#each STATUSES as s (s.id)}
                 {#if p.counts[s.id]}
-                  <span title={`${s.label} : ${p.counts[s.id]}`} style="width:{((p.counts[s.id] ?? 0) / n) * 100}%;background:{s.color}"></span>
+                  <span title={`${t(s.label)}: ${p.counts[s.id]}`} style="width:{((p.counts[s.id] ?? 0) / n) * 100}%;background:{s.color}"></span>
                 {/if}
               {/each}
             </div>
-            <div class="muted small" style="margin-top:6px">{n} tâche{n > 1 ? "s" : ""} · {p.counts.done ?? 0} terminée{(p.counts.done ?? 0) > 1 ? "s" : ""}</div>
+            <div class="muted small" style="margin-top:6px">{tn(n, "{n} task", "{n} tasks")} · {t("done: {n}", { n: p.counts.done ?? 0 })}</div>
           </a>
         {:else}
           <div class="empty">
-            {#if isMember}Aucun pipe pour l'instant. Créez-en un pour organiser vos tâches.{:else}Aucun pipe open dans cet espace.{/if}
+            {#if isMember}{t("No pipe yet. Create one to organise your tasks.")}{:else}{t("No open pipe in this space.")}{/if}
           </div>
         {/each}
       </div>
       {#if archivedPipes.length}
         <button class="btn ghost small show-archived" onclick={() => (showArchived = !showArchived)}>
           <Icon name="archive" size={16} />
-          {showArchived ? "Masquer les pipes archivés" : `Voir les pipes archivés (${archivedPipes.length})`}
+          {showArchived ? t("Hide archived pipes") : t("Show archived pipes ({n})", { n: archivedPipes.length })}
         </button>
       {/if}
     {:else}
       <div class="list incoming-list">
-        {#each space.incoming ?? [] as t (t.id)}
+        {#each space.incoming ?? [] as item (item.id)}
           <div class="card incoming-item">
-            {#if t.sender}<Avatar user={t.sender} size={32} />{/if}
+            {#if item.sender}<Avatar user={item.sender} size={32} />{/if}
             <div class="body">
-              <button class="link-title" onclick={() => app.openTask(t.id)}>{t.title}</button>
+              <button class="link-title" onclick={() => app.openTask(item.id)}>{item.title}</button>
               <div class="muted small">
-                {#if t.sender}{t.sender.id === meId ? "Créée par vous" : `Envoyée par ${t.sender.name}`}{/if}
-                · {relativeTime(t.updatedAt)}
-                {#if t.dueDate} · échéance {formatDate(t.dueDate)}{/if}
-                {#if t.commentCount} · {t.commentCount} commentaire{t.commentCount > 1 ? "s" : ""}{/if}
+                {#if item.sender}{item.sender.id === meId ? t("Created by you") : t("Sent by {name}", { name: item.sender.name })}{/if}
+                · {relativeTime(item.updatedAt)}
+                {#if item.dueDate} · {t("due {date}", { date: formatDate(item.dueDate) })}{/if}
+                {#if item.commentCount} · {tn(item.commentCount, "{n} comment", "{n} comments")}{/if}
               </div>
-              {#if t.description}<div class="excerpt"><Markdown source={t.description} compact /></div>{/if}
+              {#if item.description}<div class="excerpt"><Markdown source={item.description} compact /></div>{/if}
             </div>
             <div class="row actions">
-              <button class="btn small" onclick={() => (accepting = t)}><Icon name="check" size={16} />Accepter</button>
-              {#if t.sender && t.sender.id !== meId}
-                <button class="btn small neutral" onclick={() => (refusing = t)}><Icon name="return" size={16} />Refuser</button>
+              <button class="btn small" onclick={() => (accepting = item)}><Icon name="check" size={16} />{t("Accept")}</button>
+              {#if item.sender && item.sender.id !== meId}
+                <button class="btn small neutral" onclick={() => (refusing = item)}><Icon name="return" size={16} />{t("Refuse")}</button>
               {/if}
             </div>
           </div>
         {:else}
-          <div class="empty">L'incoming est vide. Les tâches envoyées par d'autres arriveront ici.</div>
+          <div class="empty">{t("The incoming is empty. Tasks sent by others will arrive here.")}</div>
         {/each}
       </div>
     {/if}

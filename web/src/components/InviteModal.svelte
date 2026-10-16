@@ -3,6 +3,7 @@
   import { app } from "../lib/app.svelte";
   import Modal from "./Modal.svelte";
   import Icon from "./Icon.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   let { onclose, ondone }: { onclose: () => void; ondone?: () => void } = $props();
 
@@ -25,7 +26,7 @@
       app.refresh();
       ondone?.();
       if (r.sent) {
-        app.toast(r.created ? `Invitation envoyée à ${email}` : `${email} a déjà un compte : un lien de connexion lui a été envoyé`);
+        app.toast(r.created ? t("Invitation sent to {email}", { email }) : t("{email} already has an account: a sign-in link was sent to them", { email }));
         onclose();
       } else {
         link = r.link ?? null;
@@ -40,52 +41,51 @@
   async function copy() {
     try {
       await navigator.clipboard.writeText(link!);
-      app.toast("Lien copié");
+      app.toast(t("Link copied"));
     } catch {
-      app.toast("Copie impossible : sélectionnez le lien", "error");
+      app.toast(t("Could not copy: select the link"), "error");
     }
   }
 </script>
 
-<Modal title="Inviter par e-mail" {onclose}>
+<Modal title={t("Invite by e-mail")} {onclose}>
   {#if link}
     <div class="callout warning">
       <Icon name="mail" />
-      <span>L'envoi d'e-mails n'est pas configuré. Transmettez vous-même ce lien à <strong>{email}</strong> : il le ou la connecte directement, une seule fois, pendant 7 jours.</span>
+      <span>{t("E-mail sending is not set up. Pass this link on to {email} yourself: it signs them in directly, once, for 7 days.", { email })}</span>
     </div>
     <input class="input" readonly value={link} onfocus={(e) => (e.currentTarget as HTMLInputElement).select()} />
     <div class="modal-actions">
-      <button class="btn neutral" onclick={copy}>Copier le lien</button>
-      <button class="btn" onclick={onclose}>Terminé</button>
+      <button class="btn neutral" onclick={copy}>{t("Copy the link")}</button>
+      <button class="btn" onclick={onclose}>{t("Done")}</button>
     </div>
   {:else}
     <form onsubmit={submit}>
       <p class="muted small intro">
-        La personne reçoit un lien pour se connecter, sans compte Outline. Elle ne voit que vous (et les personnes qu'elle invite) ;
-        les autres comptes ne la voient pas, sauf dans les équipes où vous l'ajoutez.
+        {t("The person gets a link to sign in, without an Outline account. They only see you (and the people they invite); other accounts do not see them, except in the teams you add them to.")}
       </p>
       <div class="field">
-        <label for="inv-email">Adresse e-mail</label>
+        <label for="inv-email">{t("E-mail address")}</label>
         <!-- svelte-ignore a11y_autofocus -->
         <input id="inv-email" class="input" type="email" bind:value={email} required autofocus />
       </div>
       <div class="field">
-        <label for="inv-name">Nom (facultatif)</label>
-        <input id="inv-name" class="input" bind:value={name} maxlength="120" placeholder="Prénom Nom" />
+        <label for="inv-name">{t("Name (optional)")}</label>
+        <input id="inv-name" class="input" bind:value={name} maxlength="120" placeholder={t("First name Last name")} />
       </div>
       {#if adminTeams.length}
         <div class="field">
-          <label for="inv-team">Ajouter à une équipe (facultatif)</label>
+          <label for="inv-team">{t("Add to a team (optional)")}</label>
           <select id="inv-team" class="input" bind:value={teamId}>
-            <option value="">Aucune</option>
+            <option value="">{t("None")}</option>
             {#each adminTeams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
           </select>
         </div>
       {/if}
       {#if error}<div class="error-text">{error}</div>{/if}
       <div class="modal-actions">
-        <button type="button" class="btn neutral" onclick={onclose}>Annuler</button>
-        <button class="btn" disabled={busy || !email.trim()}>Inviter</button>
+        <button type="button" class="btn neutral" onclick={onclose}>{t("Cancel")}</button>
+        <button class="btn" disabled={busy || !email.trim()}>{t("Invite")}</button>
       </div>
     </form>
   {/if}

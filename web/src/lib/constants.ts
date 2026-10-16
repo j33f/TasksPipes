@@ -1,31 +1,34 @@
 import type { Status } from "./types";
+import { intlLocale, t } from "./i18n.svelte";
 
+/** Generic statuses; their labels are English source text, shown with t(). */
 export const STATUSES: { id: Status; label: string; color: string }[] = [
   { id: "backlog", label: "Backlog", color: "#66778F" },
-  { id: "ready", label: "Prêt à démarrer", color: "#2BC2FF" },
-  { id: "started", label: "Démarré", color: "#9E5CF7" },
-  { id: "ongoing", label: "En cours", color: "#0366d6" },
-  { id: "blocked", label: "Bloqué", color: "#ed2651" },
-  { id: "done", label: "Terminé", color: "#3ad984" },
-  { id: "abandoned", label: "Abandonné", color: "#a2b2c3" },
+  { id: "ready", label: "Ready to start", color: "#2BC2FF" },
+  { id: "started", label: "Started", color: "#9E5CF7" },
+  { id: "ongoing", label: "In progress", color: "#0366d6" },
+  { id: "blocked", label: "Blocked", color: "#ed2651" },
+  { id: "done", label: "Done", color: "#3ad984" },
+  { id: "abandoned", label: "Dropped", color: "#a2b2c3" },
 ];
 
+/** Kinds of task fields; labels are English source text, shown with t(). */
 export const FIELD_TYPE_LABELS: Record<import("./types").FieldType, string> = {
-  text: "Texte court",
-  textarea: "Texte long",
-  number: "Nombre",
-  money: "Montant (€)",
+  text: "Short text",
+  textarea: "Long text",
+  number: "Number",
+  money: "Amount (€)",
   date: "Date",
-  url: "Lien",
+  url: "Link",
   email: "E-mail",
-  phone: "Téléphone",
-  select: "Liste de choix",
-  multiselect: "Choix multiples",
-  checkbox: "Case à cocher",
-  user: "Personne",
-  rncp: "Titre RNCP / RS",
-  docs: "Documents Outline",
-  files: "Fichiers",
+  phone: "Phone",
+  select: "Choice list",
+  multiselect: "Multiple choices",
+  checkbox: "Checkbox",
+  user: "Person",
+  rncp: "RNCP / RS qualification",
+  docs: "Outline documents",
+  files: "Files",
 };
 
 /** Moves an item of a list one step up (-1) or down (+1). */
@@ -66,24 +69,34 @@ export function initials(name = "?"): string {
   return ((parts[0]?.[0] || "?") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
-const dateFmt = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" });
-const dateFmtYear = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" });
-const dateTimeFmt = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+// Date formats of the current language (rebuilt when it changes).
+const formats = new Map<string, Intl.DateTimeFormat>();
+function fmt(kind: "day" | "year" | "time"): Intl.DateTimeFormat {
+  const key = `${intlLocale()}:${kind}`;
+  let f = formats.get(key);
+  if (!f) {
+    const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
+    if (kind !== "day") opts.year = "numeric";
+    if (kind === "time") Object.assign(opts, { hour: "2-digit", minute: "2-digit" });
+    formats.set(key, (f = new Intl.DateTimeFormat(intlLocale(), opts)));
+  }
+  return f;
+}
 
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
-  return d.getFullYear() === new Date().getFullYear() ? dateFmt.format(d) : dateFmtYear.format(d);
+  return fmt(d.getFullYear() === new Date().getFullYear() ? "day" : "year").format(d);
 }
 
-export const formatDateTime = (iso: string) => dateTimeFmt.format(new Date(iso));
+export const formatDateTime = (iso: string) => fmt("time").format(new Date(iso));
 
 export function relativeTime(iso: string): string {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (diff < 60) return "à l'instant";
-  if (diff < 3600) return `il y a ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return `il y a ${Math.floor(diff / 3600)} h`;
-  if (diff < 86400 * 7) return `il y a ${Math.floor(diff / 86400)} j`;
+  if (diff < 60) return t("just now");
+  if (diff < 3600) return t("{n} min ago", { n: Math.floor(diff / 60) });
+  if (diff < 86400) return t("{n} h ago", { n: Math.floor(diff / 3600) });
+  if (diff < 86400 * 7) return t("{n} d ago", { n: Math.floor(diff / 86400) });
   return formatDate(iso);
 }
 

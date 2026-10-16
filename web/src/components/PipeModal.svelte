@@ -9,6 +9,7 @@
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import Icon from "./Icon.svelte";
   import IconPicker from "./IconPicker.svelte";
+  import { t, tn } from "../lib/i18n.svelte";
 
   let { spaceId, pipe = null, onclose }: { spaceId: string; pipe?: Pipe | null; onclose: () => void } = $props();
 
@@ -45,7 +46,7 @@
       const body = { name, description, visibility, kind, color, icon, withTemplates: !pipe && withTemplates };
       if (pipe) {
         await api.patch(`/pipes/${pipe.id}`, body);
-        app.toast("Pipe mis à jour");
+        app.toast(t("Pipe updated"));
       } else {
         const { id } = await api.post<{ id: string }>(`/spaces/${spaceId}/pipes`, body);
         navigate(`/pipes/${id}`);
@@ -63,7 +64,7 @@
     if (!pipe) return;
     try {
       await api.patch(`/pipes/${pipe.id}`, { archived });
-      app.toast(archived ? "Pipe archivé" : "Pipe désarchivé");
+      app.toast(archived ? t("Pipe archived") : t("Pipe unarchived"));
       app.refresh();
       onclose();
     } catch (err) {
@@ -72,7 +73,7 @@
   }
 
   async function remove() {
-    if (!pipe || !confirm(`Supprimer le pipe « ${pipe.name} » ?`)) return;
+    if (!pipe || !confirm(t("Delete the pipe “{name}”?", { name: pipe.name }))) return;
     try {
       await api.del(`/pipes/${pipe.id}`);
       app.refresh();
@@ -84,21 +85,21 @@
   }
 </script>
 
-<Modal title={pipe ? "Modifier le pipe" : "Nouveau pipe"} {onclose}>
+<Modal title={pipe ? t("Edit the pipe") : t("New pipe")} {onclose}>
   <form onsubmit={submit}>
     <div class="field">
-      <label for="pm-kind">Type</label>
+      <label for="pm-kind">{t("Type")}</label>
       <select id="pm-kind" class="input" value={kind} onchange={(e) => chooseKind((e.currentTarget as HTMLSelectElement).value)}>
         {#each groups as g (g)}
           <optgroup label={g}>
-            {#each choosable.filter((t) => t.group === g) as t (t.id)}
-              <option value={t.id} disabled={t.teamOnly && !isTeam}>{t.label}{t.teamOnly && !isTeam ? " (espace d'équipe uniquement)" : ""}</option>
+            {#each choosable.filter((pt) => pt.group === g) as pt (pt.id)}
+              <option value={pt.id} disabled={pt.teamOnly && !isTeam}>{pt.label}{pt.teamOnly && !isTeam ? ` (${t("team space only")})` : ""}</option>
             {/each}
           </optgroup>
         {/each}
       </select>
       {#if !pipe}
-        <div class="hint">Aucun type ne convient ? <a href="/designer" onclick={onclose}>Concevez le vôtre dans Modèles</a>.</div>
+        <div class="hint">{t("No type fits?")} <a href="/designer" onclick={onclose}>{t("Design your own in Models")}</a>.</div>
       {/if}
       {#if type}
         <div class="hint">{type.description}</div>
@@ -107,58 +108,58 @@
             {#each type.columns as c (c.id)}<span class="col"><span class="status-dot" style="background:{c.color}"></span>{c.label}</span>{/each}
           </div>
           {#if type.taskTypes.length}
-            <div class="hint">Types de tâches : {type.taskTypes.map((id) => app.taskType(id)?.label ?? id).join(" · ")}</div>
+            <div class="hint">{t("Task types:")} {type.taskTypes.map((id) => app.taskType(id)?.label ?? id).join(" · ")}</div>
           {/if}
         </div>
         {#if pipe && kind !== pipe.kind}
-          <div class="hint warn">Les tâches seront rangées dans les colonnes du nouveau type selon leur état.</div>
+          <div class="hint warn">{t("Tasks will be put in the columns of the new type according to their state.")}</div>
         {/if}
       {/if}
       {#if !pipe && type?.templates.length}
         <label class="check">
           <input type="checkbox" bind:checked={withTemplates} />
-          Ajouter les {type.templates.length} tâches type au backlog
+          {tn(type.templates.length, "Add the {n} starter task to the first column", "Add the {n} starter tasks to the first column")}
         </label>
         {#if withTemplates}
-          <ul class="templates">{#each type.templates as t (t)}<li>{t}</li>{/each}</ul>
+          <ul class="templates">{#each type.templates as tpl (tpl)}<li>{tpl}</li>{/each}</ul>
         {/if}
       {/if}
     </div>
     <div class="field">
-      <label for="pm-name">Nom, icône et couleur</label>
+      <label for="pm-name">{t("Name, icon and colour")}</label>
       <div class="row name-row">
         <IconPicker {icon} {color} {kind} onchange={(next) => { icon = next.icon; color = next.color; }} />
         <!-- svelte-ignore a11y_autofocus -->
         <input id="pm-name" class="input" bind:value={name} required maxlength="120" autofocus
-          placeholder={type && type.id !== "general" ? `${type.label}${type.templates.length ? " – session …" : ""}` : ""} />
+          placeholder={type && type.id !== "general" ? `${type.label}${type.templates.length ? ` – ${t("session")} …` : ""}` : ""} />
       </div>
     </div>
     <div class="field">
-      <span class="label-text">Description</span>
+      <span class="label-text">{t("Description")}</span>
       <MarkdownEditor bind:value={description} rows={4} />
     </div>
     <div class="field">
-      <span class="label-text">Visibilité</span>
+      <span class="label-text">{t("Visibility")}</span>
       <div class="radio-cards">
         <button type="button" class="radio-card" class:selected={visibility === "private"} onclick={() => (visibility = "private")}>
           {#if isTeam}
-            <strong><Icon name="users" size={16} />Équipe</strong>
-            <span>Privé : visible uniquement par les membres de l'équipe.</span>
+            <strong><Icon name="users" size={16} />{t("Team")}</strong>
+            <span>{t("Private: only the team's members see it.")}</span>
           {:else}
-            <strong><Icon name="lock" size={16} />Perso</strong>
-            <span>Privé : visible uniquement par vous.</span>
+            <strong><Icon name="lock" size={16} />{t("Personal")}</strong>
+            <span>{t("Private: only you see it.")}</span>
           {/if}
         </button>
         <button type="button" class="radio-card" class:selected={visibility === "open"} disabled={type?.confidential}
           onclick={() => (visibility = "open")}>
-          <strong><Icon name="globe" size={16} />Open</strong>
-          <span>Public : tout le monde le voit et peut y ajouter des tâches.</span>
+          <strong><Icon name="globe" size={16} />{t("Open")}</strong>
+          <span>{t("Public: everyone sees it and can add tasks to it.")}</span>
         </button>
       </div>
       {#if type?.confidential}
         <div class="hint"><Icon name="lock" size={12} />
-          {#if type.teamOnly}Données sensibles : visible uniquement par les membres de l'équipe, et ses tâches ne peuvent pas en sortir.
-          {:else}Données personnelles sensibles : ce type de pipe reste privé.{/if}
+          {#if type.teamOnly}{t("Sensitive data: only the team's members see it, and its tasks cannot leave it.")}
+          {:else}{t("Sensitive personal data: this type of pipe stays private.")}{/if}
         </div>
       {/if}
     </div>
@@ -167,14 +168,14 @@
       {#if pipe && !pipe.isDefault}
         <button type="button" class="btn ghost" onclick={() => setArchived(!pipe.archived)}
           disabled={!pipe.archived && openTasks > 0}
-          title={!pipe.archived && openTasks > 0 ? `Encore ${openTasks} tâche(s) en cours : à terminer ou abandonner avant d'archiver` : ""}>
-          <Icon name="archive" size={16} />{pipe.archived ? "Désarchiver" : "Archiver"}
+          title={!pipe.archived && openTasks > 0 ? tn(openTasks, "Still {n} open task: finish or drop it before archiving", "Still {n} open tasks: finish or drop them before archiving") : ""}>
+          <Icon name="archive" size={16} />{pipe.archived ? t("Unarchive") : t("Archive")}
         </button>
-        <button type="button" class="btn ghost" onclick={remove}><Icon name="trash" size={16} />Supprimer</button>
+        <button type="button" class="btn ghost" onclick={remove}><Icon name="trash" size={16} />{t("Delete")}</button>
       {/if}
       <span class="spacer"></span>
-      <button type="button" class="btn neutral" onclick={onclose}>Annuler</button>
-      <button class="btn" disabled={busy || !name.trim()}>{pipe ? "Enregistrer" : "Créer"}</button>
+      <button type="button" class="btn neutral" onclick={onclose}>{t("Cancel")}</button>
+      <button class="btn" disabled={busy || !name.trim()}>{pipe ? t("Save") : t("Create")}</button>
     </div>
   </form>
 </Modal>

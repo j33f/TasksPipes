@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ChecklistItem } from "../lib/types";
   import Icon from "./Icon.svelte";
+  import { t } from "../lib/i18n.svelte";
 
   let { items, editable = true, onadd, ontoggle, onrename, ondelete, onmove }: {
     items: ChecklistItem[];
@@ -49,7 +50,7 @@
 
 <div class="checklist">
   {#if items.length}
-    <div class="progress" title={`${doneCount} sur ${items.length}`}>
+    <div class="progress" title={t("{done} of {total}", { done: doneCount, total: items.length })}>
       <div class="bar"><div class="fill" style:width={`${(doneCount / items.length) * 100}%`}></div></div>
       <span class="small muted">{doneCount}/{items.length}</span>
     </div>
@@ -74,14 +75,14 @@
               if (e.key === "Escape") editingId = null;
             }} />
         {:else}
-          <span class="text" role="button" tabindex={editable ? 0 : -1} title={item.doneBy ? `Cochée par ${item.doneBy}` : undefined}
+          <span class="text" role="button" tabindex={editable ? 0 : -1} title={item.doneBy ? t("Checked by {name}", { name: item.doneBy }) : undefined}
             ondblclick={() => editable && (editingId = item.id)}
             onkeydown={(e) => editable && e.key === "Enter" && (editingId = item.id)}>{item.text}</span>
         {/if}
         {#if editable}
           <span class="actions">
-            <button class="btn ghost icon small" title="Renommer" onclick={() => (editingId = item.id)}><Icon name="edit" size={14} /></button>
-            <button class="btn ghost icon small" title="Supprimer" onclick={() => ondelete(item)}><Icon name="trash" size={14} /></button>
+            <button class="btn ghost icon small" title={t("Rename")} onclick={() => (editingId = item.id)}><Icon name="edit" size={14} /></button>
+            <button class="btn ghost icon small" title={t("Delete")} onclick={() => ondelete(item)}><Icon name="trash" size={14} /></button>
           </span>
         {/if}
       </li>
@@ -97,7 +98,7 @@
     <!-- Not a form: the checklist may sit inside the new task form. -->
     <div class="add">
       <Icon name="plus" size={16} />
-      <input placeholder="Ajouter une sous-tâche… (Entrée)" bind:value={draft} maxlength="5000"
+      <input placeholder={t("Add a sub-task… (Enter)")} bind:value={draft} maxlength="5000"
         onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
         onpaste={(e) => {
           const text = e.clipboardData?.getData("text") ?? "";

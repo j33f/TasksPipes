@@ -7,6 +7,7 @@ import { ensureDefaultPipes, one, query, tx, type Queryable, type Row } from "./
 import { absoluteOutlineUrl, normalizeOutlineUrl, outlineApi, outlineToken, OutlineError, type OutlineUser } from "./outline.js";
 import { mailEnabled, sendLinkMail } from "./mail.js";
 import { verifyTotp } from "./totp.js";
+import { localeOf, tr, type Locale } from "./i18n.js";
 
 const SESSION_COOKIE = "tp_session";
 const STATE_COOKIE = "tp_oauth_state";
@@ -25,6 +26,9 @@ export interface SessionUser {
   kind: "outline" | "email";
   /** Second factor enabled (e-mail accounts). */
   totp: boolean;
+  /** Chosen language and theme; null follows the browser / the system. */
+  locale: "en" | "fr" | null;
+  theme: "light" | "dark" | null;
 }
 
 type OutlineCaller = <T = unknown>(method: string, body?: object) => Promise<{ data: T }>;
@@ -72,7 +76,7 @@ const cookieOptions = (maxAgeSeconds: number): CookieSerializeOptions => ({
 export async function upsertOutlineUser(
   db: Queryable,
   u: OutlineUser,
-  { login = false, instance = config.outlineUrl } = {}
+  { login = false, instance = config.outlineUrl, lang = config.defaultLocale as Locale } = {}
 ): Promise<string> {
   const { rows } = await db.query(
     `INSERT INTO users (id, name, email, avatar_url, last_login_at, outline_url, outline_id)
@@ -92,13 +96,13 @@ export async function upsertOutlineUser(
      instance, u.id, instance === config.outlineUrl]
   );
   // No row: the id belongs to another kind of account, which is never taken over.
-  if (!rows[0]) throw new OutlineError(403, "Compte incompatible");
-  await ensurePersonalSpace(db, rows[0].id);
+  if (!rows[0]) throw new OutlineError(403, "Incompatible account");
+  await ensurePersonalSpace(db, rows[0].id, lang);
   return rows[0].id;
 }
 
 /** Gives a user their personal space (with its default pipe) if they have none yet. */
-export async function ensurePersonalSpace(db: Queryable, userId: string) {
+export async function ensurePersonalSpace(db: Queryable, userId: string, lang: Locale = config.defaultLocale) {
   const { rows } = await db.query(
     `INSERT INTO spaces (kind, user_id, created_by) VALUES ('user', $1, $1)
      ON CONFLICT (user_id) DO NOTHING RETURNING id`,
@@ -109,7 +113,7 @@ export async function ensurePersonalSpace(db: Queryable, userId: string) {
       `INSERT INTO space_members (space_id, user_id, role) VALUES ($1, $2, 'admin') ON CONFLICT DO NOTHING`,
       [rows[0].id, userId]
     );
-    await ensureDefaultPipes(db, rows[0].id);
+    await ensureDefaultPipes(db, rows[0].id, lang);
   }
 }
 
@@ -171,11 +175,11 @@ async function establishSession(
   instance = config.outlineUrl
 ) {
   const { data } = await outlineApi<{ user: OutlineUser; team: { id: string } }>(tokens.accessToken, "auth.info", {}, instance);
-  if (!data?.user?.id) throw new OutlineError(502, "Réponse inattendue : est-ce bien un serveur Outline ?");
+  if (!data?.user?.id) throw new OutlineError(502, "Unexpected answer: is this really an Outline server?");
   if (instance === config.outlineUrl && config.outlineTeamId && data.team?.id !== config.outlineTeamId) {
-    throw new OutlineError(403, "Ce compte n'appartient pas à l'espace de travail Outline autorisé.");
+    throw new OutlineError(403, "This account does not belong to the allowed Outline workspace.");
   }
-  const userId = await tx((client) => upsertOutlineUser(client, data.user, { login: true, instance }));
+  const userId = await tx((client) => upsertOutlineUser(client, data.user, { login: true, instance, lang: localeOf(req) }));
   await createSession(reply, userId, tokens, instance);
   req.log.info({ userId, instance }, "User logged in");
 
@@ -199,7 +203,7 @@ async function refreshSessionToken(session: Row): Promise<string | null> {
   return t.access_token;
 }
 
-const NO_OUTLINE = "Outline n'est pas accessible aux comptes invités par e-mail.";
+const NO_OUTLINE = "Outline is not available to accounts invited by e-mail.";
 
 function outlineCallerFor(session: Row): OutlineCaller {
   return async (method, body) => {
@@ -221,7 +225,7 @@ function outlineCallerFor(session: Row): OutlineCaller {
 }
 
 const noOutline: OutlineCaller = async () => {
-  throw new OutlineError(401, "Non authentifié");
+  throw new OutlineError(401, "Not signed in");
 };
 
 async function auth(app: FastifyInstance) {
@@ -237,7 +241,7 @@ async function auth(app: FastifyInstance) {
     const token = req.cookies[SESSION_COOKIE];
     if (!token) return;
     const session = await one(
-      `SELECT s.*, u.name, u.email, u.avatar_url, u.auth_kind, u.totp_secret IS NOT NULL AS totp
+      `SELECT s.*, u.name, u.email, u.avatar_url, u.auth_kind, u.totp_secret IS NOT NULL AS totp, u.locale, u.theme
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.id = $1 AND s.expires_at > now()`,
       [hash(token)]
@@ -245,7 +249,7 @@ async function auth(app: FastifyInstance) {
     if (!session) return;
     req.user = {
       id: session.user_id, name: session.name, email: session.email, avatarUrl: session.avatar_url,
-      kind: session.auth_kind, totp: session.totp,
+      kind: session.auth_kind, totp: session.totp, locale: session.locale, theme: session.theme,
     };
     req.outline = outlineCallerFor(session);
     req.outlineUrl = session.outline_url ?? config.outlineUrl;
@@ -261,12 +265,13 @@ async function auth(app: FastifyInstance) {
   // ----- Accounts invited by e-mail: sign-in link, then TOTP if enabled -----
 
   app.post<{ Body: { email?: string } }>("/api/auth/email", async (req, reply) => {
+    const lang = localeOf(req);
     if (!mailEnabled) {
-      return reply.code(503).send({ error: "L'envoi d'e-mails n'est pas configuré : demandez un lien à la personne qui vous a invité·e." });
+      return reply.code(503).send({ error: tr(lang, "E-mail sending is not set up: ask the person who invited you for a link.") });
     }
     const email = String(req.body?.email || "").trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: "Adresse e-mail invalide" });
-    const user = await one(`SELECT id, name FROM users WHERE auth_kind = 'email' AND lower(email) = $1`, [email]);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: tr(lang, "Invalid e-mail address") });
+    const user = await one(`SELECT id, name, locale FROM users WHERE auth_kind = 'email' AND lower(email) = $1`, [email]);
     // Same answer whether the address is known or not; at most 5 links per hour.
     if (user) {
       const recent = await one(
@@ -275,11 +280,13 @@ async function auth(app: FastifyInstance) {
       );
       if (recent!.n < 5) {
         const link = await createLoginLink(user.id, LOGIN_LINK_MINUTES);
-        await sendLinkMail(email, "Votre lien de connexion à TasksPipes", [
-          `Bonjour ${user.name},`,
-          `Voici votre lien pour vous connecter à TasksPipes. Il est valable ${LOGIN_LINK_MINUTES} minutes et ne sert qu'une fois.`,
-          "Si vous n'avez pas demandé ce lien, ignorez simplement cet e-mail.",
-        ], { label: "Se connecter", url: link }).catch((err) => req.log.error({ err }, "Sign-in e-mail failed"));
+        // In the language the person chose, else the one of the page asking for the link.
+        const l: Locale = user.locale ?? lang;
+        await sendLinkMail(l, email, tr(l, "Your TasksPipes sign-in link"), [
+          tr(l, "Hello {name},", { name: user.name }),
+          tr(l, "Here is your link to sign in to TasksPipes. It is valid for {minutes} minutes and works only once.", { minutes: LOGIN_LINK_MINUTES }),
+          tr(l, "If you did not ask for this link, just ignore this e-mail."),
+        ], { label: tr(l, "Sign in"), url: link }).catch((err) => req.log.error({ err }, "Sign-in e-mail failed"));
       } else {
         req.log.warn({ userId: user.id }, "Too many sign-in links requested");
       }
@@ -295,9 +302,9 @@ async function auth(app: FastifyInstance) {
        WHERE id = $1 AND purpose = 'magic' AND used_at IS NULL AND expires_at > now() RETURNING user_id`,
       [hash(token)]
     );
-    if (!row) return reply.code(400).send({ error: "Ce lien n'est plus valable (déjà utilisé ou expiré). Demandez-en un nouveau." });
+    if (!row) return reply.code(400).send({ error: tr(localeOf(req), "This link is no longer valid (already used or expired). Ask for a new one.") });
     const user = await one(`SELECT id, totp_secret FROM users WHERE id = $1 AND auth_kind = 'email'`, [row.user_id]);
-    if (!user) return reply.code(400).send({ error: "Compte introuvable" });
+    if (!user) return reply.code(400).send({ error: tr(localeOf(req), "Account not found") });
     if (user.totp_secret) {
       const pending = crypto.randomBytes(32).toString("base64url");
       await query(`INSERT INTO login_tokens (id, user_id, purpose, expires_at) VALUES ($1, $2, 'totp', now() + interval '10 minutes')`, [
@@ -325,13 +332,13 @@ async function auth(app: FastifyInstance) {
       : null;
     if (!row) {
       reply.clearCookie(TOTP_COOKIE, { path: "/" });
-      return reply.code(400).send({ error: "Vérification expirée ou trop de tentatives : reconnectez-vous avec un nouveau lien." });
+      return reply.code(400).send({ error: tr(localeOf(req), "Verification expired or too many attempts: sign in again with a new link.") });
     }
     const user = await one(`SELECT id, totp_secret, totp_last_step FROM users WHERE id = $1`, [row.user_id]);
     const step = user?.totp_secret
       ? verifyTotp(decrypt(user.totp_secret)!, String(req.body?.code || ""), user.totp_last_step === null ? null : Number(user.totp_last_step))
       : null;
-    if (step === null) return reply.code(400).send({ error: "Code incorrect" });
+    if (step === null) return reply.code(400).send({ error: tr(localeOf(req), "Wrong code") });
     await query(`UPDATE login_tokens SET used_at = now() WHERE id = $1`, [hash(pending!)]);
     await query(`UPDATE users SET totp_last_step = $2, last_login_at = now() WHERE id = $1`, [user!.id, step]);
     reply.clearCookie(TOTP_COOKIE, { path: "/" });
@@ -340,8 +347,8 @@ async function auth(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/auth/outline", async (_req, reply) => {
-    if (!config.oauthEnabled) return reply.code(404).send("OAuth non configuré");
+  app.get("/auth/outline", async (req, reply) => {
+    if (!config.oauthEnabled) return reply.code(404).send(tr(localeOf(req), "OAuth is not set up"));
     const state = crypto.randomBytes(16).toString("hex");
     reply.setCookie(STATE_COOKIE, state, cookieOptions(600));
     const url = new URL(`${config.outlineUrl}/oauth/authorize`);
@@ -359,7 +366,7 @@ async function auth(app: FastifyInstance) {
       if (req.query.error) return fail(req.query.error_description || req.query.error);
       const expected = req.cookies[STATE_COOKIE];
       reply.clearCookie(STATE_COOKIE, { path: "/" });
-      if (!expected || expected !== req.query.state) return fail("État OAuth invalide, veuillez réessayer.");
+      if (!expected || expected !== req.query.state) return fail(tr(localeOf(req), "Invalid OAuth state, please try again."));
       const t = await outlineToken({
         grant_type: "authorization_code",
         code: req.query.code || "",
@@ -373,14 +380,14 @@ async function auth(app: FastifyInstance) {
       return reply.redirect("/");
     } catch (err) {
       req.log.error({ err }, "OAuth callback failed");
-      return fail((err as Error).message || "Connexion impossible");
+      return fail(err instanceof OutlineError ? tr(localeOf(req), err.message, err.params) : tr(localeOf(req), "Sign-in failed"));
     }
   });
 
   app.post<{ Body: { token?: string; outlineUrl?: string } }>("/api/auth/apikey", async (req, reply) => {
-    if (!config.allowApiKeyLogin) return reply.code(404).send({ error: "Connexion par clé API désactivée" });
+    if (!config.allowApiKeyLogin) return reply.code(404).send({ error: tr(localeOf(req), "API key sign-in is disabled") });
     const token = String(req.body?.token || "").trim();
-    if (!token) return reply.code(400).send({ error: "Clé API requise" });
+    if (!token) return reply.code(400).send({ error: tr(localeOf(req), "API key required") });
     try {
       // The Outline server chosen on the login page (the configured one by default).
       const instance = await normalizeOutlineUrl(req.body?.outlineUrl);
@@ -389,7 +396,11 @@ async function auth(app: FastifyInstance) {
     } catch (err) {
       const status = err instanceof OutlineError && err.status < 500 ? (err.status === 400 ? 400 : 401) : 502;
       req.log.warn({ err }, "API key login failed");
-      const message = status === 401 && (err as OutlineError).status === 401 ? "Clé API Outline invalide" : (err as Error).message;
+      const lang = localeOf(req);
+      const message =
+        status === 401 && (err as OutlineError).status === 401
+          ? tr(lang, "Invalid Outline API key")
+          : err instanceof OutlineError ? tr(lang, err.message, err.params) : (err as Error).message;
       return reply.code(status).send({ error: message });
     }
   });

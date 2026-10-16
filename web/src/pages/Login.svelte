@@ -4,6 +4,7 @@
   import { app } from "../lib/app.svelte";
   import { router } from "../lib/router.svelte";
   import Icon from "../components/Icon.svelte";
+  import { LOCALES, prefs, t, type Locale } from "../lib/i18n.svelte";
 
   let cfg = $state<{ oauth: boolean; apiKey: boolean; outlineUrl: string; mail: boolean } | null>(null);
   let email = $state("");
@@ -51,7 +52,7 @@
   function addServer(e: SubmitEvent) {
     e.preventDefault();
     const url = canonical(newServer);
-    if (!url) return (serverError = "Adresse invalide");
+    if (!url) return (serverError = t("Invalid address"));
     if (!servers.includes(url)) {
       added = [...added, url];
       store("tp:outlineServers", JSON.stringify(added));
@@ -108,14 +109,14 @@
 <div class="login">
   <div class="login-box">
     <svg width="40" height="40" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><rect x="7" y="8" width="5" height="16" rx="2" fill="var(--background)"/><rect x="14" y="8" width="5" height="11" rx="2" fill="var(--background)" opacity=".75"/><rect x="21" y="8" width="5" height="7" rx="2" fill="var(--background)" opacity=".5"/></svg>
-    <h1>Connexion à TasksPipes</h1>
-    <p class="muted">Utilisez votre compte Outline, ou votre adresse e-mail si vous avez été invité·e.</p>
+    <h1>{t("Sign in to TasksPipes")}</h1>
+    <p class="muted">{t("Use your Outline account, or your e-mail address if you were invited.")}</p>
 
     {#if error}<div class="callout danger">{error}</div>{/if}
 
     {#if cfg}
       <div class="field">
-        <label for="server">Serveur Outline</label>
+        <label for="server">{t("Outline server")}</label>
         <div class="row">
           <select id="server" class="input" value={server}
             onchange={(e) => {
@@ -123,10 +124,10 @@
               if (v === "+") { adding = true; (e.currentTarget as HTMLSelectElement).value = server; } else select(v);
             }}>
             {#each servers as url (url)}<option value={url}>{hostOf(url)}</option>{/each}
-            <option value="+">Ajouter un serveur…</option>
+            <option value="+">{t("Add a server…")}</option>
           </select>
           {#if !isDefaultServer}
-            <button type="button" class="btn ghost icon" title="Retirer ce serveur de la liste" onclick={() => removeServer(server)}>
+            <button type="button" class="btn ghost icon" title={t("Remove this server from the list")} onclick={() => removeServer(server)}>
               <Icon name="close" size={18} />
             </button>
           {/if}
@@ -134,9 +135,9 @@
         {#if adding}
           <form class="row add-server" onsubmit={addServer}>
             <!-- svelte-ignore a11y_autofocus -->
-            <input class="input" placeholder="https://outline.exemple.fr" bind:value={newServer} autofocus aria-label="Adresse du serveur" />
-            <button class="btn neutral" disabled={!newServer.trim()}>Ajouter</button>
-            <button type="button" class="btn ghost" onclick={() => { adding = false; serverError = ""; }}>Annuler</button>
+            <input class="input" placeholder="https://outline.example.com" bind:value={newServer} autofocus aria-label={t("Server address")} />
+            <button class="btn neutral" disabled={!newServer.trim()}>{t("Add")}</button>
+            <button type="button" class="btn ghost" onclick={() => { adding = false; serverError = ""; }}>{t("Cancel")}</button>
           </form>
           {#if serverError}<div class="error-text">{serverError}</div>{/if}
         {/if}
@@ -144,42 +145,49 @@
     {/if}
 
     {#if cfg?.oauth && isDefaultServer}
-      <a class="btn full" href="/auth/outline">Continuer avec Outline</a>
+      <a class="btn full" href="/auth/outline">{t("Continue with Outline")}</a>
     {/if}
 
-    {#if cfg?.oauth && isDefaultServer && cfg?.apiKey}<div class="divider-text">ou</div>{/if}
+    {#if cfg?.oauth && isDefaultServer && cfg?.apiKey}<div class="divider-text">{t("or")}</div>{/if}
 
     {#if cfg?.apiKey}
       <form onsubmit={submit}>
         <div class="field">
-          <label for="token">Clé API Outline</label>
+          <label for="token">{t("Outline API key")}</label>
           <input id="token" class="input" type="password" autocomplete="off" placeholder="ol_api_…" bind:value={token} required />
           <div class="hint">
-            À créer dans <a href={`${server}/settings/api-and-apps`} target="_blank" rel="noreferrer">{hostOf(server)} › Paramètres › API</a>.
+            {t("Create one in")} <a href={`${server}/settings/api-and-apps`} target="_blank" rel="noreferrer">{hostOf(server)} › {t("Settings › API")}</a>.
           </div>
         </div>
-        <button class="btn full" class:neutral={cfg.oauth && isDefaultServer} disabled={busy || !token.trim()}>Se connecter avec une clé API</button>
+        <button class="btn full" class:neutral={cfg.oauth && isDefaultServer} disabled={busy || !token.trim()}>{t("Sign in with an API key")}</button>
       </form>
     {/if}
 
     {#if cfg}
-      <div class="divider-text">invité·e par e-mail ?</div>
+      <div class="divider-text">{t("invited by e-mail?")}</div>
       {#if emailSent}
         <div class="callout info">
-          Si un compte invité correspond à <strong>{email}</strong>, un lien de connexion vient de lui être envoyé.
-          Il est valable 20 minutes.
+          {t("If an invited account matches {email}, a sign-in link was just sent to it. It is valid for 20 minutes.", { email })}
         </div>
-        <button class="btn ghost full" onclick={() => (emailSent = false)}>Utiliser une autre adresse</button>
+        <button class="btn ghost full" onclick={() => (emailSent = false)}>{t("Use another address")}</button>
       {:else}
         <form onsubmit={askLink}>
           <div class="field">
-            <label for="email">Adresse e-mail</label>
+            <label for="email">{t("E-mail address")}</label>
             <input id="email" class="input" type="email" autocomplete="email" bind:value={email} required />
           </div>
-          <button class="btn full neutral" disabled={busy || !email.trim()}>Recevoir un lien de connexion</button>
+          <button class="btn full neutral" disabled={busy || !email.trim()}>{t("Get a sign-in link")}</button>
         </form>
       {/if}
     {/if}
+
+    <div class="lang">
+      <select class="input" aria-label={t("Language")} value={prefs.locale ?? ""}
+        onchange={(e) => prefs.set({ locale: ((e.currentTarget as HTMLSelectElement).value || null) as Locale | null })}>
+        <option value="">{t("Language of the browser")}</option>
+        {#each LOCALES as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+      </select>
+    </div>
   </div>
 </div>
 
@@ -190,6 +198,8 @@
   .add-server { margin-top: 8px; }
   .add-server .input { flex: 1; min-width: 0; }
   .full { width: 100%; height: 40px; font-size: 15px; }
+  .lang { margin-top: 28px; display: flex; justify-content: center; }
+  .lang .input { width: auto; min-height: 30px; font-size: 13px; padding: 2px 8px; }
   .divider-text { display: flex; align-items: center; gap: 12px; color: var(--text-tertiary); font-size: 13px; margin: 20px 0; }
   .divider-text::before, .divider-text::after { content: ""; flex: 1; border-top: 1px solid var(--divider); }
 </style>
