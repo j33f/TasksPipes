@@ -28,7 +28,7 @@
   const openTasks = $derived(pipe ? openTaskCount(pipe.counts) : 0);
   // A private pipe belongs to its space: personal in a personal space, the team's in a team space.
   const isTeam = $derived(app.spaces.find((s) => s.id === spaceId)?.kind === "team");
-  const choosable = $derived(app.pipeTypes.filter((t) => app.usable(t) || t.id === initial?.kind));
+  const choosable = $derived(app.pipeTypes.filter((pt) => app.offered(pt) || pt.id === initial?.kind));
   const groups = $derived([...new Set(choosable.map((t) => t.group))]);
 
   function chooseKind(id: string) {

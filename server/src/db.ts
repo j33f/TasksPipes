@@ -235,6 +235,8 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS outline_url text;
 
 -- Display preferences of the account (NULL: follow the browser / the system).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS locale text CHECK (locale IN ('en', 'fr'));
+-- Pipe types someone turned off (no longer offered to them; their task types follow when no other type offers them).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_pipe_types text[] NOT NULL DEFAULT '{}';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS theme text CHECK (theme IN ('light', 'dark'));
 
 -- Calendar subscription link: hash of the token (lookup) and the token encrypted (shown again to its owner).

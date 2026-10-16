@@ -31,6 +31,19 @@
   const taskGroups = $derived([...new Set(taskTypes.map((ty) => app.taskTypeGroup(ty)))]);
   const offeredIn = (id: string) => app.pipeTypes.filter((p) => p.taskTypes.includes(id)).map((p) => p.label);
 
+  let busy = $state(false);
+  async function toggle(ty: PipeType) {
+    busy = true;
+    try {
+      await app.setPipeTypeDisabled(ty.id, !ty.disabled);
+      app.toast(ty.disabled ? t("“{name}” is offered again", { name: ty.label }) : t("“{name}” turned off, with the task types only it offered", { name: ty.label }));
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    } finally {
+      busy = false;
+    }
+  }
+
   async function remove(kind: "pipe-types" | "task-types", ty: PipeType | TaskType) {
     if (!confirm(t("Delete the type “{name}”?", { name: ty.label }))) return;
     try {
@@ -45,6 +58,7 @@
 </script>
 
 {#snippet owner(ty: PipeType | TaskType)}
+  {#if ty.disabled}<span class="badge" title={t("Not offered to you any more")}>{t("Turned off")}</span>{/if}
   {#if ty.custom}
     {#if ty.visibility === "private"}<span class="badge" title={t("Only you see it")}><Icon name="lock" size={12} />{t("Private")}</span>{/if}
     <span class="badge">{mine(ty) ? (ty.visibility === "private" ? t("My model") : t("My model · public")) : t("by {name}", { name: ty.createdBy?.name ?? "?" })}</span>
@@ -79,7 +93,7 @@
         <div class="section-title">{g}</div>
         <div class="grid">
           {#each pipeTypes.filter((ty) => ty.group === g) as ty (ty.id)}
-            <div class="card type-card">
+            <div class="card type-card" class:off={ty.disabled}>
               <div class="row head">
                 <PipeIcon pipe={{ icon: ty.icon, kind: ty.id, color: ty.color }} size={22} />
                 <strong class="grow">{ty.label}</strong>
@@ -96,6 +110,11 @@
               </div>
               <div class="row actions">
                 <button class="btn ghost small" onclick={() => (pipeEditor = { base: ty })}>{t("Duplicate")}</button>
+                {#if ty.id !== "general"}
+                  <button class="btn ghost small" disabled={busy}
+                    title={ty.disabled ? t("Offer this type again when creating a pipe") : t("Stop offering this type when creating a pipe; existing pipes keep working")}
+                    onclick={() => toggle(ty)}>{ty.disabled ? t("Turn on") : t("Turn off")}</button>
+                {/if}
                 {#if mine(ty)}
                   <button class="btn ghost small" onclick={() => (pipeEditor = { editing: ty })}><Icon name="edit" size={14} />{t("Edit")}</button>
                   <button class="btn ghost small" disabled={Boolean(usage.pipeTypes[ty.id])}
@@ -114,7 +133,7 @@
       <div class="section-title">{g}</div>
       <div class="grid">
         {#each taskTypes.filter((ty) => app.taskTypeGroup(ty) === g) as ty (ty.id)}
-          <div class="card type-card">
+          <div class="card type-card" class:off={ty.disabled}>
             <div class="row head">
               <Icon name={iconOf(ty.icon)} />
               <strong class="grow">{ty.label}</strong>
@@ -146,7 +165,8 @@
     </div>
     {/each}
     <div class="section">
-      <div class="hint">{t("A task type is used in the pipes whose type offers it: add it to a pipe type.")}</div>
+      <div class="hint">{t("A task type is used in the pipes whose type offers it: add it to a pipe type.")}
+        {t("Task types offered only by pipe types you turned off are turned off too.")}</div>
     </div>
   {/if}
 </div>
@@ -167,6 +187,8 @@
   .tabs button.active { color: var(--text); border-bottom-color: var(--text); }
   .section { margin-top: 24px; }
   .type-card { display: flex; flex-direction: column; gap: 8px; }
+  .type-card.off { opacity: 0.6; }
+  .type-card.off:hover { opacity: 1; }
   .head strong { font-size: 15px; }
   .grow { flex: 1; min-width: 0; }
   .desc { line-height: 1.4; }

@@ -62,6 +62,18 @@ class AppState {
     return !t.custom || t.visibility !== "private" || t.createdBy?.id === this.me?.user.id;
   }
 
+  /** Whether a type is offered to me in pickers: usable and not turned off. */
+  offered(t: { custom?: true; visibility?: string; createdBy?: { id: string } | null; disabled?: boolean }): boolean {
+    return this.usable(t) && !t.disabled;
+  }
+
+  /** Turns a pipe type off or on for me (its task types follow), then reloads the catalog. */
+  async setPipeTypeDisabled(id: string, disabled: boolean) {
+    const off = this.pipeTypes.filter((p) => p.disabled && p.id !== id).map((p) => p.id);
+    await api.put("/me/disabled-pipe-types", { pipeTypes: disabled ? [...off, id] : off });
+    await this.loadCatalog();
+  }
+
   /** Category of a task type: its own, or that of the first built-in pipe type offering it. */
   taskTypeGroup(t: TaskType): string {
     return t.group ?? this.pipeTypes.find((p) => !p.custom && p.taskTypes.includes(t.id))?.group ?? this.pipeType("general")?.group ?? "General";

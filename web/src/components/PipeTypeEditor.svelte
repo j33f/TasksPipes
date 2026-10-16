@@ -47,10 +47,10 @@
   let busy = $state(false);
   let error = $state("");
 
-  const choosable = $derived(app.pipeTypes.filter((pt) => app.usable(pt)));
+  const choosable = $derived(app.pipeTypes.filter((pt) => app.offered(pt)));
   const groups = $derived([...new Set(choosable.map((pt) => pt.group))]);
   // Others' private task types stay listed only if this type already offers them.
-  const offered = $derived(app.taskTypes.filter((tt) => tt.id !== "task" && (app.usable(tt) || draft.taskTypes.includes(tt.id))));
+  const offered = $derived(app.taskTypes.filter((tt) => tt.id !== "task" && (app.offered(tt) || draft.taskTypes.includes(tt.id))));
 
   function startFrom(id: string) {
     baseId = id;

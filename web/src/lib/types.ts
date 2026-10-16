@@ -205,6 +205,8 @@ export interface CustomMeta {
   custom?: true;
   /** Private: offered only to its author. */
   visibility?: "private" | "public";
+  /** Turned off by me (pipe type), or offered only by pipe types I turned off (task type). */
+  disabled?: boolean;
   createdBy?: { id: string; name: string } | null;
   updatedAt?: string;
 }

@@ -30,7 +30,7 @@
   let stage = $state<string | null>(untrack(() => initialStage ?? (pipe ? app.columnsFor(pipe.kind)[0]?.id : null) ?? null));
 
   // Task type: those of the pipe type, or any of them when sending to an incoming bucket.
-  const typeChoices = $derived(pipe ? app.taskTypesFor(pipe.kind) : app.taskTypes.filter((tt) => app.usable(tt)));
+  const typeChoices = $derived(pipe ? app.taskTypesFor(pipe.kind) : app.taskTypes.filter((tt) => app.offered(tt)));
   // Default: the pipe type's main task type, except in checklist processes (with starter tasks) where plain tasks prevail.
   let taskTypeId = $state(
     untrack(() => (pipe && !app.pipeType(pipe.kind)?.templates.length ? app.taskTypesFor(pipe.kind)[1]?.id : null) ?? "task")

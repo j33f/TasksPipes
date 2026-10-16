@@ -45,7 +45,7 @@
   const savedField = (id?: string) => (id ? editing?.fields.find((f) => f.id === id) : undefined);
   const hasOptions = (t: FieldType) => t === "select" || t === "multiselect";
 
-  const choosable = $derived(app.taskTypes.filter((tt) => app.usable(tt)));
+  const choosable = $derived(app.taskTypes.filter((tt) => app.offered(tt)));
   const groups = $derived([...new Set(choosable.map((tt) => app.taskTypeGroup(tt)))]);
 
   function startFrom(id: string) {

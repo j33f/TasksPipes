@@ -918,12 +918,29 @@ export async function apiRoutes(app: FastifyInstance) {
   // ----- Pipes --------------------------------------------------------------
 
   // In the language of the page; select options keep their stored values (see localizeTaskType).
+  // Types I turned off are flagged `disabled`; so is a task type offered only by pipe types I turned off.
   app.get("/catalog", async (req) => {
     const lang = localeOf(req);
+    const off = new Set<string>((await one(`SELECT disabled_pipe_types FROM users WHERE id = $1`, [me(req)]))?.disabled_pipe_types ?? []);
+    const pipeTypes = allPipeTypes();
+    const offeredBy = (id: string) => pipeTypes.filter((p) => p.taskTypes.includes(id));
     return {
-      pipeTypes: allPipeTypes().map((p) => localizePipeType(lang, p)),
-      taskTypes: allTaskTypes().map((t) => localizeTaskType(lang, t)),
+      pipeTypes: pipeTypes.map((p) => ({ ...localizePipeType(lang, p), disabled: off.has(p.id) })),
+      taskTypes: allTaskTypes().map((t) => {
+        const by = offeredBy(t.id);
+        return { ...localizeTaskType(lang, t), disabled: by.length > 0 && by.every((p) => off.has(p.id)) };
+      }),
     };
+  });
+
+  // Turns pipe types off or on for me (the general type, behind personal pipes, always stays on).
+  app.put("/me/disabled-pipe-types", async (req: Req) => {
+    const ids = req.body?.pipeTypes;
+    if (!Array.isArray(ids) || ids.some((x) => typeof x !== "string")) throw bad("Invalid pipe type");
+    const known = new Set(allPipeTypes().map((p) => p.id));
+    const list = [...new Set(ids as string[])].filter((id) => known.has(id) && id !== DEFAULT_PIPE_TYPE);
+    await query(`UPDATE users SET disabled_pipe_types = $2 WHERE id = $1`, [me(req), list]);
+    return { pipeTypes: list };
   });
 
   // ----- Designer: pipe and task types made by users -----------------------
