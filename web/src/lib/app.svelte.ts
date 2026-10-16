@@ -1,12 +1,13 @@
 import { api } from "./api";
 import { setParams } from "./router.svelte";
-import type { Me, PipeType, SpaceSummary, User, UserRef } from "./types";
+import type { Me, PipeType, SidebarData, SpaceSummary, User, UserRef } from "./types";
 
 class AppState {
   me = $state<Me | null | undefined>(undefined);
   spaces = $state<SpaceSummary[]>([]);
   users = $state<User[]>([]);
   pipeTypes = $state<PipeType[]>([]);
+  sidebar = $state<SidebarData>({ mine: [], pinned: [] });
   /** Bumped after every mutation so pages reload their data. */
   version = $state(0);
   toastMessage = $state<{ message: string; type: "info" | "error"; id: number } | null>(null);
@@ -31,14 +32,26 @@ class AppState {
 
   async loadShared() {
     if (!this.me) return;
-    const [spaces, users, pipeTypes] = await Promise.all([
+    const [spaces, users, pipeTypes, sidebar] = await Promise.all([
       api.get<SpaceSummary[]>("/spaces"),
       api.get<User[]>("/users"),
       this.pipeTypes.length ? this.pipeTypes : api.get<PipeType[]>("/pipe-types"),
+      api.get<SidebarData>("/sidebar"),
     ]);
     this.spaces = spaces;
     this.users = users;
     this.pipeTypes = pipeTypes;
+    this.sidebar = sidebar;
+  }
+
+  isPinned(pipeId: string): boolean {
+    return this.sidebar.pinned.some((p) => p.id === pipeId);
+  }
+
+  async setPinned(pipeId: string, pinned: boolean) {
+    if (pinned) await api.put(`/pipes/${pipeId}/pin`);
+    else await api.del(`/pipes/${pipeId}/pin`);
+    this.sidebar = await api.get<SidebarData>("/sidebar");
   }
 
   pipeType(id: string | null | undefined): PipeType | undefined {

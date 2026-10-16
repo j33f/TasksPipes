@@ -9,6 +9,7 @@
   import Icon from "../components/Icon.svelte";
   import Markdown from "../components/Markdown.svelte";
   import PipeModal from "../components/PipeModal.svelte";
+  import PipeIcon from "../components/PipeIcon.svelte";
   import TeamModal from "../components/TeamModal.svelte";
   import NewTaskModal from "../components/NewTaskModal.svelte";
   import AcceptDialog from "../components/AcceptDialog.svelte";
@@ -109,6 +110,7 @@
           {@const n = total(p.counts)}
           <a class="card pipe-card" class:archived={p.archived} href={`/pipes/${p.id}`} style="border-top: 3px solid {p.color || 'var(--divider)'}">
             <div class="row">
+              <PipeIcon pipe={p} size={20} />
               <h3>{p.name}</h3>
               <span class="spacer"></span>
               {#if p.archived}

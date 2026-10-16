@@ -60,6 +60,7 @@ function docOrNull(doc: unknown): DocRef | null {
 }
 
 const color = (v: unknown) => (typeof v === "string" && v ? v.slice(0, 20) : null);
+const icon = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 32) : null);
 
 function pipeKind(value: unknown): string {
   if (value === undefined || value === null || value === "") return DEFAULT_PIPE_TYPE;
@@ -142,6 +143,7 @@ function presentPipe(p: Row) {
     description: p.description,
     visibility: p.visibility,
     kind: p.kind,
+    icon: p.icon,
     archived: Boolean(p.archived_at),
     isDefault: p.is_default,
     color: p.color,
@@ -151,6 +153,10 @@ function presentPipe(p: Row) {
     createdAt: p.created_at,
   };
 }
+
+/** Number of tasks per status of the pipe aliased `p`. */
+const PIPE_COUNTS = `(SELECT json_object_agg(status, n) FROM
+  (SELECT status, count(*) AS n FROM tasks t WHERE t.pipe_id = p.id GROUP BY status) c) AS counts`;
 
 const getTaskRow = (id: string, db?: Queryable) => one(`${TASK_SELECT} WHERE t.id = $1`, [id], db);
 
@@ -464,9 +470,7 @@ export async function apiRoutes(app: FastifyInstance) {
         [s.id]
       ),
       query(
-        `SELECT p.*, u.name AS created_by_name,
-                (SELECT json_object_agg(status, n) FROM
-                   (SELECT status, count(*) AS n FROM tasks t WHERE t.pipe_id = p.id GROUP BY status) c) AS counts
+        `SELECT p.*, u.name AS created_by_name, ${PIPE_COUNTS}
          FROM pipes p LEFT JOIN users u ON u.id = p.created_by
          WHERE p.space_id = $1 AND (p.visibility = 'open' OR $2)
          ORDER BY p.archived_at NULLS FIRST, p.position, p.created_at`,
@@ -556,6 +560,44 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.get("/pipe-types", async () => PIPE_TYPES);
 
+  // Sidebar: my personal pipes, and the pipes I pinned that I can still see.
+  app.get("/sidebar", async (req) => {
+    const uid = me(req);
+    const [mine, pinned] = await Promise.all([
+      query(
+        `SELECT p.*, ${PIPE_COUNTS} FROM pipes p JOIN spaces s ON s.id = p.space_id
+         WHERE s.user_id = $1 AND p.archived_at IS NULL ORDER BY p.position, p.created_at`,
+        [uid]
+      ),
+      query(
+        `SELECT p.*, ${SPACE_NAME} AS space_name, ${PIPE_COUNTS},
+                EXISTS (SELECT 1 FROM space_members m WHERE m.space_id = p.space_id AND m.user_id = $1) AS can_manage
+         FROM pipe_pins pp
+         JOIN pipes p ON p.id = pp.pipe_id
+         JOIN spaces s ON s.id = p.space_id LEFT JOIN users su ON su.id = s.user_id
+         WHERE pp.user_id = $1 AND p.archived_at IS NULL
+           AND (p.visibility = 'open' OR EXISTS (SELECT 1 FROM space_members m WHERE m.space_id = p.space_id AND m.user_id = $1))
+         ORDER BY pp.created_at`,
+        [uid]
+      ),
+    ]);
+    return {
+      mine: mine.rows.map((p) => ({ ...presentPipe(p), canManage: true })),
+      pinned: pinned.rows.map((p) => ({ ...presentPipe(p), spaceName: p.space_name, canManage: p.can_manage })),
+    };
+  });
+
+  app.put("/pipes/:id/pin", async (req: Req) => {
+    const { p } = await loadPipeFor(req.params.id, me(req));
+    await query(`INSERT INTO pipe_pins (user_id, pipe_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [me(req), p.id]);
+    return { ok: true };
+  });
+
+  app.delete("/pipes/:id/pin", async (req: Req) => {
+    await query(`DELETE FROM pipe_pins WHERE user_id = $1 AND pipe_id = $2`, [me(req), uuid(req.params.id, "Pipe")]);
+    return { ok: true };
+  });
+
   app.post("/spaces/:id/pipes", async (req: Req) => {
     const uid = me(req);
     const spaceId = uuid(req.params.id, "Espace");
@@ -563,8 +605,8 @@ export async function apiRoutes(app: FastifyInstance) {
     const kind = pipeKind(req.body?.kind);
     const id = await tx(async (client) => {
       const row = await one(
-        `INSERT INTO pipes (space_id, name, description, visibility, kind, color, created_by, position)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, (SELECT COALESCE(max(position), 0) + 1 FROM pipes WHERE space_id = $1))
+        `INSERT INTO pipes (space_id, name, description, visibility, kind, color, icon, created_by, position)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, (SELECT COALESCE(max(position), 0) + 1 FROM pipes WHERE space_id = $1))
          RETURNING id`,
         [
           spaceId,
@@ -573,6 +615,7 @@ export async function apiRoutes(app: FastifyInstance) {
           req.body?.visibility === "open" ? "open" : "private",
           kind,
           color(req.body?.color),
+          icon(req.body?.icon),
           uid,
         ],
         client
@@ -625,7 +668,7 @@ export async function apiRoutes(app: FastifyInstance) {
       }
     }
     await query(
-      `UPDATE pipes SET name = $2, description = $3, visibility = $4, color = $5, kind = $6,
+      `UPDATE pipes SET name = $2, description = $3, visibility = $4, color = $5, kind = $6, icon = $8,
          archived_at = CASE WHEN $7::boolean IS NULL THEN archived_at WHEN $7 THEN COALESCE(archived_at, now()) END,
          updated_at = now()
        WHERE id = $1`,
@@ -637,6 +680,7 @@ export async function apiRoutes(app: FastifyInstance) {
         "color" in b ? color(b.color) : p.color,
         "kind" in b ? pipeKind(b.kind) : p.kind,
         "archived" in b ? Boolean(b.archived) : null,
+        "icon" in b ? icon(b.icon) : p.icon,
       ]
     );
     return { ok: true };

@@ -26,6 +26,7 @@ export const api = {
   get: <T = unknown>(p: string) => request<T>("GET", `/api${p}`),
   post: <T = unknown>(p: string, b: unknown = {}) => request<T>("POST", `/api${p}`, b),
   patch: <T = unknown>(p: string, b: unknown = {}) => request<T>("PATCH", `/api${p}`, b),
+  put: <T = unknown>(p: string, b: unknown = {}) => request<T>("PUT", `/api${p}`, b),
   del: <T = unknown>(p: string) => request<T>("DELETE", `/api${p}`),
 };
 

@@ -140,9 +140,19 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- Pipe type (see pipeTypes.ts).
 ALTER TABLE pipes ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'general';
 ALTER TABLE pipes ADD COLUMN IF NOT EXISTS archived_at timestamptz;
+-- Icon name or emoji; NULL means the default icon of the pipe type.
+ALTER TABLE pipes ADD COLUMN IF NOT EXISTS icon text;
 -- Every personal space has one default pipe, which cannot be archived or deleted.
 ALTER TABLE pipes ADD COLUMN IF NOT EXISTS is_default boolean NOT NULL DEFAULT false;
 CREATE UNIQUE INDEX IF NOT EXISTS pipes_default_idx ON pipes(space_id) WHERE is_default;
+
+-- Pipes each person pinned in their sidebar.
+CREATE TABLE IF NOT EXISTS pipe_pins (
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  pipe_id uuid NOT NULL REFERENCES pipes(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, pipe_id)
+);
 
 -- Tasks in a personal space belong to that person: no explicit assignee there.
 UPDATE tasks t SET assignee_id = NULL FROM spaces s

@@ -8,6 +8,7 @@
   import Modal from "./Modal.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import Icon from "./Icon.svelte";
+  import IconPicker from "./IconPicker.svelte";
 
   let { spaceId, pipe = null, onclose }: { spaceId: string; pipe?: Pipe | null; onclose: () => void } = $props();
 
@@ -17,6 +18,7 @@
   let visibility = $state<"private" | "open">(initial?.visibility ?? "private");
   let kind = $state(initial?.kind ?? "general");
   let color = $state<string | null>(initial?.color ?? app.pipeType("general")?.color ?? PALETTE[4]);
+  let icon = $state<string | null>(initial?.icon ?? null);
   let withTemplates = $state(true);
   let busy = $state(false);
   let error = $state("");
@@ -38,7 +40,7 @@
     e.preventDefault();
     busy = true;
     try {
-      const body = { name, description, visibility, kind, color, withTemplates: !pipe && withTemplates };
+      const body = { name, description, visibility, kind, color, icon, withTemplates: !pipe && withTemplates };
       if (pipe) {
         await api.patch(`/pipes/${pipe.id}`, body);
         app.toast("Pipe mis à jour");
@@ -103,10 +105,13 @@
       {/if}
     </div>
     <div class="field">
-      <label for="pm-name">Nom</label>
-      <!-- svelte-ignore a11y_autofocus -->
-      <input id="pm-name" class="input" bind:value={name} required maxlength="120" autofocus
-        placeholder={type && type.id !== "general" ? `${type.label}${type.templates.length ? " – session …" : ""}` : ""} />
+      <label for="pm-name">Nom, icône et couleur</label>
+      <div class="row name-row">
+        <IconPicker {icon} {color} {kind} onchange={(next) => { icon = next.icon; color = next.color; }} />
+        <!-- svelte-ignore a11y_autofocus -->
+        <input id="pm-name" class="input" bind:value={name} required maxlength="120" autofocus
+          placeholder={type && type.id !== "general" ? `${type.label}${type.templates.length ? " – session …" : ""}` : ""} />
+      </div>
     </div>
     <div class="field">
       <span class="label-text">Description</span>
@@ -130,14 +135,6 @@
         </button>
       </div>
     </div>
-    <div class="field">
-      <span class="label-text">Couleur</span>
-      <div class="swatches">
-        {#each PALETTE as c (c)}
-          <button type="button" class="swatch" class:selected={color === c} style="background:{c}" aria-label={c} onclick={() => (color = c)}></button>
-        {/each}
-      </div>
-    </div>
     {#if error}<div class="error-text">{error}</div>{/if}
     <div class="modal-actions">
       {#if pipe && !pipe.isDefault}
@@ -156,6 +153,8 @@
 </Modal>
 
 <style>
+  .name-row { gap: 6px; }
+  .name-row .input { flex: 1; }
   .check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 10px; cursor: pointer; }
   .templates { margin: 6px 0 0; padding-left: 26px; max-height: 160px; overflow-y: auto; font-size: 13px; color: var(--text-tertiary); }
 </style>

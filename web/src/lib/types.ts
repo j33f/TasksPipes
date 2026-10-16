@@ -39,6 +39,8 @@ export interface Pipe {
   description: string;
   visibility: "private" | "open";
   kind: string;
+  /** Icon name or emoji; null means the default icon of the pipe type. */
+  icon: string | null;
   archived: boolean;
   /** The classic pipe every personal space has; it cannot be archived or deleted. */
   isDefault: boolean;
@@ -114,12 +116,23 @@ export interface PipeDetail extends Pipe {
   tasks: Task[];
 }
 
+export interface SidebarPipe extends Pipe {
+  spaceName?: string;
+  canManage: boolean;
+}
+
+export interface SidebarData {
+  mine: SidebarPipe[];
+  pinned: SidebarPipe[];
+}
+
 export interface PipeType {
   id: string;
   label: string;
   group: string;
   description: string;
   color: string;
+  icon: string;
   templates: string[];
 }
 

@@ -5,6 +5,13 @@
   import SpaceIcon from "./SpaceIcon.svelte";
   import Icon from "./Icon.svelte";
   import TeamModal from "./TeamModal.svelte";
+  import PipeIcon from "./PipeIcon.svelte";
+  import PipeModal from "./PipeModal.svelte";
+  import NewTaskModal from "./NewTaskModal.svelte";
+  import { api, errorMessage } from "../lib/api";
+  import { navigate } from "../lib/router.svelte";
+  import { openTaskCount } from "../lib/constants";
+  import type { SidebarPipe } from "../lib/types";
 
   let { open, onclose }: { open: boolean; onclose: () => void } = $props();
 
@@ -15,6 +22,66 @@
   const matches = (name: string) => name.toLowerCase().includes(filter.trim().toLowerCase());
   const personalId = $derived(app.me?.personalSpaceId);
   const myIncoming = $derived(app.personalSpace?.incomingCount ?? 0);
+
+  // "Mes pipes" unfolds like an Outline collection; remembered per browser.
+  const read = () => { try { return localStorage.getItem("tp:myPipesOpen") === "1"; } catch { return false; } };
+  let myPipesOpen = $state(read());
+  function toggleMyPipes() {
+    myPipesOpen = !myPipesOpen;
+    try { localStorage.setItem("tp:myPipesOpen", myPipesOpen ? "1" : "0"); } catch { /* storage unavailable */ }
+  }
+
+  // Hover actions of a pipe: "+" adds a task, "…" opens its menu.
+  let menu = $state<{ pipe: SidebarPipe; style: string } | null>(null);
+  let menuEl = $state<HTMLElement>();
+  let renamingId = $state<string | null>(null);
+  let newTaskPipe = $state<SidebarPipe | null>(null);
+  let editing = $state<SidebarPipe | null>(null);
+
+  function openMenu(e: MouseEvent, pipe: SidebarPipe) {
+    if (menu?.pipe.id === pipe.id) return (menu = null);
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const left = Math.min(r.left, window.innerWidth - 236);
+    const style = r.bottom + 260 > window.innerHeight
+      ? `left:${left}px;bottom:${window.innerHeight - r.top + 4}px`
+      : `left:${left}px;top:${r.bottom + 4}px`;
+    menu = { pipe, style };
+  }
+
+  function closeMenuOutside(e: MouseEvent) {
+    if (menu && menuEl && !menuEl.contains(e.target as Node) && !(e.target as Element).closest?.("[data-menu-trigger]")) menu = null;
+  }
+
+  async function run(fn: () => Promise<unknown>, success?: string) {
+    menu = null;
+    try {
+      await fn();
+      if (success) app.toast(success);
+      app.refresh();
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    }
+  }
+
+  function rename(pipe: SidebarPipe, e: FocusEvent) {
+    const name = (e.currentTarget as HTMLInputElement).value.trim();
+    renamingId = null;
+    if (name && name !== pipe.name) run(() => api.patch(`/pipes/${pipe.id}`, { name }));
+  }
+
+  function renameKeydown(e: KeyboardEvent) {
+    const input = e.currentTarget as HTMLInputElement;
+    if (e.key === "Escape") { renamingId = null; return; }
+    if (e.key === "Enter") input.blur();
+  }
+
+  function remove(pipe: SidebarPipe) {
+    if (!confirm(`Supprimer le pipe « ${pipe.name} » ?`)) return (menu = null);
+    run(async () => {
+      await api.del(`/pipes/${pipe.id}`);
+      if (router.path === `/pipes/${pipe.id}`) navigate(`/spaces/${pipe.spaceId}`);
+    }, "Pipe supprimé");
+  }
 </script>
 
 {#if open}
@@ -36,9 +103,30 @@
       <Icon name="inbox" /><span class="label">Mon incoming</span>
       {#if myIncoming}<span class="count">{myIncoming}</span>{/if}
     </a>
-    <a class="sidebar-link" class:active={isActive(`/spaces/${personalId}`)} href={`/spaces/${personalId}`}>
-      <Icon name="pipe" /><span class="label">Mes pipes</span>
-    </a>
+    <div class="sidebar-link has-disclosure hover-actions" class:active={isActive(`/spaces/${personalId}`)}>
+      <button class="disclosure" class:open={myPipesOpen} aria-expanded={myPipesOpen}
+        title={myPipesOpen ? "Replier" : "Déplier"} onclick={toggleMyPipes}><Icon name="chevron" size={14} /></button>
+      <a class="row-link" href={`/spaces/${personalId}`}>
+        <Icon name="pipe" /><span class="label">Mes pipes</span>
+      </a>
+      <span class="actions">
+        <a class="act" title="Nouveau pipe" href={`/spaces/${personalId}?newPipe=1`}><Icon name="plus" size={16} /></a>
+      </span>
+    </div>
+    {#if myPipesOpen}
+      {#each app.sidebar.mine as p (p.id)}
+        {@render pipeLink(p, null, true)}
+      {/each}
+    {/if}
+
+    {#if app.sidebar.pinned.length}
+      <div class="sidebar-section">
+        <div class="sidebar-section-title"><span>Épinglés</span></div>
+        {#each app.sidebar.pinned as p (p.id)}
+          {@render pipeLink(p, p.spaceId === personalId ? null : (p.spaceName ?? null), false)}
+        {/each}
+      </div>
+    {/if}
 
     <div class="sidebar-search">
       <input class="input" placeholder="Filtrer les espaces…" bind:value={filter} />
@@ -97,6 +185,61 @@
   </div>
 </nav>
 
+{#snippet pipeLink(p: SidebarPipe, spaceName: string | null, nested: boolean)}
+  {#if renamingId === p.id}
+    <div class="sidebar-link pipe-link" class:nested>
+      <PipeIcon pipe={p} size={18} />
+      <!-- svelte-ignore a11y_autofocus -->
+      <input class="rename" value={p.name} maxlength="120" aria-label="Nom du pipe" autofocus
+        onfocus={(e) => (e.currentTarget as HTMLInputElement).select()} onblur={(e) => rename(p, e)} onkeydown={renameKeydown} />
+    </div>
+  {:else}
+    <div class="sidebar-link pipe-link hover-actions" class:nested class:active={router.path === `/pipes/${p.id}`}
+      class:menu-open={menu?.pipe.id === p.id}>
+      <a class="row-link" href={`/pipes/${p.id}`} title={spaceName ? `${spaceName} › ${p.name}` : p.name}>
+        <PipeIcon pipe={p} size={18} />
+        <span class="label">{p.name}{#if spaceName}<span class="space-name"> · {spaceName}</span>{/if}</span>
+      </a>
+      <span class="actions">
+        <button class="act" title="Nouvelle tâche" onclick={() => (newTaskPipe = p)}><Icon name="plus" size={16} /></button>
+        <button class="act" title="Plus d'actions" data-menu-trigger onclick={(e) => openMenu(e, p)}><Icon name="more" size={16} /></button>
+      </span>
+    </div>
+  {/if}
+{/snippet}
+
+<svelte:window onmousedown={closeMenuOutside} onkeydown={(e) => e.key === "Escape" && (menu = null)} onresize={() => (menu = null)} />
+
+{#if menu}
+  {@const p = menu.pipe}
+  {@const pinned = app.isPinned(p.id)}
+  {@const open = openTaskCount(p.counts)}
+  <div class="pipe-menu" style={menu.style} bind:this={menuEl} role="menu">
+    <button class="menu-item" role="menuitem" onclick={() => { menu = null; newTaskPipe = p; }}><Icon name="plus" size={16} />Nouvelle tâche</button>
+    {#if p.canManage}
+      <button class="menu-item" role="menuitem" onclick={() => { menu = null; renamingId = p.id; }}><Icon name="edit" size={16} />Renommer</button>
+      <button class="menu-item" role="menuitem" onclick={() => { menu = null; editing = p; }}><Icon name="settings" size={16} />Icône, couleur, type…</button>
+    {/if}
+    <button class="menu-item" role="menuitem" onclick={() => run(() => app.setPinned(p.id, !pinned), pinned ? "Désépinglé" : "Épinglé")}>
+      <Icon name="pin" size={16} />{pinned ? "Désépingler" : "Épingler"}
+    </button>
+    {#if p.canManage && !p.isDefault}
+      <div class="menu-sep"></div>
+      <button class="menu-item" role="menuitem" disabled={open > 0}
+        title={open > 0 ? `Encore ${open} tâche${open > 1 ? "s" : ""} en cours : à terminer ou abandonner avant d'archiver` : undefined}
+        onclick={() => run(() => api.patch(`/pipes/${p.id}`, { archived: true }), "Pipe archivé")}>
+        <Icon name="archive" size={16} />Archiver
+      </button>
+      <button class="menu-item danger" role="menuitem" onclick={() => remove(p)}><Icon name="trash" size={16} />Supprimer</button>
+    {/if}
+  </div>
+{/if}
+
+{#if newTaskPipe}
+  <NewTaskModal pipe={{ id: newTaskPipe.id, name: newTaskPipe.name, spaceId: newTaskPipe.spaceId }} onclose={() => (newTaskPipe = null)} />
+{/if}
+{#if editing}<PipeModal spaceId={editing.spaceId} pipe={editing} onclose={() => (editing = null)} />{/if}
+
 {#if showNewTeam}
   <TeamModal onclose={() => (showNewTeam = false)} />
 {/if}
@@ -121,6 +264,38 @@
   .sidebar-link:hover { background: var(--sidebar-hover); text-decoration: none; color: var(--text); }
   .sidebar-link.active { background: var(--sidebar-active); color: var(--text); }
   .sidebar-link.user:hover { background: none; }
+  .has-disclosure { padding-left: 0; gap: 0; }
+  .has-disclosure .row-link { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: inherit; text-decoration: none; padding: 0 0 0 2px; }
+  .disclosure {
+    border: 0; background: none; color: var(--text-tertiary); width: 20px; height: 24px; padding: 0; margin-right: 2px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 4px; flex-shrink: 0;
+  }
+  .disclosure:hover { color: var(--text); }
+  .disclosure :global(svg) { transition: transform 100ms ease; }
+  .disclosure.open :global(svg) { transform: rotate(90deg); }
+  .pipe-link { font-size: 14px; min-height: 30px; gap: 0; padding-right: 4px; }
+  .pipe-link .row-link { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+  .pipe-link.nested { padding-left: 30px; }
+  .space-name { color: var(--text-tertiary); font-weight: 400; }
+  .rename {
+    flex: 1; min-width: 0; margin-left: 8px; font: inherit; color: var(--text); background: var(--background);
+    border: 1px solid var(--input-border-focused); border-radius: 4px; padding: 1px 4px; outline: none;
+  }
+  .actions { display: none; align-items: center; gap: 2px; flex-shrink: 0; }
+  .hover-actions:hover .actions, .hover-actions:focus-within .actions, .hover-actions.menu-open .actions { display: flex; }
+  .hover-actions:hover, .hover-actions.menu-open { background: var(--sidebar-hover); color: var(--text); }
+  .act {
+    border: 0; background: none; padding: 3px; border-radius: 4px; cursor: pointer; color: var(--text-tertiary);
+    display: flex; align-items: center;
+  }
+  .act:hover { color: var(--text); background: var(--sidebar-active); text-decoration: none; }
+  .pipe-menu {
+    position: fixed; z-index: 60; width: 220px; padding: 6px; border-radius: 8px;
+    background: var(--modal-background); box-shadow: var(--menu-shadow);
+  }
+  .pipe-menu .menu-item:disabled { opacity: 0.45; cursor: default; background: none; }
+  .pipe-menu .danger { color: var(--danger); }
+  .menu-sep { height: 1px; background: var(--divider); margin: 6px 4px; }
   .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sidebar-link.muted .label { opacity: 0.6; }
   .sidebar-search { margin: 12px 0 0; }

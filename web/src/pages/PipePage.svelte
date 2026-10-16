@@ -8,6 +8,7 @@
   import Markdown from "../components/Markdown.svelte";
   import TaskCard from "../components/TaskCard.svelte";
   import PipeModal from "../components/PipeModal.svelte";
+  import IconPicker from "../components/IconPicker.svelte";
   import NewTaskModal from "../components/NewTaskModal.svelte";
 
   let { id }: { id: string } = $props();
@@ -58,6 +59,34 @@
   // Every task done or abandoned: the pipe can be closed.
   const finished = $derived(Boolean(pipe?.tasks.length) && openTaskCount(pipe!.counts) === 0);
 
+  async function save(body: Record<string, unknown>) {
+    if (!pipe) return;
+    Object.assign(pipe, body);
+    try {
+      await api.patch(`/pipes/${pipe.id}`, body);
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    }
+    app.refresh();
+  }
+
+  // Inline title, like an Outline document: saved on blur or Enter, Escape cancels.
+  function rename(e: FocusEvent) {
+    const input = e.currentTarget as HTMLInputElement;
+    const name = input.value.trim();
+    if (!pipe || !name || name === pipe.name) {
+      input.value = pipe?.name ?? "";
+      return;
+    }
+    save({ name });
+  }
+
+  function titleKeydown(e: KeyboardEvent) {
+    const input = e.currentTarget as HTMLInputElement;
+    if (e.key === "Escape") input.value = pipe?.name ?? "";
+    if (e.key === "Enter" || e.key === "Escape") input.blur();
+  }
+
   async function setArchived(archived: boolean) {
     try {
       await api.patch(`/pipes/${id}`, { archived });
@@ -102,8 +131,13 @@
           <span>›</span><span>Pipe</span>
         </div>
         <h1>
-          <span class="color-dot" style="background:{pipe.color || 'var(--divider)'}"></span>
-          {pipe.name}
+          <IconPicker icon={pipe.icon} color={pipe.color} kind={pipe.kind} editable={pipe.canManage} size={28}
+            onchange={(next) => save(next)} />
+          {#if pipe.canManage}
+            <input class="title-input" value={pipe.name} maxlength="120" aria-label="Nom du pipe" onblur={rename} onkeydown={titleKeydown} />
+          {:else}
+            {pipe.name}
+          {/if}
           {#if pipe.archived}<span class="badge"><Icon name="archive" size={12} />Archivé</span>{/if}
           {#if app.pipeType(pipe.kind)}<span class="badge">{app.pipeType(pipe.kind)?.label}</span>{/if}
           {#if pipe.visibility === "open"}
@@ -138,6 +172,11 @@
             <Icon name="user" size={16} />Les miennes
           </button>
         {/if}
+        <button class="btn neutral icon" class:active-toggle={app.isPinned(pipe.id)}
+          title={app.isPinned(pipe.id) ? "Désépingler du menu" : "Épingler dans le menu"}
+          onclick={() => app.setPinned(pipe!.id, !app.isPinned(pipe!.id)).catch((err) => app.toast(errorMessage(err), "error"))}>
+          <Icon name="pin" />
+        </button>
         {#if pipe.canManage}
           <button class="btn neutral icon" title="Modifier le pipe" onclick={() => (editing = true)}><Icon name="settings" /></button>
         {/if}
@@ -183,7 +222,14 @@
 <style>
   .page-header { margin-bottom: 16px; }
   .archived { margin-top: 10px; align-items: center; }
-  .color-dot { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+  .page-header h1 { gap: 6px; flex-wrap: wrap; }
+  .page-header h1 :global(.badge) { margin-left: 4px; }
+  .title-input {
+    font: inherit; color: inherit; border: 0; outline: none; background: none; padding: 0 2px; margin: 0;
+    border-radius: 4px; min-width: 4ch; max-width: 100%; field-sizing: content;
+  }
+  .title-input:hover { background: var(--list-hover); }
+  .title-input:focus { background: none; box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
   .description { margin-top: 6px; color: var(--text-secondary); max-width: 760px; }
   .filter { width: 180px; min-height: 32px; height: 32px; font-size: 14px; }
   .active-toggle { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }

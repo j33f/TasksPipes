@@ -16,6 +16,15 @@ export const openTaskCount = (counts: Partial<Record<Status, number>>) =>
 
 export const STATUS_BY_ID = Object.fromEntries(STATUSES.map((s) => [s.id, s])) as Record<Status, (typeof STATUSES)[number]>;
 
+import type { IconName } from "../components/Icon.svelte";
+
+/** Icons offered for pipes (an emoji can be used instead). */
+export const PIPE_ICONS: IconName[] = [
+  "pipe", "star", "flag", "check", "clipboard", "calendar", "doc", "book", "graduation", "users", "user", "briefcase",
+  "target", "megaphone", "mail", "phone", "comment", "euro", "chart", "shield", "bulb", "heart", "bolt", "folder",
+  "inbox", "send", "globe", "home", "search", "settings",
+];
+
 // Outline brand colours.
 export const PALETTE = ["#FF5C80", "#FF4DFA", "#9E5CF7", "#3633FF", "#2BC2FF", "#2930FF", "#3ad984", "#F5BE31", "#f08a24", "#0366d6"];
 
