@@ -14,7 +14,7 @@ const alive = new WeakSet<WebSocket>();
 
 export interface LiveEvent {
   /** task.sent: a task arrived in an incoming bucket; task.refused: one came back; incoming.changed: one left. */
-  type: "task.sent" | "task.refused" | "incoming.changed" | "connection.request" | "connection.accepted";
+  type: "task.sent" | "task.refused" | "incoming.changed" | "connection.request" | "connection.accepted" | "hello";
   spaceId?: string;
   task?: { id: string; number: number; title: string };
   by?: string;
@@ -37,6 +37,8 @@ export async function realtime(app: FastifyInstance) {
     set.add(socket);
     alive.add(socket);
     socket.on("pong", () => alive.add(socket));
+    // First message: the server's version, so pages left open across an update notice it.
+    socket.send(JSON.stringify({ type: "hello", version: config.version }));
     socket.on("message", () => {}); // nothing is expected from the page
     socket.on("close", () => {
       set!.delete(socket);

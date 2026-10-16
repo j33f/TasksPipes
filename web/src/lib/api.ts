@@ -1,4 +1,5 @@
 import { prefs, t } from "./i18n.svelte";
+import { checkServerVersion } from "./version.svelte";
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -16,6 +17,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers: body !== undefined ? { "Content-Type": "application/json", "X-Locale": prefs.lang } : { "X-Locale": prefs.lang },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  checkServerVersion(res.headers.get("X-App-Version"));
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith("/api/auth")) window.dispatchEvent(new Event("tp:unauthorized"));

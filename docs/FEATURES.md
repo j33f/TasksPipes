@@ -65,6 +65,10 @@ types (fields, with a live preview), from scratch or from an existing model. A m
 used by its author only — and can be made **public**; it is filed in a category. Only its author can change it.
 A type in use cannot be deleted, and the kind of a saved field cannot change.
 
+Each person can **turn off** the pipe types they do not need (all but *General tasks*): they are no longer offered
+when creating a pipe, and the task types offered only by turned-off pipe types are turned off too. Existing pipes of
+those types keep working. This is a personal choice: others still see every type.
+
 ## Tasks
 
 - **Owner**: a task in a personal space belongs to its holder; to hand it to someone, send it to their incoming. In a
@@ -93,6 +97,9 @@ pipe and column, or **refuses** it with a reason: it then goes back to the sende
 A task sent or refused shows up at once for its recipients, with a notification. The connection closes after five
 minutes of inactivity or one minute in the background, and reopens when the page is used again. The number of
 waiting tasks shows in the tab title and, on mobile, as a badge on the menu button.
+
+After the server is updated, open pages notice the new version and reload themselves — at once if nothing is being
+edited, otherwise once the edit is over, with a banner offering to reload.
 
 ## Calendar
 

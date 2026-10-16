@@ -3,6 +3,7 @@
   import { prefs, t, tn } from "./lib/i18n.svelte";
   import { app } from "./lib/app.svelte";
   import { live } from "./lib/realtime.svelte";
+  import { reloadNow, update } from "./lib/version.svelte";
   import { interceptLinks, navigate, router } from "./lib/router.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import TaskModal from "./components/TaskModal.svelte";
@@ -108,6 +109,12 @@
   <div class="layout">
     <Sidebar open={navOpen} onclose={() => (navOpen = false)} />
     <main class="main">
+      {#if update.available}
+        <div class="update-bar" role="status">
+          <span>{t("A new version of TasksPipes is available.")}</span>
+          <button class="btn small" onclick={reloadNow}>{t("Reload")}</button>
+        </div>
+      {/if}
       <div class="mobile-bar">
         <button class="btn ghost icon menu-btn" onclick={() => (navOpen = !navOpen)}
           aria-label={app.pendingCount ? tn(app.pendingCount, "Menu, {n} task waiting", "Menu, {n} tasks waiting") : t("Menu")}>

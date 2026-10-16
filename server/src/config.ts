@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 const trimSlash = (s?: string) => (s || "").replace(/\/+$/, "");
 
 const outlineUrl = trimSlash(process.env.OUTLINE_URL);
@@ -5,7 +7,11 @@ const appUrl = trimSlash(process.env.APP_URL || "http://localhost:3000");
 const oauthClientId = process.env.OUTLINE_OAUTH_CLIENT_ID || "";
 const oauthClientSecret = process.env.OUTLINE_OAUTH_CLIENT_SECRET || "";
 
+/** Version of the server, from its package.json (dist/ in production, src/ in development: both one level down). */
+const version: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+
 export const config = {
+  version,
   port: Number(process.env.PORT || 3000),
   logLevel: process.env.LOG_LEVEL || "info",
   prettyLogs: process.env.NODE_ENV !== "production",

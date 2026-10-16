@@ -1,12 +1,15 @@
 import { app } from "./app.svelte";
 import { t } from "./i18n.svelte";
+import { checkServerVersion } from "./version.svelte";
 
 /** Closed after this long without any activity on the page, or this long after the page is hidden. */
 const IDLE_MS = 5 * 60_000;
 const HIDDEN_MS = 60_000;
 
 interface LiveEvent {
-  type: "task.sent" | "task.refused" | "incoming.changed" | "connection.request" | "connection.accepted";
+  type: "task.sent" | "task.refused" | "incoming.changed" | "connection.request" | "connection.accepted" | "hello";
+  /** "hello": version of the server. */
+  version?: string;
   spaceId?: string;
   task?: { id: string; number: number; title: string };
   by?: string;
@@ -114,6 +117,7 @@ class Live {
   }
 
   #handle(e: LiveEvent) {
+    if (e.type === "hello") return checkServerVersion(e.version);
     app.refresh();
     if (e.type === "connection.request") {
       return app.toast(t("{name} wants to connect with you", { name: e.by ?? "" }), "info", { label: t("View"), run: () => (app.dialog = "settings") });

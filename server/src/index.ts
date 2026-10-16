@@ -50,6 +50,11 @@ app.setErrorHandler((err: FastifyError, req, reply) => {
   return reply.code(500).send({ error: tr(lang, "Internal error") });
 });
 
+// Every API answer carries the server's version: an open page built for another version reloads itself.
+app.addHook("onSend", async (req, reply) => {
+  if (req.url.startsWith("/api/")) reply.header("X-App-Version", config.version);
+});
+
 await app.register(cookie);
 await app.register(authPlugin);
 await app.register(realtime);
@@ -86,4 +91,4 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
-app.log.info({ outline: config.outlineUrl, oauth: config.oauthEnabled }, "TasksPipes ready");
+app.log.info({ version: config.version, outline: config.outlineUrl, oauth: config.oauthEnabled }, "TasksPipes ready");
