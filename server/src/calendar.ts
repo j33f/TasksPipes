@@ -51,6 +51,22 @@ const nextDay = (d: string) => {
 };
 const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
 
+/**
+ * Default reminders of an open task, relative to the start of its all-day event (midnight of the due date):
+ * 9:00 five days before, the day before and on the day.
+ */
+const ALARMS: { trigger: string; text: string }[] = [
+  { trigger: "-P4DT15H", text: "Due in 5 days: {title}" },
+  { trigger: "-PT15H", text: "Due tomorrow: {title}" },
+  { trigger: "PT9H", text: "Due today: {title}" },
+];
+
+const alarms = (title: string, lang: Locale) =>
+  ALARMS.map((a) =>
+    ["BEGIN:VALARM", "ACTION:DISPLAY", `TRIGGER:${a.trigger}`, // The title is put in afterwards: it is the person's text, never translated.
+    prop("DESCRIPTION", tr(lang, a.text).replace("{title}", title)), "END:VALARM"].join("\r\n")
+  );
+
 function event(t: Row, lang: Locale): string {
   const done = t.status === "done";
   const place = `${t.space_kind === "team" ? `${t.space_name} › ` : ""}${t.pipe_name}`;
@@ -73,7 +89,7 @@ function event(t: Row, lang: Locale): string {
     prop("DESCRIPTION", description),
     prop("URL", link),
     "TRANSP:TRANSPARENT",
-    ...(done ? ["STATUS:CONFIRMED"] : []),
+    ...(done ? ["STATUS:CONFIRMED"] : alarms(t.title, lang)),
     "END:VEVENT",
   ].join("\r\n");
 }

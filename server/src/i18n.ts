@@ -249,6 +249,9 @@ const FR: Record<string, string> = {
   // Calendar feed
   Column: "Colonne",
   "Tasks assigned to {name} that have a due date": "Tâches attribuées à {name} qui ont une échéance",
+  "Due in 5 days: {title}": "Échéance dans 5 jours : {title}",
+  "Due tomorrow: {title}": "Échéance demain : {title}",
+  "Due today: {title}": "Échéance aujourd'hui : {title}",
 
   // E-mails
   "Your TasksPipes sign-in link": "Votre lien de connexion à TasksPipes",
