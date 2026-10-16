@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { config } from "./config.js";
-import { loadCustomTypes, one, query, syncStages, tx, type Queryable, type Row } from "./db.js";
+import { loadCustomTypes, one, pool, query, syncStages, tx, type Queryable, type Row } from "./db.js";
 import { absoluteOutlineUrl, type OutlineDocument } from "./outline.js";
 import { HttpError, bad, forbidden, notFound } from "./errors.js";
 import {
@@ -13,7 +13,7 @@ import QRCode from "qrcode";
 import { INVITE_LINK_DAYS, createLoginLink, decrypt, encrypt, ensurePersonalSpace } from "./auth.js";
 import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
 import { sendLinkMail } from "./mail.js";
-import { notifySpace } from "./realtime.js";
+import { notifySpace, notifyUser } from "./realtime.js";
 import { calendarUrl } from "./calendar.js";
 
 export const STATUSES = ["backlog", "ready", "started", "ongoing", "blocked", "abandoned", "done"] as const;
@@ -409,6 +409,15 @@ function assertStaysInSpace(t: Row, targetSpaceId: string) {
   }
 }
 
+/** Adds someone to a team (as a member), if not in it yet. */
+async function addMember(db: Queryable, teamId: string, userId: string, addedBy: string) {
+  await db.query(
+    `INSERT INTO space_members (space_id, user_id, role, added_by)
+     SELECT $1, $2, 'member', $3 FROM spaces WHERE id = $1 AND kind = 'team' ON CONFLICT DO NOTHING`,
+    [teamId, userId, addedBy]
+  );
+}
+
 async function requireTeamAdmin(spaceId: string, userId: string) {
   const s = await getSpace(uuid(spaceId, "Space"), userId);
   if (!s) throw notFound("Space not found");
@@ -443,7 +452,51 @@ export async function apiRoutes(app: FastifyInstance) {
     user: req.user,
     personalSpaceId: await personalSpaceId(me(req)),
     outlineUrl: req.outlineUrl,
+    features: { invitations: config.allowEmailInvitations },
   }));
+
+  // ----- Avatar of e-mail accounts (Outline accounts use their Outline picture) ----
+
+  const AVATAR_TYPES: Record<string, (b: Buffer) => boolean> = {
+    "image/png": (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+    "image/jpeg": (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+    "image/webp": (b) => b.subarray(0, 4).toString() === "RIFF" && b.subarray(8, 12).toString() === "WEBP",
+    "image/gif": (b) => b.subarray(0, 4).toString() === "GIF8",
+  };
+
+  app.post("/me/avatar", { bodyLimit: 2 * 1024 * 1024 }, async (req: Req) => {
+    if (req.user!.kind !== "email") throw bad("The picture of an Outline account is changed in Outline");
+    const content = req.body as unknown as Buffer;
+    const mime = String(req.headers["x-file-type"] || "");
+    // Checked against the file's first bytes, not only its declared type.
+    if (!Buffer.isBuffer(content) || !AVATAR_TYPES[mime]?.(content)) throw bad("The picture must be a PNG, JPEG, WebP or GIF image");
+    await query(
+      `INSERT INTO user_avatars (user_id, mime, content) VALUES ($1, $2, $3)
+       ON CONFLICT (user_id) DO UPDATE SET mime = EXCLUDED.mime, content = EXCLUDED.content, updated_at = now()`,
+      [me(req), mime, content]
+    );
+    // The URL changes with each picture, so that it can be cached for long.
+    await query(`UPDATE users SET avatar_url = $2, updated_at = now() WHERE id = $1`, [me(req), `/api/avatars/${me(req)}?v=${Date.now()}`]);
+    return { ok: true };
+  });
+
+  app.delete("/me/avatar", async (req: Req) => {
+    if (req.user!.kind !== "email") throw bad("The picture of an Outline account is changed in Outline");
+    await query(`DELETE FROM user_avatars WHERE user_id = $1`, [me(req)]);
+    await query(`UPDATE users SET avatar_url = NULL, updated_at = now() WHERE id = $1`, [me(req)]);
+    return { ok: true };
+  });
+
+  app.get("/avatars/:id", async (req: Req, reply) => {
+    const a = await one(`SELECT mime, content FROM user_avatars WHERE user_id = $1`, [uuid(req.params.id, "User")]);
+    if (!a) throw notFound();
+    return reply
+      .header("Content-Type", a.mime)
+      .header("X-Content-Type-Options", "nosniff")
+      .header("Content-Security-Policy", "sandbox")
+      .header("Cache-Control", "private, max-age=31536000, immutable")
+      .send(a.content);
+  });
 
   // ----- My account (e-mail accounts: name and TOTP) -------------------------
 
@@ -510,17 +563,28 @@ export async function apiRoutes(app: FastifyInstance) {
 
   // ----- Invitations by e-mail ------------------------------------------------
 
+  // My invitations both ways, with their state. Someone asked to connect is only named once they accept.
   app.get("/invitations", async (req) => {
     const { rows } = await query(
-      `SELECT u.id, u.name, u.email, u.last_login_at, i.created_at, i.inviter_id = $1 AS mine
+      `SELECT u.id, u.name, u.email, u.avatar_url, u.last_login_at, i.created_at, i.status, i.inviter_id = $1 AS mine
        FROM invitations i JOIN users u ON u.id = CASE WHEN i.inviter_id = $1 THEN i.invitee_id ELSE i.inviter_id END
-       WHERE i.inviter_id = $1 OR i.invitee_id = $1 ORDER BY i.created_at DESC`,
+       WHERE (i.inviter_id = $1 OR i.invitee_id = $1) AND NOT (i.invitee_id = $1 AND i.status = 'refused')
+       ORDER BY i.status = 'pending' AND i.invitee_id = $1 DESC, i.created_at DESC`,
       [me(req)]
     );
-    return rows.map((r) => ({
-      id: r.id, name: r.name, email: r.mine ? r.email : null, active: Boolean(r.last_login_at),
-      invitedByMe: r.mine, createdAt: r.created_at,
-    }));
+    return rows.map((r) => {
+      const hidden = r.mine && r.status !== "accepted";
+      return {
+        id: r.id,
+        name: hidden ? r.email : r.name,
+        email: r.mine ? r.email : null,
+        avatarUrl: hidden ? null : r.avatar_url,
+        active: Boolean(r.last_login_at),
+        invitedByMe: r.mine,
+        status: r.status,
+        createdAt: r.created_at,
+      };
+    });
   });
 
   /** E-mails an invitation (a sign-in link); without e-mail configured, returns the link to pass on by hand. */
@@ -537,44 +601,96 @@ export async function apiRoutes(app: FastifyInstance) {
   }
 
   app.post("/invitations", async (req: Req) => {
+    if (!config.allowEmailInvitations) throw forbidden("Invitations by e-mail are turned off on this instance");
     const uid = me(req);
     const email = text(req.body?.email, "E-mail", { required: true, max: 254 }).toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw bad("Invalid e-mail address");
     if (email === req.user!.email?.toLowerCase()) throw bad("That is your own address");
-    if (await one(`SELECT 1 FROM users WHERE auth_kind = 'outline' AND lower(email) = $1`, [email])) {
-      throw bad("This person has an Outline account: they can sign in with Outline.");
-    }
     const name = text(req.body?.name, "Name", { max: 120 }) || email.split("@")[0];
     const teamId = optUuid(req.body?.teamId, "Team");
     if (teamId) await requireTeamAdmin(teamId, uid);
 
-    const { invitee, created } = await tx(async (client) => {
-      let invitee = await one(`SELECT id, name, email, locale FROM users WHERE auth_kind = 'email' AND lower(email) = $1`, [email], client);
-      const created = !invitee;
-      if (!invitee) {
-        invitee = await one(
+    // Someone already on the platform (an e-mail account first, else an Outline account of this server).
+    const existing = await one(
+      `SELECT id, name, email, locale FROM users WHERE lower(email) = $1 AND id <> $2
+       ORDER BY auth_kind = 'email' DESC, outline_url = $3 DESC NULLS LAST LIMIT 1`,
+      [email, uid, config.outlineUrl]
+    );
+
+    if (!existing) {
+      const invitee = await tx(async (client) => {
+        const u = await one(
           `INSERT INTO users (id, name, email, auth_kind) VALUES (gen_uuidv7(), $1, $2, 'email') RETURNING id, name, email, locale`,
           [name, email],
           client
         );
-        await ensurePersonalSpace(client, invitee!.id, localeOf(req));
-      }
-      await client.query(`INSERT INTO invitations (inviter_id, invitee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [uid, invitee!.id]);
-      if (teamId) {
-        await client.query(
-          `INSERT INTO space_members (space_id, user_id, role, added_by) VALUES ($1, $2, 'member', $3) ON CONFLICT DO NOTHING`,
-          [teamId, invitee!.id, uid]
-        );
-      }
-      return { invitee: invitee!, created };
-    });
-    return { id: invitee.id, created, ...(await sendInvitation(req, invitee)) };
+        await ensurePersonalSpace(client, u!.id, localeOf(req));
+        await client.query(`INSERT INTO invitations (inviter_id, invitee_id, status) VALUES ($1, $2, 'accepted')`, [uid, u!.id]);
+        if (teamId) await addMember(client, teamId, u!.id, uid);
+        return u!;
+      });
+      return { created: true, ...(await sendInvitation(req, invitee)) };
+    }
+
+    if ((await one(`SELECT user_visible($1, $2) AS ok`, [uid, existing.id]))!.ok) {
+      if (teamId) await addMember(pool, teamId, existing.id, uid);
+      return { created: false, connected: true, name: existing.name };
+    }
+    // They had asked me first: inviting them back accepts their request.
+    const theirs = await one(
+      `UPDATE invitations SET status = 'accepted', responded_at = now()
+       WHERE inviter_id = $1 AND invitee_id = $2 AND status = 'pending' RETURNING team_id`,
+      [existing.id, uid]
+    );
+    if (theirs) {
+      if (theirs.team_id) await addMember(pool, theirs.team_id, uid, existing.id);
+      if (teamId) await addMember(pool, teamId, existing.id, uid);
+      notifyUser(existing.id, { type: "connection.accepted", by: req.user!.name });
+      return { created: false, connected: true, name: existing.name };
+    }
+    // Otherwise a request they accept or refuse. A refused one stays refused, without telling the inviter.
+    const row = await one(
+      `INSERT INTO invitations (inviter_id, invitee_id, status, team_id) VALUES ($1, $2, 'pending', $3)
+       ON CONFLICT (inviter_id, invitee_id) DO UPDATE SET team_id = COALESCE(EXCLUDED.team_id, invitations.team_id)
+         WHERE invitations.status = 'pending'
+       RETURNING (xmax = 0) AS fresh`,
+      [uid, existing.id, teamId]
+    );
+    if (row?.fresh) {
+      notifyUser(existing.id, { type: "connection.request", by: req.user!.name });
+      const lang: Locale = existing.locale ?? localeOf(req);
+      await sendLinkMail(lang, existing.email, tr(lang, "{name} wants to connect with you on TasksPipes", { name: req.user!.name }), [
+        tr(lang, "Hello {name},", { name: existing.name }),
+        tr(lang, "{name} wants to connect with you on TasksPipes, to share tasks. You can accept or refuse from your dashboard.", { name: req.user!.name }),
+      ], { label: tr(lang, "Open TasksPipes"), url: config.appUrl }).catch((err) => req.log.error({ err }, "Connection e-mail failed"));
+    }
+    // Same answer as for a new address: whether someone has an account is not disclosed.
+    return { created: false, sent: true };
   });
+
+  /** Answers a request to connect (`id`: the person who asked). */
+  async function answerRequest(req: Req, accept: boolean) {
+    const uid = me(req);
+    const row = await one(
+      `UPDATE invitations SET status = $3, responded_at = now()
+       WHERE inviter_id = $1 AND invitee_id = $2 AND status = 'pending' RETURNING inviter_id, team_id`,
+      [uuid(req.params.id, "Person"), uid, accept ? "accepted" : "refused"]
+    );
+    if (!row) throw notFound("Invitation not found");
+    if (accept) {
+      if (row.team_id) await addMember(pool, row.team_id, uid, row.inviter_id);
+      notifyUser(row.inviter_id, { type: "connection.accepted", by: req.user!.name });
+    }
+    return { ok: true };
+  }
+
+  app.post("/invitations/:id/accept", (req: Req) => answerRequest(req, true));
+  app.post("/invitations/:id/refuse", (req: Req) => answerRequest(req, false));
 
   app.post("/invitations/:id/resend", async (req: Req) => {
     const invitee = await one(
       `SELECT u.id, u.name, u.email, u.locale FROM invitations i JOIN users u ON u.id = i.invitee_id
-       WHERE i.inviter_id = $1 AND i.invitee_id = $2 AND u.auth_kind = 'email'`,
+       WHERE i.inviter_id = $1 AND i.invitee_id = $2 AND i.status = 'accepted' AND u.auth_kind = 'email'`,
       [me(req), uuid(req.params.id, "Person")]
     );
     if (!invitee) throw notFound("Invitation not found");

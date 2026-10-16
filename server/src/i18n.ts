@@ -253,6 +253,22 @@ const FR: Record<string, string> = {
   "Due tomorrow: {title}": "Échéance demain : {title}",
   "Due today: {title}": "Échéance aujourd'hui : {title}",
 
+  // Invitations, connection requests, avatars, sign-up
+  "Invitations by e-mail are turned off on this instance": "Les invitations par e-mail sont désactivées sur cette instance",
+  "{name} wants to connect with you on TasksPipes": "{name} souhaite se connecter avec vous sur TasksPipes",
+  "{name} wants to connect with you on TasksPipes, to share tasks. You can accept or refuse from your dashboard.":
+    "{name} souhaite se connecter avec vous sur TasksPipes pour partager des tâches. Vous pouvez accepter ou refuser depuis votre tableau de bord.",
+  "Open TasksPipes": "Ouvrir TasksPipes",
+  "The picture of an Outline account is changed in Outline": "La photo d'un compte Outline se change dans Outline",
+  "The picture must be a PNG, JPEG, WebP or GIF image": "La photo doit être une image PNG, JPEG, WebP ou GIF",
+  "Sign-up is turned off on this instance": "La création de compte est désactivée sur cette instance",
+  "Welcome to TasksPipes": "Bienvenue sur TasksPipes",
+  "Your account is ready. This link confirms your address and signs you in; it is valid for {hours} hours and works only once.":
+    "Votre compte est prêt. Ce lien confirme votre adresse et vous connecte ; il est valable {hours} heures et ne sert qu'une fois.",
+  "You already have an account on TasksPipes with your Outline account: sign in with Outline.":
+    "Vous avez déjà un compte TasksPipes avec votre compte Outline : connectez-vous avec Outline.",
+  "Outline server address required": "Adresse du serveur Outline requise",
+
   // E-mails
   "Your TasksPipes sign-in link": "Votre lien de connexion à TasksPipes",
   "Hello {name},": "Bonjour {name},",

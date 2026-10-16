@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { api } from "../lib/api";
+  import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
-  import type { Task } from "../lib/types";
+  import type { Invitation, Task } from "../lib/types";
+  import Avatar from "../components/Avatar.svelte";
   import TaskRow from "../components/TaskRow.svelte";
   import SpaceIcon from "../components/SpaceIcon.svelte";
   import Icon from "../components/Icon.svelte";
@@ -9,6 +10,22 @@
   import { t, tn } from "../lib/i18n.svelte";
 
   let data = $state<{ assigned: Task[]; sent: Task[]; due: Task[] } | null>(null);
+  // Requests to connect waiting for my answer.
+  let requests = $state<Invitation[]>([]);
+  $effect(() => {
+    app.version;
+    api.get<Invitation[]>("/invitations").then((r) => (requests = r.filter((i) => !i.invitedByMe && i.status === "pending"))).catch(() => {});
+  });
+
+  async function answer(i: Invitation, accept: boolean) {
+    try {
+      await api.post(`/invitations/${i.id}/${accept ? "accept" : "refuse"}`);
+      app.toast(accept ? t("You are now connected with {name}", { name: i.name }) : t("Request refused"));
+      app.refresh();
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    }
+  }
   let creating = $state(false);
 
   $effect(() => {
@@ -28,6 +45,15 @@
     </div>
     <button class="btn" onclick={() => (creating = true)}><Icon name="plus" size={18} />{t("New task")}</button>
   </div>
+
+  {#each requests as r (r.id)}
+    <div class="callout info request">
+      <Avatar user={r} size={24} />
+      <span class="grow">{t("{name} wants to connect with you, to share tasks.", { name: r.name })}</span>
+      <button class="btn small" onclick={() => answer(r, true)}>{t("Accept")}</button>
+      <button class="btn ghost small" onclick={() => answer(r, false)}>{t("Refuse")}</button>
+    </div>
+  {/each}
 
   {#if app.isGuest && !app.me?.user.totp}
     <button class="callout warning secure" onclick={() => (app.accountOpen = true)}>
@@ -103,6 +129,8 @@
 
 <style>
   .incoming { color: var(--text); align-items: center; }
+  .request { align-items: center; }
+  .request .grow { flex: 1; }
   .secure { width: 100%; border: 0; font: inherit; font-size: 14px; color: var(--text); text-align: left; cursor: pointer; align-items: center; }
   .incoming:hover { text-decoration: none; filter: brightness(0.98); }
 </style>

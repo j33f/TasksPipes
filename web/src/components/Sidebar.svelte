@@ -196,7 +196,7 @@
     {#if app.people.length}
       {@const people = app.people.filter((s) => matches(s.name))}
       <div class="sidebar-section">
-        {@render foldTitle("people", t("People"), people.length, () => (showInvite = true), t("Invite by e-mail"))}
+        {@render foldTitle("people", t("People"), people.length, app.me?.features.invitations ? () => (showInvite = true) : undefined, t("Invite by e-mail"))}
         {#if isOpen("people")}
           {#each people as s (s.id)}
             <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}

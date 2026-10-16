@@ -6,8 +6,8 @@ const IDLE_MS = 5 * 60_000;
 const HIDDEN_MS = 60_000;
 
 interface LiveEvent {
-  type: "task.sent" | "task.refused" | "incoming.changed";
-  spaceId: string;
+  type: "task.sent" | "task.refused" | "incoming.changed" | "connection.request" | "connection.accepted";
+  spaceId?: string;
   task?: { id: string; number: number; title: string };
   by?: string;
   reason?: string;
@@ -115,6 +115,10 @@ class Live {
 
   #handle(e: LiveEvent) {
     app.refresh();
+    if (e.type === "connection.request") {
+      return app.toast(t("{name} wants to connect with you", { name: e.by ?? "" }), "info", { label: t("View"), run: () => (app.accountOpen = true) });
+    }
+    if (e.type === "connection.accepted") return app.toast(t("{name} accepted to connect with you", { name: e.by ?? "" }));
     if (e.type === "incoming.changed" || !e.task) return;
     this.arrivals++;
     const task = e.task;

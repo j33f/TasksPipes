@@ -24,6 +24,8 @@ export interface Me {
   };
   personalSpaceId: string;
   outlineUrl: string;
+  /** What this instance allows. */
+  features: { invitations: boolean };
 }
 
 export interface SpaceSummary {
@@ -248,5 +250,8 @@ export interface Invitation {
   email: string | null;
   active: boolean;
   invitedByMe: boolean;
+  avatarUrl: string | null;
+  /** A person already on the platform answers the request; a new address is accepted at once. */
+  status: "pending" | "accepted" | "refused";
   createdAt: string;
 }

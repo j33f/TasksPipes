@@ -250,6 +250,20 @@ CREATE TABLE IF NOT EXISTS invitations (
   PRIMARY KEY (inviter_id, invitee_id)
 );
 CREATE INDEX IF NOT EXISTS invitations_invitee_idx ON invitations(invitee_id);
+-- Inviting someone already on the platform is a request they accept or refuse (with the team to join, if any);
+-- inviting a new address creates the account and the link at once.
+ALTER TABLE invitations ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'accepted'
+  CHECK (status IN ('pending', 'accepted', 'refused'));
+ALTER TABLE invitations ADD COLUMN IF NOT EXISTS team_id uuid REFERENCES spaces(id) ON DELETE SET NULL;
+ALTER TABLE invitations ADD COLUMN IF NOT EXISTS responded_at timestamptz;
+
+-- Pictures uploaded by e-mail accounts (Outline accounts use their Outline avatar).
+CREATE TABLE IF NOT EXISTS user_avatars (
+  user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  mime text NOT NULL,
+  content bytea NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 
 -- One-time sign-in links ('magic') and pending second factor steps ('totp'); ids are hashes.
 CREATE TABLE IF NOT EXISTS login_tokens (
@@ -263,14 +277,14 @@ CREATE TABLE IF NOT EXISTS login_tokens (
 );
 CREATE INDEX IF NOT EXISTS login_tokens_user_idx ON login_tokens(user_id, created_at);
 
--- Who sees whom: oneself; Outline accounts see each other; an account invited by e-mail is seen
--- only by the accounts it invited or that invited it (and sees only those).
+-- Who sees whom: oneself; Outline accounts of the same server see each other; otherwise, two accounts
+-- see each other once one invited the other and the invitation is accepted.
 CREATE OR REPLACE FUNCTION user_visible(viewer uuid, target uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT viewer = target
     OR EXISTS (SELECT 1 FROM users v JOIN users t ON t.id = target
                WHERE v.id = viewer AND v.auth_kind = 'outline' AND t.auth_kind = 'outline' AND t.outline_url = v.outline_url)
-    OR EXISTS (SELECT 1 FROM invitations i
-               WHERE (i.inviter_id = viewer AND i.invitee_id = target) OR (i.inviter_id = target AND i.invitee_id = viewer))
+    OR EXISTS (SELECT 1 FROM invitations i WHERE i.status = 'accepted'
+               AND ((i.inviter_id = viewer AND i.invitee_id = target) OR (i.inviter_id = target AND i.invitee_id = viewer)))
 $$;
 
 -- Spaces one may reach: visible people's personal spaces; teams one belongs to, or, for an Outline account,
@@ -361,10 +375,12 @@ export async function migrate(log: FastifyBaseLogger) {
     try {
       await pool.query(SCHEMA);
       // Accounts made before several Outline servers were possible come from the configured one.
-      await pool.query(
-        `UPDATE users SET outline_url = $1, outline_id = id::text WHERE auth_kind = 'outline' AND outline_url IS NULL`,
-        [config.outlineUrl]
-      );
+      if (config.outlineUrl) {
+        await pool.query(
+          `UPDATE users SET outline_url = $1, outline_id = id::text WHERE auth_kind = 'outline' AND outline_url IS NULL`,
+          [config.outlineUrl]
+        );
+      }
       await loadCustomTypes();
       await ensureDefaultPipes();
       await syncStages();

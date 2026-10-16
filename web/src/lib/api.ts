@@ -25,14 +25,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 /** Sends one file as the raw request body. */
-async function upload<T>(path: string, file: File): Promise<T> {
+async function upload<T>(path: string, file: Blob & { name?: string; type: string }): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: "POST",
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/octet-stream",
       "X-Locale": prefs.lang,
-      "X-File-Name": encodeURIComponent(file.name),
+      "X-File-Name": encodeURIComponent(file.name ?? "file"),
       "X-File-Type": file.type || "application/octet-stream",
     },
     body: file,

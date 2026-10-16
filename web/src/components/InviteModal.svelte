@@ -22,11 +22,15 @@
     busy = true;
     error = "";
     try {
-      const r = await api.post<{ sent: boolean; link?: string; created: boolean }>("/invitations", { email, name, teamId: teamId || null });
+      const r = await api.post<{ sent?: boolean; link?: string; created: boolean; connected?: boolean; name?: string }>("/invitations", { email, name, teamId: teamId || null });
       app.refresh();
       ondone?.();
-      if (r.sent) {
-        app.toast(r.created ? t("Invitation sent to {email}", { email }) : t("{email} already has an account: a sign-in link was sent to them", { email }));
+      if (r.connected) {
+        app.toast(t("You are now connected with {name}", { name: r.name ?? email }));
+        onclose();
+      } else if (r.sent) {
+        // Someone already on TasksPipes gets a request; who has an account is not disclosed.
+        app.toast(t("Invitation sent to {email}", { email }));
         onclose();
       } else {
         link = r.link ?? null;
@@ -62,7 +66,7 @@
   {:else}
     <form onsubmit={submit}>
       <p class="muted small intro">
-        {t("The person gets a link to sign in, without an Outline account. They only see you (and the people they invite); other accounts do not see them, except in the teams you add them to.")}
+        {t("A new person gets a link to sign in, without an Outline account; someone already on TasksPipes gets a request to connect. Once connected, you see each other; other accounts do not see them, except in the teams you add them to.")}
       </p>
       <div class="field">
         <label for="inv-email">{t("E-mail address")}</label>

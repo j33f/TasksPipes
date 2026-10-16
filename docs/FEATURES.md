@@ -1,8 +1,31 @@
 # Features
 
+TasksPipes was designed for an adult training centre, but fits other uses just as well:
+
+- **Training centres** — the built-in types cover course design, admissions, session starts, exams, learner and
+  disability follow-up, Qualiopi quality, funding and invoicing.
+- **Business** — sales (quotes, negotiation, won / lost), prospecting, communication and admin pipes, with fields for
+  clients, amounts and documents, and incoming buckets to pass work between people and teams.
+- **Personal organisation** — a Personal pipe in every space, *My tasks* across all pipes, a GTD *Next action* view,
+  sub-tasks and a calendar subscription with reminders.
+
+Other needs are covered by the [models](#models): design your own pipe and task types.
+
+## People
+
+Once TasksPipes is connected to Outline, everyone in the Outline workspace is there straight away, imported at the
+first sign-in: you can send them tasks, see their open pipes or build teams with them before they have signed in.
+
+On the sign-in page, you type the address of your Outline server; it is kept in your browser for next time, and you
+can add others and switch between them. Each server keeps its own people and teams: accounts of one server do not
+see those of another.
+
+You can also use TasksPipes [without Outline](#e-mail-accounts), and [invite people by e-mail](#invitations-and-connections):
+once connected, you see each other in the app and can send each other tasks.
+
 ## Spaces
 
-Everyone in the Outline workspace has a **personal space**; everyone else's is visible too. **Team spaces** are
+Everyone has a **personal space**; the personal spaces of the people you can see are visible too. **Team spaces** are
 created by picking their members. Governance is shared by promoting other members to *admin*; a team always keeps
 at least one admin.
 
@@ -77,14 +100,33 @@ waiting tasks shows in the tab title and, on mobile, as a badge on the menu butt
 any calendar app. Each task is an all-day event with a link back to it, and open tasks carry reminders at 9:00 five
 days before, the day before and on the due date. The link can be renewed if it leaks.
 
-## Invited guests
+## E-mail accounts
 
-People without an Outline account (trainers, partners…) can be invited by e-mail and added to a team. They sign in
-with one-time links and can turn on two-factor authentication (TOTP, e.g. Google Authenticator).
+People without an Outline account can **create an account** from the sign-in page with just their e-mail address
+and a display name: a link sent by e-mail confirms the address and signs them in. They can also be created by an
+[invitation](#invitations-and-connections).
 
-An invited guest only sees the people who invited them and the people they invited. Outline accounts do not see
-guests, except those they invited themselves — and the member list of a team they share. Guests only see their own
-teams and have no access to Outline.
+E-mail accounts sign in with one-time links (20 minutes when asked from the sign-in page), can turn on two-factor
+authentication (TOTP, e.g. Google Authenticator), change their name and upload a **profile picture**, cropped and
+shrunk in the browser. They have no access to Outline documents.
+
+## Invitations and connections
+
+From **My account** (or the *People* section of the sidebar), invite someone by e-mail, optionally into one of your
+teams:
+
+- **a new address**: an e-mail account is created and gets a sign-in link valid for 7 days; you are connected at once;
+- **someone already on TasksPipes**: they get a **request to connect**, by e-mail, live notification and on their
+  dashboard, which they **accept or refuse**. If they had already asked you, your invitation accepts their request.
+  The answer is the same whether or not the address has an account, so invitations do not reveal who uses TasksPipes;
+  a refused request stays refused without telling you.
+
+Connected people see each other in the app and can send each other tasks; the team you chose is joined on acceptance.
+An e-mail account only sees the people it is connected to. Outline accounts of a same server see each other, but
+not e-mail accounts, except those they are connected to — and the member list of a team they share. E-mail accounts
+only see their own teams.
+
+Invitations can be turned off for the whole instance (`ALLOW_EMAIL_INVITATIONS=false`).
 
 ## Personal settings
 

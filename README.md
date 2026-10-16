@@ -25,10 +25,23 @@ follows Outline's look and feel.
 - **My tasks** and **Next action** — everything assigned to you across pipes, and a GTD view suggesting what to start next.
 - **Task types and fields** — course design, sales opportunity, application… with dates, amounts, files and Outline documents.
 - **Models** — design your own pipe and task types, from scratch or from an existing one.
-- **Sub-tasks, history, live updates, calendar subscription**, guests invited by e-mail with two-factor authentication,
-  English and French, light and dark themes.
+- **Calendar** — subscribe to your tasks with a due date in Google Calendar, Apple Calendar or any calendar app,
+  with reminders five days before, the day before and on the day.
+- **Your Outline workspace, ready** — once connected to Outline, everyone in the workspace is there straight away:
+  you can send them tasks or build teams with them before they have even signed in.
+- **Any Outline server** — you type the address of your Outline server when signing in; it is then remembered in
+  your browser, and you can switch between several servers.
+- **Without Outline too** — anyone can create an account with just an e-mail address and a display name, sign in
+  with links sent by e-mail (optionally with two-factor authentication) and set a profile picture.
+- **Invitations and connections** — invite people by e-mail (trainers, clients, partners…): a new person gets a
+  sign-in link, someone already on TasksPipes gets a request they accept or refuse. Once connected, you see each
+  other in the app; the rest of the workspace does not see them, unless you add them to a team.
+- **Sub-tasks, history, live updates**, English and French, light and dark themes.
 
-The built-in catalog of pipe and task types is designed for French adult training centres (Qualiopi, RNCP, OPCO…).
+TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:
+course design, admissions, exams, Qualiopi quality, funding… But nothing ties it to training: the general,
+sales, prospecting, communication and admin pipes fit any business, the Personal pipe and the Next action view
+make it a good personal to-do list, and the designer lets you create the pipe and task types you need.
 See [the feature guide](docs/FEATURES.md) for the details.
 
 # Installation
@@ -36,12 +49,12 @@ See [the feature guide](docs/FEATURES.md) for the details.
 TasksPipes runs as a single container next to a PostgreSQL database, behind an HTTPS reverse proxy.
 
 ```shell
-cp .env.example .env        # then set APP_URL, APP_SECRET, POSTGRES_PASSWORD and OUTLINE_URL
+cp .env.example .env        # then set APP_URL, APP_SECRET and POSTGRES_PASSWORD
 docker compose up -d --build
 ```
 
 Please see the [hosting documentation](docs/HOSTING.md) for the configuration in production: sign-in with Outline
-(OAuth or API keys), e-mail for invited guests, other Outline servers, language and security notes.
+(OAuth or API keys), e-mail accounts and invitations, language and security notes.
 
 # Contributing
 

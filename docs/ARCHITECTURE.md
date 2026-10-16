@@ -19,7 +19,7 @@ Outline through its RPC-style API.
 | `index.ts` | Starts Fastify, the error handler (translates errors), static files and the SPA fallback. |
 | `config.ts` | Environment variables. |
 | `db.ts` | Connection pool, the schema (applied at every start), SQL visibility functions, start-up data fixes. |
-| `auth.ts` | Sessions, Outline sign-in (OAuth and API keys), e-mail links and TOTP for invited guests. |
+| `auth.ts` | Sessions, Outline sign-in (OAuth and API keys), e-mail sign-up, sign-in links and TOTP. |
 | `outline.ts` | Outline API client, validation of other Outline servers (https, no internal addresses). |
 | `routes.ts` | The JSON API under `/api`: spaces, pipes, tasks, sub-tasks, files, invitations, designer… |
 | `pipeTypes.ts` | Built-in catalog of pipe and task types, and the custom types made with the designer. |
@@ -49,14 +49,14 @@ follow Outline's design tokens (`web/src/app.css`).
 
 | Table | Holds |
 | --- | --- |
-| `users` | Outline accounts (keyed by Outline server and id) and guests invited by e-mail; preferences. |
+| `users`, `user_avatars` | Outline accounts (keyed by Outline server and id) and e-mail accounts; preferences; uploaded pictures. |
 | `spaces`, `space_members` | Personal spaces (one per person) and team spaces, with roles. |
 | `pipes`, `pipe_pins` | Pipes (type, visibility, archiving) and the pipes people pinned. |
 | `tasks` | Tasks: place (space, pipe or incoming), column and generic status, owner, due date, type and field values. |
 | `task_items`, `task_files` | Sub-tasks and files of tasks. |
 | `task_events` | History of every task, with the state before and after each change. |
 | `custom_types` | Pipe and task types made with the designer. |
-| `sessions`, `login_tokens`, `invitations` | Sessions, e-mail sign-in links and TOTP steps, who invited whom. |
+| `sessions`, `login_tokens`, `invitations` | Sessions, e-mail sign-in links and TOTP steps, invitations and requests to connect (pending, accepted, refused). |
 
 Ids are UUIDv7 (`gen_uuidv7()`), except for accounts of the configured Outline server, which keep their Outline id.
 
@@ -68,7 +68,8 @@ the nearest one.
 
 Who sees what is decided in SQL, so lists and single reads follow the same rules:
 
-- `user_visible(viewer, target)`: oneself; Outline accounts of the same server; and people linked by an invitation.
+- `user_visible(viewer, target)`: oneself; Outline accounts of the same server; and people linked by an accepted
+  invitation.
 - `space_visible(viewer, space)`: personal spaces of visible people; teams one belongs to, or, for an Outline
   account, the teams created by an account of the same server.
 

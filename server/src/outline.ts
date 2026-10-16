@@ -52,7 +52,7 @@ function isPrivateIp(ip: string): boolean {
   return PRIVATE.check(ip, net.isIPv6(ip) ? "ipv6" : "ipv4");
 }
 
-const isDefault = (instance: string) => instance === config.outlineUrl;
+const isDefault = (instance: string) => Boolean(config.outlineUrl) && instance === config.outlineUrl;
 
 /** Refuses a server whose name points to an internal address (checked on each call, against DNS tricks). */
 async function assertPublicHost(instance: string) {
@@ -70,7 +70,10 @@ const hostAllowed = (host: string) =>
 /** Validates a server address typed on the login page; returns its canonical URL (https, no trailing slash). */
 export async function normalizeOutlineUrl(input: unknown): Promise<string> {
   const raw = typeof input === "string" ? input.trim() : "";
-  if (!raw) return config.outlineUrl;
+  if (!raw) {
+    if (config.outlineUrl) return config.outlineUrl;
+    throw new OutlineError(400, "Outline server address required");
+  }
   let u: URL;
   try {
     u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);

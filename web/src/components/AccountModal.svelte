@@ -64,6 +64,24 @@
     }
   }
 
+  // Picture of an e-mail account: cropped to a square and shrunk in the browser before upload.
+  let picking = $state<HTMLInputElement>();
+  async function setAvatar(file: File | undefined) {
+    if (!file) return;
+    try {
+      const img = await createImageBitmap(file);
+      const side = Math.min(img.width, img.height);
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 256;
+      canvas.getContext("2d")!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 256, 256);
+      const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, "image/jpeg", 0.88));
+      if (!blob) throw new Error(t("This picture cannot be read"));
+      await run(() => api.upload("/me/avatar", blob), t("Picture updated"));
+    } catch (err) {
+      error = errorMessage(err);
+    }
+  }
+
   function saveName() {
     if (name.trim() && name !== user.name) run(() => api.patch("/me", { name }), t("Name saved"));
   }
@@ -101,6 +119,11 @@
     code = "";
   }
 
+  async function answer(i: Invitation, accept: boolean) {
+    await run(() => api.post(`/invitations/${i.id}/${accept ? "accept" : "refuse"}`), accept ? t("You are now connected with {name}", { name: i.name }) : t("Request refused"));
+    loadInvitations();
+  }
+
   const resend = (i: Invitation) =>
     api
       .post<{ sent: boolean; link?: string }>(`/invitations/${i.id}/resend`)
@@ -116,7 +139,16 @@
 
 <Modal title={t("My account")} {onclose}>
   <div class="profile">
-    <Avatar {user} size={48} />
+    {#if app.isGuest}
+      <button class="avatar-btn" title={t("Change the picture")} onclick={() => picking?.click()}>
+        <Avatar {user} size={48} />
+        <span class="avatar-edit"><Icon name="edit" size={14} /></span>
+      </button>
+      <input bind:this={picking} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden
+        onchange={(e) => { setAvatar((e.currentTarget as HTMLInputElement).files?.[0]); (e.currentTarget as HTMLInputElement).value = ""; }} />
+    {:else}
+      <Avatar {user} size={48} />
+    {/if}
     <div class="grow">
       {#if app.isGuest}
         <input class="input" bind:value={name} maxlength="120" onblur={saveName} aria-label={t("Name")}
@@ -124,7 +156,10 @@
       {:else}
         <strong>{user.name}</strong>
       {/if}
-      <div class="small muted">{user.email ?? ""} · {app.isGuest ? t("account invited by e-mail") : t("Outline account")}</div>
+      <div class="small muted">{user.email ?? ""} · {app.isGuest ? t("e-mail account") : t("Outline account")}</div>
+      {#if app.isGuest && user.avatarUrl}
+        <button class="btn ghost small remove-pic" onclick={() => run(() => api.del("/me/avatar"), t("Picture removed"))}>{t("Remove the picture")}</button>
+      {/if}
     </div>
   </div>
 
@@ -218,25 +253,39 @@
     <div class="section-title">
       <Icon name="mail" />{t("Invitations")}
       <span class="spacer"></span>
-      <button class="btn small neutral" onclick={() => (inviting = true)}><Icon name="plus" size={16} />{t("Invite by e-mail")}</button>
+      {#if app.me?.features.invitations}
+        <button class="btn small neutral" onclick={() => (inviting = true)}><Icon name="plus" size={16} />{t("Invite by e-mail")}</button>
+      {/if}
     </div>
     {#each invitations as i (i.id)}
       <div class="inv row">
+        <Avatar user={i} size={28} />
         <div class="grow">
           <strong>{i.name}</strong>
           <div class="small muted">
-            {#if i.invitedByMe}
+            {#if i.invitedByMe && i.status === "pending"}
+              {t("asked on {date}, waiting for an answer", { date: formatDate(i.createdAt) })}
+            {:else if i.invitedByMe && i.status === "refused"}
+              {t("asked on {date}", { date: formatDate(i.createdAt) })}
+            {:else if i.invitedByMe}
               {i.email} · {t("invited on {date}", { date: formatDate(i.createdAt) })} · {i.active ? t("has signed in") : t("not signed in yet")}
+            {:else if i.status === "pending"}
+              {t("wants to connect with you, to share tasks")}
             {:else}
               {t("invited you on {date}", { date: formatDate(i.createdAt) })}
             {/if}
           </div>
         </div>
-        {#if i.invitedByMe}<button class="btn ghost small" onclick={() => resend(i)}>{t("Send a new link")}</button>{/if}
+        {#if !i.invitedByMe && i.status === "pending"}
+          <button class="btn small" onclick={() => answer(i, true)}>{t("Accept")}</button>
+          <button class="btn ghost small" onclick={() => answer(i, false)}>{t("Refuse")}</button>
+        {:else if i.invitedByMe && i.status === "accepted"}
+          <button class="btn ghost small" onclick={() => resend(i)}>{t("Send a new link")}</button>
+        {/if}
       </div>
     {:else}
       <div class="small muted">
-        {t("Invite people without an Outline account (trainers, partners…): they sign in with a link received by e-mail.")}
+        {t("Invite people by e-mail (trainers, clients, partners…): new people get a sign-in link, people already on TasksPipes get a request to connect. Once connected, you see each other.")}
       </div>
     {/each}
   </div>
@@ -246,6 +295,12 @@
 
 <style>
   .profile { display: flex; align-items: center; gap: 12px; }
+  .avatar-btn { position: relative; border: 0; background: none; padding: 0; cursor: pointer; border-radius: 50%; display: flex; }
+  .avatar-edit {
+    position: absolute; right: -2px; bottom: -2px; width: 22px; height: 22px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; background: var(--background); box-shadow: var(--card-shadow); color: var(--text-secondary);
+  }
+  .remove-pic { margin-left: -8px; }
   .grow { flex: 1; min-width: 0; }
   .section { margin-top: 24px; }
   .ok { color: #2a9d63; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }

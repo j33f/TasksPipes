@@ -14,8 +14,8 @@ const alive = new WeakSet<WebSocket>();
 
 export interface LiveEvent {
   /** task.sent: a task arrived in an incoming bucket; task.refused: one came back; incoming.changed: one left. */
-  type: "task.sent" | "task.refused" | "incoming.changed";
-  spaceId: string;
+  type: "task.sent" | "task.refused" | "incoming.changed" | "connection.request" | "connection.accepted";
+  spaceId?: string;
   task?: { id: string; number: number; title: string };
   by?: string;
   reason?: string;
@@ -59,6 +59,12 @@ export async function realtime(app: FastifyInstance) {
   }, 30_000);
   timer.unref();
   app.addHook("onClose", async () => clearInterval(timer));
+}
+
+/** Notifies one person (all their open pages). */
+export function notifyUser(userId: string, event: LiveEvent) {
+  const message = JSON.stringify(event);
+  for (const s of sockets.get(userId) ?? []) if (s.readyState === s.OPEN) s.send(message);
 }
 
 /** Notifies the members of a space (but not the person who acted). Never throws. */

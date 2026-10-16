@@ -15,6 +15,7 @@ const TOTP_COOKIE = "tp_2fa";
 /** Validity of a sign-in link: an invitation, or a link asked from the login page. */
 export const INVITE_LINK_DAYS = 7;
 const LOGIN_LINK_MINUTES = 20;
+const SIGNUP_LINK_HOURS = 24;
 const key = crypto.createHash("sha256").update(config.appSecret).digest();
 
 export interface SessionUser {
@@ -258,9 +259,65 @@ async function auth(app: FastifyInstance) {
   app.get("/api/auth/config", async () => ({
     oauth: config.oauthEnabled,
     apiKey: config.allowApiKeyLogin,
-    outlineUrl: config.outlineUrl,
+    // Only to match the OAuth button with the server typed on the login page: no server is suggested.
+    outlineUrl: config.oauthEnabled ? config.outlineUrl : null,
     mail: mailEnabled,
+    signup: config.allowEmailSignup && mailEnabled,
   }));
+
+  // ----- Sign-up with an e-mail address and a name -----------------------------
+
+  // A few sign-ups per address per hour, so the form cannot be used to flood mailboxes.
+  const signups = new Map<string, number[]>();
+  app.post<{ Body: { email?: string; name?: string } }>("/api/auth/signup", async (req, reply) => {
+    const lang = localeOf(req);
+    if (!config.allowEmailSignup || !mailEnabled) return reply.code(403).send({ error: tr(lang, "Sign-up is turned off on this instance") });
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const name = String(req.body?.name || "").trim().slice(0, 120);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return reply.code(400).send({ error: tr(lang, "Invalid e-mail address") });
+    if (!name) return reply.code(400).send({ error: tr(lang, "{label} is required", { label: "Name" }) });
+    const now = Date.now();
+    const recent = (signups.get(req.ip) ?? []).filter((t) => now - t < 3_600_000);
+    if (recent.length >= 10) return { ok: true };
+    signups.set(req.ip, [...recent, now]);
+
+    // The answer is the same whatever happens, so the form does not tell who has an account.
+    const existing = await one(`SELECT id, name, auth_kind, locale FROM users WHERE lower(email) = $1 ORDER BY auth_kind = 'email' DESC LIMIT 1`, [email]);
+    const send = (l: Locale, subject: string, lines: string[], link: string, label: string) =>
+      sendLinkMail(l, email, subject, lines, { label, url: link }).catch((err) => req.log.error({ err }, "Sign-up e-mail failed"));
+    if (existing?.auth_kind === "outline") {
+      const l: Locale = existing.locale ?? lang;
+      await send(l, tr(l, "Welcome to TasksPipes"), [
+        tr(l, "Hello {name},", { name: existing.name }),
+        tr(l, "You already have an account on TasksPipes with your Outline account: sign in with Outline."),
+      ], `${config.appUrl}/login`, tr(l, "Sign in"));
+    } else if (existing) {
+      const l: Locale = existing.locale ?? lang;
+      const link = await createLoginLink(existing.id, LOGIN_LINK_MINUTES);
+      await send(l, tr(l, "Your TasksPipes sign-in link"), [
+        tr(l, "Hello {name},", { name: existing.name }),
+        tr(l, "Here is your link to sign in to TasksPipes. It is valid for {minutes} minutes and works only once.", { minutes: LOGIN_LINK_MINUTES }),
+        tr(l, "If you did not ask for this link, just ignore this e-mail."),
+      ], link, tr(l, "Sign in"));
+    } else {
+      const user = await tx(async (client) => {
+        const u = await one(
+          `INSERT INTO users (id, name, email, auth_kind, locale) VALUES (gen_uuidv7(), $1, $2, 'email', NULL) RETURNING id`,
+          [name, email],
+          client
+        );
+        await ensurePersonalSpace(client, u!.id, lang);
+        return u!;
+      });
+      const link = await createLoginLink(user.id, SIGNUP_LINK_HOURS * 60);
+      await send(lang, tr(lang, "Welcome to TasksPipes"), [
+        tr(lang, "Hello {name},", { name }),
+        tr(lang, "Your account is ready. This link confirms your address and signs you in; it is valid for {hours} hours and works only once.", { hours: SIGNUP_LINK_HOURS }),
+        tr(lang, "If you did not ask for this link, just ignore this e-mail."),
+      ], link, tr(lang, "Sign in"));
+    }
+    return { ok: true };
+  });
 
   // ----- Accounts invited by e-mail: sign-in link, then TOTP if enabled -----
 
