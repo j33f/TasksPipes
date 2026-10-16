@@ -216,6 +216,65 @@ CREATE TABLE IF NOT EXISTS custom_types (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Accounts: from Outline, or invited by e-mail (signing in with an e-mailed link, optionally with TOTP).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_kind text NOT NULL DEFAULT 'outline';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_last_step bigint;
+CREATE UNIQUE INDEX IF NOT EXISTS users_guest_email_idx ON users(lower(email)) WHERE auth_kind = 'email';
+ALTER TABLE sessions ALTER COLUMN access_token DROP NOT NULL;
+
+-- Outline accounts come from a server (the configured one, or another given on the login page):
+-- the same Outline id on two servers makes two accounts. The internal id of an account from the
+-- configured server is its Outline id; accounts from other servers get their own id.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS outline_url text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS outline_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS users_outline_idx ON users(outline_url, outline_id) WHERE outline_id IS NOT NULL;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS outline_url text;
+
+-- Who invited whom: the two accounts see each other.
+CREATE TABLE IF NOT EXISTS invitations (
+  inviter_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  invitee_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (inviter_id, invitee_id)
+);
+CREATE INDEX IF NOT EXISTS invitations_invitee_idx ON invitations(invitee_id);
+
+-- One-time sign-in links ('magic') and pending second factor steps ('totp'); ids are hashes.
+CREATE TABLE IF NOT EXISTS login_tokens (
+  id text PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose text NOT NULL CHECK (purpose IN ('magic', 'totp')),
+  attempts integer NOT NULL DEFAULT 0,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS login_tokens_user_idx ON login_tokens(user_id, created_at);
+
+-- Who sees whom: oneself; Outline accounts see each other; an account invited by e-mail is seen
+-- only by the accounts it invited or that invited it (and sees only those).
+CREATE OR REPLACE FUNCTION user_visible(viewer uuid, target uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT viewer = target
+    OR EXISTS (SELECT 1 FROM users v JOIN users t ON t.id = target
+               WHERE v.id = viewer AND v.auth_kind = 'outline' AND t.auth_kind = 'outline' AND t.outline_url = v.outline_url)
+    OR EXISTS (SELECT 1 FROM invitations i
+               WHERE (i.inviter_id = viewer AND i.invitee_id = target) OR (i.inviter_id = target AND i.invitee_id = viewer))
+$$;
+
+-- Spaces one may reach: visible people's personal spaces; teams one belongs to, or, for an Outline account,
+-- the teams created by an account of the same Outline server.
+CREATE OR REPLACE FUNCTION space_visible(viewer uuid, sid uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM spaces s WHERE s.id = sid AND (
+      (s.kind = 'user' AND user_visible(viewer, s.user_id))
+      OR (s.kind = 'team' AND (
+        EXISTS (SELECT 1 FROM space_members m WHERE m.space_id = s.id AND m.user_id = viewer)
+        OR EXISTS (SELECT 1 FROM users v JOIN users c ON c.id = s.created_by
+                   WHERE v.id = viewer AND v.auth_kind = 'outline' AND c.auth_kind = 'outline' AND c.outline_url = v.outline_url)))))
+$$;
+
 -- The default personal pipe used to be called "Mes tâches".
 UPDATE pipes SET name = 'Perso' WHERE is_default AND name = 'Mes tâches';
 
@@ -288,6 +347,11 @@ export async function migrate(log: FastifyBaseLogger) {
   for (let attempt = 1; ; attempt++) {
     try {
       await pool.query(SCHEMA);
+      // Accounts made before several Outline servers were possible come from the configured one.
+      await pool.query(
+        `UPDATE users SET outline_url = $1, outline_id = id::text WHERE auth_kind = 'outline' AND outline_url IS NULL`,
+        [config.outlineUrl]
+      );
       await loadCustomTypes();
       await ensureDefaultPipes();
       await syncStages();

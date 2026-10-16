@@ -8,6 +8,11 @@ import {
 } from "./pipeTypes.js";
 import { validatePipeType, validateTaskType } from "./designer.js";
 import { cleanFields } from "./fields.js";
+import QRCode from "qrcode";
+import { INVITE_LINK_DAYS, createLoginLink, decrypt, encrypt, ensurePersonalSpace } from "./auth.js";
+import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
+import { sendLinkMail } from "./mail.js";
+import { notifySpace } from "./realtime.js";
 
 export const STATUSES = ["backlog", "ready", "started", "ongoing", "blocked", "abandoned", "done"] as const;
 type Status = (typeof STATUSES)[number];
@@ -104,7 +109,7 @@ function getSpace(id: string, userId: string) {
      FROM spaces s
      LEFT JOIN users su ON su.id = s.user_id
      LEFT JOIN space_members m ON m.space_id = s.id AND m.user_id = $2
-     WHERE s.id = $1`,
+     WHERE s.id = $1 AND space_visible($2, s.id)`,
     [id, userId]
   );
 }
@@ -197,7 +202,8 @@ interface TaskPermissions {
 
 async function taskPermissions(t: Row, userId: string): Promise<TaskPermissions> {
   const isMember = Boolean(await memberRole(t.space_id, userId));
-  const openPipe = t.pipe_visibility === "open";
+  // An open pipe is open to those who can reach its space (not to people unknown to its owner).
+  const openPipe = t.pipe_visibility === "open" && (isMember || (await spaceVisible(t.space_id, userId)));
   // In a pipe reserved to a team (PSH…), only the team's members see the task, not even its author or sender.
   const involved = (t.author_id === userId || t.sender_id === userId) && !pipeTypeById(t.pipe_kind)?.teamOnly;
   return {
@@ -219,6 +225,10 @@ async function loadTaskFor(id: string, userId: string, need?: keyof TaskPermissi
   return { t, perms };
 }
 
+/** Whether someone may reach a space (see space_visible in the schema). */
+const spaceVisible = async (spaceId: string, userId: string, db?: Queryable) =>
+  Boolean((await one(`SELECT space_visible($2, $1) AS ok`, [spaceId, userId], db))?.ok);
+
 async function loadPipeFor(id: unknown, userId: string) {
   const p = await one(
     `SELECT p.*, u.name AS created_by_name FROM pipes p LEFT JOIN users u ON u.id = p.created_by WHERE p.id = $1`,
@@ -226,7 +236,7 @@ async function loadPipeFor(id: unknown, userId: string) {
   );
   if (!p) throw notFound("Pipe introuvable");
   const role = await memberRole(p.space_id, userId);
-  if (!role && p.visibility !== "open") throw notFound("Pipe introuvable");
+  if (!role && (p.visibility !== "open" || !(await spaceVisible(p.space_id, userId)))) throw notFound("Pipe introuvable");
   return { p, role };
 }
 
@@ -398,10 +408,10 @@ async function assertAdminRemains(db: Queryable, spaceId: string) {
   if (r!.n < 1) throw bad("L'équipe doit garder au moins un administrateur");
 }
 
-const presentDoc = (d: OutlineDocument) => ({
+const presentDoc = (d: OutlineDocument, instance: string) => ({
   id: d.id,
   title: d.title || "Sans titre",
-  url: absoluteOutlineUrl(d.url),
+  url: absoluteOutlineUrl(d.url, instance),
   updatedAt: d.updatedAt,
   collectionId: d.collectionId,
 });
@@ -418,13 +428,133 @@ export async function apiRoutes(app: FastifyInstance) {
   app.get("/me", async (req) => ({
     user: req.user,
     personalSpaceId: await personalSpaceId(me(req)),
-    outlineUrl: config.outlineUrl,
+    outlineUrl: req.outlineUrl,
   }));
 
-  app.get("/users", async () => {
+  // ----- My account (e-mail accounts: name and TOTP) -------------------------
+
+  app.patch("/me", async (req: Req) => {
+    if (req.user!.kind !== "email") throw bad("Le nom d'un compte Outline se change dans Outline");
+    const name = text(req.body?.name, "Nom", { required: true, max: 120 });
+    await query(`UPDATE users SET name = $2, updated_at = now() WHERE id = $1`, [me(req), name]);
+    return { ok: true };
+  });
+
+  const requireEmailAccount = (req: Req) => {
+    if (req.user!.kind !== "email") throw bad("La double authentification concerne les comptes invités par e-mail ; un compte Outline la règle dans Outline.");
+  };
+
+  // Step 1: a new secret, kept aside until a first code confirms the app is set up.
+  app.post("/me/totp/setup", async (req: Req) => {
+    requireEmailAccount(req);
+    if (req.user!.totp) throw bad("La double authentification est déjà active");
+    const secret = newSecret();
+    await query(`UPDATE users SET totp_pending = $2 WHERE id = $1`, [me(req), encrypt(secret)]);
+    const url = otpauthUrl(secret, req.user!.email ?? req.user!.name);
+    return { secret, url, qr: await QRCode.toDataURL(url, { margin: 1, width: 220 }) };
+  });
+
+  app.post("/me/totp/enable", async (req: Req) => {
+    requireEmailAccount(req);
+    const u = await one(`SELECT totp_pending FROM users WHERE id = $1`, [me(req)]);
+    const secret = decrypt(u?.totp_pending);
+    if (!secret) throw bad("Recommencez la configuration");
+    const step = verifyTotp(secret, String(req.body?.code || ""));
+    if (step === null) throw bad("Code incorrect : vérifiez l'heure de votre téléphone et réessayez.");
+    await query(`UPDATE users SET totp_secret = totp_pending, totp_pending = NULL, totp_last_step = $2 WHERE id = $1`, [me(req), step]);
+    return { ok: true };
+  });
+
+  app.post("/me/totp/disable", async (req: Req) => {
+    requireEmailAccount(req);
+    const u = await one(`SELECT totp_secret, totp_last_step FROM users WHERE id = $1`, [me(req)]);
+    const secret = decrypt(u?.totp_secret);
+    if (!secret) return { ok: true };
+    if (verifyTotp(secret, String(req.body?.code || ""), u!.totp_last_step === null ? null : Number(u!.totp_last_step)) === null) {
+      throw bad("Code incorrect");
+    }
+    await query(`UPDATE users SET totp_secret = NULL, totp_pending = NULL, totp_last_step = NULL WHERE id = $1`, [me(req)]);
+    return { ok: true };
+  });
+
+  // ----- Invitations by e-mail ------------------------------------------------
+
+  app.get("/invitations", async (req) => {
     const { rows } = await query(
-      `SELECT u.id, u.name, u.avatar_url, u.last_login_at, s.id AS space_id
-       FROM users u LEFT JOIN spaces s ON s.user_id = u.id ORDER BY lower(u.name)`
+      `SELECT u.id, u.name, u.email, u.last_login_at, i.created_at, i.inviter_id = $1 AS mine
+       FROM invitations i JOIN users u ON u.id = CASE WHEN i.inviter_id = $1 THEN i.invitee_id ELSE i.inviter_id END
+       WHERE i.inviter_id = $1 OR i.invitee_id = $1 ORDER BY i.created_at DESC`,
+      [me(req)]
+    );
+    return rows.map((r) => ({
+      id: r.id, name: r.name, email: r.mine ? r.email : null, active: Boolean(r.last_login_at),
+      invitedByMe: r.mine, createdAt: r.created_at,
+    }));
+  });
+
+  /** E-mails an invitation (a sign-in link); without e-mail configured, returns the link to pass on by hand. */
+  async function sendInvitation(req: Req, invitee: Row) {
+    const link = await createLoginLink(invitee.id, INVITE_LINK_DAYS * 24 * 60);
+    const sent = await sendLinkMail(invitee.email, `${req.user!.name} vous invite sur TasksPipes`, [
+      `Bonjour ${invitee.name},`,
+      `${req.user!.name} vous invite à partager des tâches avec lui ou elle sur TasksPipes.`,
+      `Ce lien vous connecte directement ; il est valable ${INVITE_LINK_DAYS} jours et ne sert qu'une fois. ` +
+        "Ensuite, demandez un nouveau lien depuis la page de connexion avec votre adresse e-mail.",
+    ], { label: "Rejoindre TasksPipes", url: link });
+    return sent ? { sent: true } : { sent: false, link };
+  }
+
+  app.post("/invitations", async (req: Req) => {
+    const uid = me(req);
+    const email = text(req.body?.email, "E-mail", { required: true, max: 254 }).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw bad("Adresse e-mail invalide");
+    if (email === req.user!.email?.toLowerCase()) throw bad("C'est votre propre adresse");
+    if (await one(`SELECT 1 FROM users WHERE auth_kind = 'outline' AND lower(email) = $1`, [email])) {
+      throw bad("Cette personne a un compte Outline : elle peut se connecter avec Outline.");
+    }
+    const name = text(req.body?.name, "Nom", { max: 120 }) || email.split("@")[0];
+    const teamId = optUuid(req.body?.teamId, "Équipe");
+    if (teamId) await requireTeamAdmin(teamId, uid);
+
+    const { invitee, created } = await tx(async (client) => {
+      let invitee = await one(`SELECT id, name, email FROM users WHERE auth_kind = 'email' AND lower(email) = $1`, [email], client);
+      const created = !invitee;
+      if (!invitee) {
+        invitee = await one(
+          `INSERT INTO users (id, name, email, auth_kind) VALUES (gen_uuidv7(), $1, $2, 'email') RETURNING id, name, email`,
+          [name, email],
+          client
+        );
+        await ensurePersonalSpace(client, invitee!.id);
+      }
+      await client.query(`INSERT INTO invitations (inviter_id, invitee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [uid, invitee!.id]);
+      if (teamId) {
+        await client.query(
+          `INSERT INTO space_members (space_id, user_id, role, added_by) VALUES ($1, $2, 'member', $3) ON CONFLICT DO NOTHING`,
+          [teamId, invitee!.id, uid]
+        );
+      }
+      return { invitee: invitee!, created };
+    });
+    return { id: invitee.id, created, ...(await sendInvitation(req, invitee)) };
+  });
+
+  app.post("/invitations/:id/resend", async (req: Req) => {
+    const invitee = await one(
+      `SELECT u.id, u.name, u.email FROM invitations i JOIN users u ON u.id = i.invitee_id
+       WHERE i.inviter_id = $1 AND i.invitee_id = $2 AND u.auth_kind = 'email'`,
+      [me(req), uuid(req.params.id, "Personne")]
+    );
+    if (!invitee) throw notFound("Invitation introuvable");
+    return sendInvitation(req, invitee);
+  });
+
+  app.get("/users", async (req) => {
+    const { rows } = await query(
+      `SELECT u.id, u.name, u.avatar_url, u.last_login_at, u.auth_kind, s.id AS space_id
+       FROM users u LEFT JOIN spaces s ON s.user_id = u.id
+       WHERE user_visible($1, u.id) ORDER BY lower(u.name)`,
+      [me(req)]
     );
     return rows.map((u) => ({
       id: u.id,
@@ -432,6 +562,7 @@ export async function apiRoutes(app: FastifyInstance) {
       avatarUrl: u.avatar_url,
       spaceId: u.space_id,
       active: Boolean(u.last_login_at),
+      guest: u.auth_kind === "email",
     }));
   });
 
@@ -481,7 +612,7 @@ export async function apiRoutes(app: FastifyInstance) {
   app.get("/spaces", async (req) => {
     const { rows } = await query(
       `SELECT s.id, s.kind, s.user_id, ${SPACE_NAME} AS name, s.description, s.color, su.avatar_url,
-              su.last_login_at, m.role AS my_role,
+              su.last_login_at, su.auth_kind = 'email' AS guest, m.role AS my_role,
               (SELECT count(*) FROM space_members sm WHERE sm.space_id = s.id) AS member_count,
               CASE WHEN m.role IS NOT NULL THEN
                 (SELECT count(*) FROM tasks t WHERE t.space_id = s.id AND t.pipe_id IS NULL) END AS incoming_count,
@@ -490,6 +621,7 @@ export async function apiRoutes(app: FastifyInstance) {
        FROM spaces s
        LEFT JOIN users su ON su.id = s.user_id
        LEFT JOIN space_members m ON m.space_id = s.id AND m.user_id = $1
+       WHERE space_visible($1, s.id)
        ORDER BY lower(${SPACE_NAME})`,
       [me(req)]
     );
@@ -502,6 +634,7 @@ export async function apiRoutes(app: FastifyInstance) {
       color: s.color,
       avatarUrl: s.avatar_url,
       active: s.kind === "team" || Boolean(s.last_login_at),
+      guest: Boolean(s.guest),
       myRole: s.my_role,
       memberCount: s.member_count,
       incomingCount: s.incoming_count,
@@ -595,6 +728,8 @@ export async function apiRoutes(app: FastifyInstance) {
     const s = await requireTeamAdmin(req.params.id, me(req));
     const userId = await ensureUser(optUuid(req.body?.userId, "Utilisateur"));
     if (!userId) throw bad("Utilisateur requis");
+    // Only people one can see: someone invited by e-mail joins a team through whoever invited them.
+    if (!(await one(`SELECT user_visible($1, $2) AS ok`, [me(req), userId]))?.ok) throw bad("Utilisateur inconnu");
     await query(
       `INSERT INTO space_members (space_id, user_id, role, added_by) VALUES ($1, $2, $3, $4)
        ON CONFLICT (space_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
@@ -734,7 +869,7 @@ export async function apiRoutes(app: FastifyInstance) {
          FROM pipe_pins pp
          JOIN pipes p ON p.id = pp.pipe_id
          JOIN spaces s ON s.id = p.space_id LEFT JOIN users su ON su.id = s.user_id
-         WHERE pp.user_id = $1 AND p.archived_at IS NULL
+         WHERE pp.user_id = $1 AND p.archived_at IS NULL AND space_visible($1, p.space_id)
            AND (p.visibility = 'open' OR EXISTS (SELECT 1 FROM space_members m WHERE m.space_id = p.space_id AND m.user_id = $1))
          ORDER BY pp.created_at`,
         [uid]
@@ -917,7 +1052,7 @@ export async function apiRoutes(app: FastifyInstance) {
       assertTaskTypeUsable(type, uid, null);
       // Otherwise the task is sent to a space's incoming bucket.
       spaceId = uuid(b.spaceId, "Espace");
-      if (!(await one(`SELECT id FROM spaces WHERE id = $1`, [spaceId]))) throw notFound("Espace introuvable");
+      if (!(await spaceVisible(spaceId, uid))) throw notFound("Espace introuvable");
       senderId = uid;
     }
     const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Propriétaire")));
@@ -942,6 +1077,10 @@ export async function apiRoutes(app: FastifyInstance) {
       await recordEvent(client, row!.id, uid, pipeId ? "created" : "sent", null, snapshot(row!), comment);
       return row!.id as string;
     });
+    if (!pipeId) {
+      const row = await getTaskRow(id);
+      notifySpace(spaceId, { type: "task.sent", task: { id, number: row!.number, title }, by: req.user!.name }, uid);
+    }
     return { id };
   });
 
@@ -1052,6 +1191,8 @@ export async function apiRoutes(app: FastifyInstance) {
         await recordEvent(client, t.id, uid, type, before, after, comment);
       }
     });
+    // Accepted out of an incoming: the other members' counts drop.
+    if (!t.pipe_id) notifySpace(t.space_id, { type: "incoming.changed" }, uid);
     return { ok: true };
   });
 
@@ -1059,7 +1200,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const uid = me(req);
     const { t } = await loadTaskFor(req.params.id, uid, "manage");
     const spaceId = uuid(req.body?.spaceId, "Destinataire");
-    if (!(await one(`SELECT id FROM spaces WHERE id = $1`, [spaceId]))) throw notFound("Destinataire introuvable");
+    if (!(await spaceVisible(spaceId, uid))) throw notFound("Destinataire introuvable");
     if (spaceId === t.space_id && !t.pipe_id) throw bad("La tâche est déjà dans cet incoming");
     assertStaysInSpace(t, spaceId);
     const comment = text(req.body?.comment, "Commentaire") || null;
@@ -1076,6 +1217,9 @@ export async function apiRoutes(app: FastifyInstance) {
       const row = await getTaskRow(t.id, client);
       await recordEvent(client, t.id, uid, "sent", snapshot(t), snapshot(row!), comment);
     });
+    notifySpace(spaceId, { type: "task.sent", task: { id: t.id, number: t.number, title: t.title }, by: req.user!.name }, uid);
+    // The incoming it left (if any) has one task less.
+    if (!t.pipe_id && t.space_id !== spaceId) notifySpace(t.space_id, { type: "incoming.changed" }, uid);
     return { ok: true };
   });
 
@@ -1084,9 +1228,9 @@ export async function apiRoutes(app: FastifyInstance) {
     const { t, perms } = await loadTaskFor(req.params.id, uid);
     if (!perms.refuse) throw forbidden("Seule une tâche reçue dans votre incoming peut être refusée");
     const reason = text(req.body?.reason, "Raison du refus", { required: true });
+    const target = await personalSpaceId(t.sender_id);
     await tx(async (client) => {
       // Back to the incoming bucket of the person who sent it.
-      const target = await personalSpaceId(t.sender_id, client);
       const position = await nextPosition(client, target, null, null);
       await client.query(
         `UPDATE tasks SET space_id = $2, pipe_id = NULL, stage = NULL, sender_id = $3, position = $4, assignee_id = NULL, updated_at = now()
@@ -1096,6 +1240,8 @@ export async function apiRoutes(app: FastifyInstance) {
       const row = await getTaskRow(t.id, client);
       await recordEvent(client, t.id, uid, "refused", snapshot(t), snapshot(row!), reason);
     });
+    notifySpace(target, { type: "task.refused", task: { id: t.id, number: t.number, title: t.title }, by: req.user!.name, reason }, uid);
+    notifySpace(t.space_id, { type: "incoming.changed" }, uid);
     return { ok: true };
   });
 
@@ -1232,16 +1378,16 @@ export async function apiRoutes(app: FastifyInstance) {
     const q = String(req.query.q || "").trim();
     if (!q) {
       const { data } = await req.outline<OutlineDocument[]>("documents.list", { limit: 15, sort: "updatedAt", direction: "DESC" });
-      return data.map(presentDoc);
+      return data.map((d) => presentDoc(d, req.outlineUrl));
     }
     // A pasted Outline document URL is resolved directly.
     const m = q.match(/\/doc\/([^/?#]+)/);
     if (m) {
       const { data } = await req.outline<OutlineDocument>("documents.info", { id: m[1] });
-      return [presentDoc(data)];
+      return [presentDoc(data, req.outlineUrl)];
     }
     const { data } = await req.outline<{ document: OutlineDocument }[]>("documents.search", { query: q, limit: 15 });
-    return data.map((r) => presentDoc(r.document));
+    return data.map((r) => presentDoc(r.document, req.outlineUrl));
   });
 
   app.get("/outline/collections", async (req) => {
@@ -1259,7 +1405,7 @@ export async function apiRoutes(app: FastifyInstance) {
       collectionId,
       publish: true,
     });
-    const doc = presentDoc(data);
+    const doc = presentDoc(data, req.outlineUrl);
     await tx(async (client) => {
       const row = await one(
         `UPDATE tasks SET outline_doc_id = $2, outline_doc_title = $3, outline_doc_url = $4, updated_at = now()

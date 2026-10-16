@@ -162,6 +162,7 @@
       </div>
     </div>
 
+    {#if !app.isGuest}
     <div class="field">
       <span class="label-text">Document Outline lié</span>
       {#if outlineDoc}
@@ -173,6 +174,7 @@
         <DocPicker onselect={(d) => (outlineDoc = d)} />
       {/if}
     </div>
+    {/if}
 
     {#if sendingToOther}
       <div class="field">

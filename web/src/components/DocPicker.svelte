@@ -2,6 +2,7 @@
   import { api, errorMessage } from "../lib/api";
   import type { OutlineDoc } from "../lib/types";
   import Icon from "./Icon.svelte";
+  import { app } from "../lib/app.svelte";
 
   let { onselect, autofocus = false }: { onselect: (doc: OutlineDoc) => void; autofocus?: boolean } = $props();
 
@@ -35,6 +36,9 @@
   }
 </script>
 
+{#if app.isGuest}
+  <div class="hint">Outline n'est pas accessible aux comptes invités par e-mail.</div>
+{:else}
 <div class="picker">
   <!-- svelte-ignore a11y_autofocus -->
   <input class="input" placeholder="Rechercher un document Outline ou coller son URL…" bind:value={q} {autofocus}
@@ -52,6 +56,7 @@
     </div>
   {/if}
 </div>
+{/if}
 
 <style>
   .picker { position: relative; }

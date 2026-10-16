@@ -350,7 +350,7 @@
                 <button class="btn ghost icon small" title="Délier" onclick={() => linkDoc(null)}><Icon name="unlink" size={16} /></button>
               {/if}
             </div>
-          {:else if perms?.manage}
+          {:else if perms?.manage && !app.isGuest}
             {#if pickingDoc}
               <DocPicker onselect={linkDoc} autofocus />
               <button class="btn ghost small" onclick={() => (pickingDoc = false)}>Annuler</button>

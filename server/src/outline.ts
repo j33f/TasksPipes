@@ -1,3 +1,5 @@
+import dns from "node:dns/promises";
+import net from "node:net";
 import { config } from "./config.js";
 
 export class OutlineError extends Error {
@@ -31,10 +33,63 @@ export interface OAuthTokens {
   expires_in?: number;
 }
 
-/** Calls an Outline RPC-style API method (POST /api/<method>). */
+// ---------------------------------------------------------------------------
+// Outline servers: the configured one, and others people sign in with.
+
+/** Private, loopback, link-local… addresses: never reached on behalf of a user-given server. */
+const PRIVATE = new net.BlockList();
+for (const [a, p] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16],
+  ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 3]] as const) {
+  PRIVATE.addSubnet(a, p, "ipv4");
+}
+for (const [a, p] of [["::", 127], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8]] as const) PRIVATE.addSubnet(a, p, "ipv6");
+
+function isPrivateIp(ip: string): boolean {
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (mapped) return isPrivateIp(mapped[1]);
+  return PRIVATE.check(ip, net.isIPv6(ip) ? "ipv6" : "ipv4");
+}
+
+const isDefault = (instance: string) => instance === config.outlineUrl;
+
+/** Refuses a server whose name points to an internal address (checked on each call, against DNS tricks). */
+async function assertPublicHost(instance: string) {
+  if (config.outlineAllowPrivate) return;
+  const host = new URL(instance).hostname.replace(/^\[|\]$/g, "");
+  const addresses = net.isIP(host) ? [host] : (await dns.lookup(host, { all: true }).catch(() => [])).map((a) => a.address);
+  if (!addresses.length) throw new OutlineError(400, `Serveur introuvable : ${host}`);
+  if (addresses.some(isPrivateIp)) throw new OutlineError(400, "Ce serveur Outline n'est pas autorisé (adresse interne).");
+}
+
+const hostAllowed = (host: string) =>
+  !config.outlineAllowedHosts.length ||
+  config.outlineAllowedHosts.some((h) => (h.startsWith("*.") ? host.endsWith(h.slice(1)) : host === h));
+
+/** Validates a server address typed on the login page; returns its canonical URL (https, no trailing slash). */
+export async function normalizeOutlineUrl(input: unknown): Promise<string> {
+  const raw = typeof input === "string" ? input.trim() : "";
+  if (!raw) return config.outlineUrl;
+  let u: URL;
+  try {
+    u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    throw new OutlineError(400, "Adresse de serveur Outline invalide");
+  }
+  const url = `${u.origin}${u.pathname.replace(/\/+$/, "")}`;
+  if (isDefault(url) || isDefault(u.origin)) return config.outlineUrl;
+  if (u.protocol !== "https:" && !(config.outlineAllowPrivate && u.protocol === "http:")) throw new OutlineError(400, "Le serveur Outline doit être en https://");
+  if (u.username || u.password) throw new OutlineError(400, "Adresse de serveur Outline invalide");
+  if (!hostAllowed(u.hostname)) throw new OutlineError(400, "Ce serveur Outline n'est pas autorisé ici.");
+  await assertPublicHost(url);
+  return url;
+}
+
+/** Calls an Outline RPC-style API method (POST /api/<method>) on a server (the configured one by default). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function outlineApi<T = any>(token: string, method: string, body: object = {}): Promise<{ data: T }> {
-  const res = await fetch(`${config.outlineApiUrl}/api/${method}`, {
+export async function outlineApi<T = any>(token: string, method: string, body: object = {}, instance = config.outlineUrl): Promise<{ data: T }> {
+  if (!isDefault(instance)) await assertPublicHost(instance);
+  const base = isDefault(instance) ? config.outlineApiUrl : instance;
+  const res = await fetch(`${base}/api/${method}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -42,6 +97,10 @@ export async function outlineApi<T = any>(token: string, method: string, body: o
       Accept: "application/json",
     },
     body: JSON.stringify(body),
+    redirect: "error",
+    signal: AbortSignal.timeout(15_000),
+  }).catch((err: Error & { cause?: { message?: string } }) => {
+    throw new OutlineError(502, `Serveur Outline injoignable : ${err.cause?.message ?? err.message}`);
   });
   const json = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string; error?: string; data: T };
   if (!res.ok || json.ok === false) {
@@ -68,8 +127,8 @@ export async function outlineToken(params: Record<string, string>): Promise<OAut
   return json as OAuthTokens;
 }
 
-export function absoluteOutlineUrl(path?: string | null): string | null {
+export function absoluteOutlineUrl(path?: string | null, instance = config.outlineUrl): string | null {
   if (!path) return null;
   if (/^https?:\/\//.test(path)) return path;
-  return `${config.outlineUrl}${path.startsWith("/") ? "" : "/"}${path}`;
+  return `${instance}${path.startsWith("/") ? "" : "/"}${path}`;
 }

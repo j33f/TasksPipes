@@ -28,6 +28,13 @@
     <button class="btn" onclick={() => (creating = true)}><Icon name="plus" size={18} />Nouvelle tâche</button>
   </div>
 
+  {#if app.isGuest && !app.me?.user.totp}
+    <button class="callout warning secure" onclick={() => (app.accountOpen = true)}>
+      <Icon name="shield" />
+      <span><strong>Sécurisez votre compte</strong> : activez la double authentification (Google Authenticator) en plus du lien par e-mail.</span>
+    </button>
+  {/if}
+
   {#if app.personalSpace?.incomingCount}
     <a class="callout info incoming" href={`/spaces/${app.me?.personalSpaceId}?tab=incoming`}>
       <Icon name="inbox" />
@@ -95,5 +102,6 @@
 
 <style>
   .incoming { color: var(--text); align-items: center; }
+  .secure { width: 100%; border: 0; font: inherit; font-size: 14px; color: var(--text); text-align: left; cursor: pointer; align-items: center; }
   .incoming:hover { text-decoration: none; filter: brightness(0.98); }
 </style>

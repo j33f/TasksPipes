@@ -11,8 +11,17 @@ class AppState {
   sidebar = $state<SidebarData>({ mine: [], pinned: [], teams: [] });
   /** Bumped after every mutation so pages reload their data. */
   version = $state(0);
-  toastMessage = $state<{ message: string; type: "info" | "error"; id: number } | null>(null);
+  toastMessage = $state<{ message: string; type: "info" | "error"; id: number; action?: { label: string; run: () => void } } | null>(null);
 
+  /** Account invited by e-mail: no Outline access, may enable TOTP. */
+  isGuest = $derived(this.me?.user.kind === "email");
+  /** "Mon compte" dialog, opened from the sidebar or the dashboard. */
+  accountOpen = $state(false);
+  /** Tasks waiting in my incoming and in my teams' ones. */
+  pendingCount = $derived(
+    this.spaces.filter((s) => s.myRole && (s.id === this.me?.personalSpaceId || s.kind === "team"))
+      .reduce((n, s) => n + (s.incomingCount ?? 0), 0)
+  );
   personalSpace = $derived(this.spaces.find((s) => s.id === this.me?.personalSpaceId) ?? null);
   myTeams = $derived(this.spaces.filter((s) => s.kind === "team" && s.myRole));
   otherTeams = $derived(this.spaces.filter((s) => s.kind === "team" && !s.myRole));
@@ -111,10 +120,10 @@ class AppState {
   }
 
   #toastTimer: ReturnType<typeof setTimeout> | undefined;
-  toast(message: string, type: "info" | "error" = "info") {
-    this.toastMessage = { message, type, id: Date.now() };
+  toast(message: string, type: "info" | "error" = "info", action?: { label: string; run: () => void }) {
+    this.toastMessage = { message, type, id: Date.now(), action };
     clearTimeout(this.#toastTimer);
-    this.#toastTimer = setTimeout(() => (this.toastMessage = null), 3500);
+    this.#toastTimer = setTimeout(() => (this.toastMessage = null), action ? 8000 : 3500);
   }
 
   openTask(id: string | null) {

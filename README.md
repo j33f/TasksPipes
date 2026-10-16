@@ -44,6 +44,17 @@ connexion via l'API Outline, documents Outline liés aux tâches, interface repr
   catégorie. Seul·e l'auteur·rice le modifie ; un type utilisé ne se supprime pas, et le type d'un champ enregistré ne change plus.
 - **Menu** : « Moi » (tableau de bord, mes tâches, prochaine action, incoming, mes pipes), épinglés, mes équipes et leurs
   pipes, autres équipes et personnes (repliées), modèles.
+- **Invitations par e-mail** : on peut inviter des personnes sans compte Outline (formateurs, partenaires…). Elles se
+  connectent par un lien à usage unique reçu par e-mail (7 jours pour une invitation, 20 minutes pour un lien demandé
+  depuis la page de connexion), et peuvent ajouter une double authentification TOTP (Google Authenticator), demandée
+  ensuite à chaque connexion (5 essais par lien). Un compte invité ne voit que la ou les personnes qui l'ont invité et
+  celles qu'il a invitées ; les comptes Outline ne voient pas les comptes invités, sauf ceux qu'ils ont invités eux-mêmes.
+  Seule exception : dans une équipe, la liste de ses membres. Les comptes invités ne voient que leurs équipes et n'ont
+  pas accès à Outline.
+- **Temps réel** : une tâche envoyée ou refusée apparaît aussitôt chez son ou ses destinataires (WebSocket), avec une
+  notification « Voir ». La connexion se ferme après 5 minutes d'inactivité ou 1 minute en arrière-plan, et se rouvre
+  au retour sur la page (les données sont alors rechargées). Le nombre de tâches en attente s'affiche dans le titre de
+  l'onglet et, sur mobile, en pastille sur le bouton du menu.
 - **Incoming bucket** pour chaque personne et chaque équipe : il reçoit les tâches envoyées par d'autres.
   Un membre peut les **accepter** (choix du pipe et de l'état) ou les **refuser en donnant une raison** : la tâche
   revient alors dans l'incoming de la personne qui l'a envoyée.
@@ -69,6 +80,13 @@ connexion via l'API Outline, documents Outline liés aux tâches, interface repr
    - **OAuth (recommandé)** : dans Outline, *Paramètres › Applications › Nouvelle application*, avec l'URL de
      redirection `${APP_URL}/auth/outline/callback`. Renseigner `OUTLINE_OAUTH_CLIENT_ID` et `OUTLINE_OAUTH_CLIENT_SECRET`.
    - **Clé API** (`ALLOW_API_KEY_LOGIN=true`) : chaque personne colle une clé API personnelle créée dans Outline.
+   - **Autres serveurs Outline** : sur la page de connexion, on peut ajouter l'adresse d'un autre serveur Outline et le
+     choisir (liste gardée dans le navigateur) ; la connexion se fait alors par clé API sur ce serveur, et le lien vers
+     la page de création de clé pointe vers lui. Les comptes d'un serveur ne voient ni les personnes ni les équipes d'un
+     autre. Seuls les serveurs publics en https sont acceptés (`OUTLINE_ALLOW_PRIVATE=true` pour un serveur interne) ;
+     `OUTLINE_ALLOWED_HOSTS` en restreint la liste. OAuth reste réservé au serveur configuré.
+   - **E-mail** (comptes invités) : renseigner `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` et `MAIL_FROM` pour envoyer
+     les invitations et les liens de connexion. Sans SMTP, une invitation affiche le lien à transmettre soi-même.
 3. `docker compose up -d --build`, puis ouvrir `APP_URL`.
 
 Placer l'application derrière un reverse proxy HTTPS en production : avec un `APP_URL` en `https://`, les cookies sont `Secure`.
@@ -100,5 +118,6 @@ Vérifications : `npm run typecheck` (server), `npm run check` (web, svelte-chec
 | Modifier titre/description | membres, ou l'auteur·rice d'une tâche située dans un pipe open |
 | Refuser | membres de l'espace dont l'incoming contient la tâche (sauf si on se l'est envoyée soi-même) |
 | Gérer une équipe (nom, membres, rôles, suppression) | admins de l'équipe |
+| Ajouter quelqu'un à une équipe, lui envoyer une tâche | admins de l'équipe / membres, parmi les personnes qu'on voit |
 
 Les tâches ne se suppriment pas (pour garder l'historique) : on les passe en *Abandonné*.

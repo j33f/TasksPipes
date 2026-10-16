@@ -9,10 +9,12 @@ export interface UserRef {
 export interface User extends UserRef {
   spaceId: string;
   active: boolean;
+  /** Invited by e-mail. */
+  guest: boolean;
 }
 
 export interface Me {
-  user: UserRef & { email: string | null };
+  user: UserRef & { email: string | null; kind: "outline" | "email"; totp: boolean };
   personalSpaceId: string;
   outlineUrl: string;
 }
@@ -26,6 +28,7 @@ export interface SpaceSummary {
   color: string | null;
   avatarUrl: string | null;
   active: boolean;
+  guest: boolean;
   myRole: "admin" | "member" | null;
   memberCount: number;
   incomingCount: number | null;
@@ -226,4 +229,14 @@ export interface PipeType extends CustomMeta {
 
 export interface OutlineDoc extends DocRef {
   updatedAt?: string;
+}
+
+export interface Invitation {
+  id: string;
+  name: string;
+  /** Only for the people I invited. */
+  email: string | null;
+  active: boolean;
+  invitedByMe: boolean;
+  createdAt: string;
 }

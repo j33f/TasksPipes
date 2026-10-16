@@ -20,11 +20,27 @@ export const config = {
   oauthClientSecret,
   oauthEnabled: Boolean(oauthClientId && oauthClientSecret),
   allowApiKeyLogin: (process.env.ALLOW_API_KEY_LOGIN ?? "true") !== "false",
-  /** Optional: restrict login to a single Outline workspace (team id). */
+  /**
+   * Other Outline servers people may sign in with (host names, "*.example.com" allowed).
+   * Empty: any public https server.
+   */
+  outlineAllowedHosts: (process.env.OUTLINE_ALLOWED_HOSTS || "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean),
+  /** Lets other Outline servers be on an internal address or in plain http (self-hosting, tests). */
+  outlineAllowPrivate: process.env.OUTLINE_ALLOW_PRIVATE === "true",
+  /** Optional: restrict login to a single Outline workspace (team id) of the configured server. */
   outlineTeamId: process.env.OUTLINE_TEAM_ID || "",
   sessionDays: Number(process.env.SESSION_DAYS || 30),
   secureCookies: appUrl.startsWith("https://"),
   webDir: process.env.WEB_DIR || "",
+  /** Sending e-mails (invitations, sign-in links). Without SMTP_HOST, nothing is sent. */
+  smtp: {
+    host: process.env.SMTP_HOST || "",
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+    from: process.env.MAIL_FROM || process.env.SMTP_USER || "",
+  },
 };
 
 if (!config.outlineUrl) throw new Error("OUTLINE_URL is required");

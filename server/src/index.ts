@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { migrate, pool } from "./db.js";
 import { authPlugin, cleanupSessions } from "./auth.js";
 import { apiRoutes } from "./routes.js";
+import { realtime } from "./realtime.js";
 import { HttpError } from "./errors.js";
 import { OutlineError } from "./outline.js";
 
@@ -24,7 +25,7 @@ app.setErrorHandler((err: FastifyError, req, reply) => {
   if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: err.message });
   if (err instanceof OutlineError) {
     req.log.warn({ err }, "Outline API error");
-    return reply.code(err.status === 401 ? 401 : 502).send({ error: `Outline : ${err.message}` });
+    return reply.code(err.status === 401 || err.status === 403 ? err.status : 502).send({ error: `Outline : ${err.message}` });
   }
   if ((err as { code?: string }).code === "22P02") return reply.code(400).send({ error: "Paramètre invalide" });
   if (err.validation || (err.statusCode && err.statusCode < 500)) {
@@ -36,6 +37,7 @@ app.setErrorHandler((err: FastifyError, req, reply) => {
 
 await app.register(cookie);
 await app.register(authPlugin);
+await app.register(realtime);
 await app.register(apiRoutes, { prefix: "/api" });
 
 app.get("/healthz", async () => {

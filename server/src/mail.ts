@@ -1,0 +1,28 @@
+import nodemailer from "nodemailer";
+import { config } from "./config.js";
+
+export const mailEnabled = Boolean(config.smtp.host && config.smtp.from);
+
+const transport = mailEnabled
+  ? nodemailer.createTransport({
+      host: config.smtp.host,
+      port: config.smtp.port,
+      secure: config.smtp.secure,
+      auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined,
+    })
+  : null;
+
+const escape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/** Sends a short e-mail with one call-to-action link. Returns false when e-mail is not configured. */
+export async function sendLinkMail(to: string, subject: string, paragraphs: string[], action: { label: string; url: string }) {
+  if (!transport) return false;
+  const text = `${paragraphs.join("\n\n")}\n\n${action.label} : ${action.url}\n\n— TasksPipes`;
+  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.5;color:#111319;max-width:520px">
+${paragraphs.map((p) => `<p>${escape(p)}</p>`).join("\n")}
+<p style="margin:24px 0"><a href="${escape(action.url)}" style="background:#0366d6;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">${escape(action.label)}</a></p>
+<p style="color:#66778F;font-size:13px">Ou copiez ce lien : ${escape(action.url)}</p>
+<p style="color:#66778F;font-size:13px">— TasksPipes</p></div>`;
+  await transport.sendMail({ from: config.smtp.from, to, subject, text, html });
+  return true;
+}

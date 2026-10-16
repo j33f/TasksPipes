@@ -1,11 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { app } from "./lib/app.svelte";
+  import { live } from "./lib/realtime.svelte";
   import { interceptLinks, navigate, router } from "./lib/router.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import TaskModal from "./components/TaskModal.svelte";
   import Icon from "./components/Icon.svelte";
   import Login from "./pages/Login.svelte";
+  import MagicLogin from "./pages/MagicLogin.svelte";
+  import AccountModal from "./components/AccountModal.svelte";
   import Home from "./pages/Home.svelte";
   import SpacePage from "./pages/SpacePage.svelte";
   import PipePage from "./pages/PipePage.svelte";
@@ -19,16 +22,32 @@
     app.init();
   });
 
-  // Shared data (spaces, users) is loaded on login and polled for incoming counts.
+  // Shared data (spaces, users) is loaded on login; then live updates keep it fresh.
+  // Polling only stands in while the live connection is down and the page is in use.
   $effect(() => {
     if (!app.me) return;
     app.loadShared().catch(() => {});
-    const timer = setInterval(() => app.loadShared().catch(() => {}), 30_000);
-    return () => clearInterval(timer);
+    live.start();
+    const timer = setInterval(() => {
+      if (!live.connected && !live.idle && !document.hidden) app.loadShared().catch(() => {});
+    }, 30_000);
+    return () => {
+      clearInterval(timer);
+      live.stop();
+    };
+  });
+
+  // Pending tasks: in the tab title and, where supported, on the installed app's icon.
+  $effect(() => {
+    const n = app.me ? app.pendingCount : 0;
+    document.title = n ? `(${n}) TasksPipes` : "TasksPipes";
+    const nav = navigator as Navigator & { setAppBadge?: (n: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+    (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
   });
 
   // Logged out users are sent to the login page, logged in users away from it.
   $effect(() => {
+    if (router.path === "/login/magic") return;
     if (app.me === null && router.path !== "/login") navigate(`/login${router.search}`, { replace: true });
     if (app.me && router.path === "/login") navigate("/", { replace: true });
   });
@@ -54,14 +73,22 @@
 
 <svelte:document onclick={interceptLinks} />
 
-{#if app.me === null && router.path === "/login"}
+{#if router.path === "/login/magic"}
+  {#if app.me !== undefined}<MagicLogin />{/if}
+{:else if app.me === null && router.path === "/login"}
   <Login />
 {:else if app.me}
   <div class="layout">
     <Sidebar open={navOpen} onclose={() => (navOpen = false)} />
     <main class="main">
       <div class="mobile-bar">
-        <button class="btn ghost icon" onclick={() => (navOpen = !navOpen)} aria-label="Menu"><Icon name="menu" /></button>
+        <button class="btn ghost icon menu-btn" onclick={() => (navOpen = !navOpen)}
+          aria-label={app.pendingCount ? `Menu, ${app.pendingCount} tâche(s) en attente` : "Menu"}>
+          <Icon name="menu" />
+          {#if app.pendingCount}
+            {#key live.arrivals}<span class="pastille" class:pulse={live.arrivals > 0}>{app.pendingCount > 99 ? "99+" : app.pendingCount}</span>{/key}
+          {/if}
+        </button>
         <strong>TasksPipes</strong>
       </div>
       {#if route.name === "home"}
@@ -81,6 +108,7 @@
       {/if}
     </main>
   </div>
+  {#if app.accountOpen}<AccountModal onclose={() => (app.accountOpen = false)} />{/if}
   {#if taskId}
     {#key taskId}<TaskModal id={taskId} onclose={() => app.openTask(null)} />{/key}
   {/if}
@@ -88,6 +116,12 @@
 
 {#if app.toastMessage}
   {#key app.toastMessage.id}
-    <div class="toast {app.toastMessage.type}" role="status">{app.toastMessage.message}</div>
+    <div class="toast {app.toastMessage.type}" role="status">
+      <span>{app.toastMessage.message}</span>
+      {#if app.toastMessage.action}
+        {@const action = app.toastMessage.action}
+        <button class="btn small" onclick={() => { action.run(); app.toastMessage = null; }}>{action.label}</button>
+      {/if}
+    </div>
   {/key}
 {/if}

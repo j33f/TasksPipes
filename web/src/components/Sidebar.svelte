@@ -5,6 +5,7 @@
   import SpaceIcon from "./SpaceIcon.svelte";
   import Icon from "./Icon.svelte";
   import TeamModal from "./TeamModal.svelte";
+  import InviteModal from "./InviteModal.svelte";
   import PipeIcon from "./PipeIcon.svelte";
   import PipeModal from "./PipeModal.svelte";
   import NewTaskModal from "./NewTaskModal.svelte";
@@ -17,6 +18,7 @@
 
   let filter = $state("");
   let showNewTeam = $state(false);
+  let showInvite = $state(false);
 
   const isActive = (href: string) => router.path + router.search === href || router.path === href;
   const matches = (name: string) => name.toLowerCase().includes(filter.trim().toLowerCase());
@@ -193,12 +195,13 @@
     {#if app.people.length}
       {@const people = app.people.filter((s) => matches(s.name))}
       <div class="sidebar-section">
-        {@render foldTitle("people", "Personnes", people.length)}
+        {@render foldTitle("people", "Personnes", people.length, () => (showInvite = true), "Inviter par e-mail")}
         {#if isOpen("people")}
           {#each people as s (s.id)}
             <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}
               href={`/spaces/${s.id}`} title={s.active ? s.name : `${s.name} (ne s'est pas encore connecté·e)`}>
               <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
+              {#if s.guest}<span class="guest" title="Invité·e par e-mail"><Icon name="mail" size={14} /></span>{/if}
               {#if s.pipeCount}<span class="count neutral">{s.pipeCount}</span>{/if}
             </a>
           {/each}
@@ -215,8 +218,10 @@
 
   <div class="sidebar-footer">
     <div class="sidebar-link user">
-      <Avatar user={app.me?.user} size={24} />
-      <span class="label">{app.me?.user.name}</span>
+      <button class="account" title="Mon compte, invitations" onclick={() => (app.accountOpen = true)}>
+        <Avatar user={app.me?.user} size={24} />
+        <span class="label">{app.me?.user.name}</span>
+      </button>
       <button class="btn ghost icon small" title="Se déconnecter" onclick={() => app.logout()}>
         <Icon name="logout" size={18} />
       </button>
@@ -229,12 +234,17 @@
     title={isOpen(key) ? "Replier" : "Déplier"} onclick={() => toggle(key)}><Icon name="chevron" size={14} /></button>
 {/snippet}
 
-{#snippet foldTitle(key: string, label: string, count: number)}
-  <button class="sidebar-section-title fold" aria-expanded={isOpen(key)} onclick={() => toggle(key)}>
-    <span class="disclosure" class:open={isOpen(key)}><Icon name="chevron" size={12} /></span>
-    <span class="grow">{label}</span>
-    {#if !isOpen(key)}<span class="fold-count">{count}</span>{/if}
-  </button>
+{#snippet foldTitle(key: string, label: string, count: number, onadd?: () => void, addTitle?: string)}
+  <div class="fold-row">
+    <button class="sidebar-section-title fold" aria-expanded={isOpen(key)} onclick={() => toggle(key)}>
+      <span class="disclosure" class:open={isOpen(key)}><Icon name="chevron" size={12} /></span>
+      <span class="grow">{label}</span>
+      {#if !isOpen(key)}<span class="fold-count">{count}</span>{/if}
+    </button>
+    {#if onadd}
+      <button class="btn ghost icon small" title={addTitle} onclick={onadd}><Icon name="plus" size={16} /></button>
+    {/if}
+  </div>
 {/snippet}
 
 {#snippet pipeLink(p: SidebarPipe, spaceName: string | null, nested: boolean)}
@@ -292,6 +302,8 @@
 {/if}
 {#if editing}<PipeModal spaceId={editing.spaceId} pipe={editing} onclose={() => (editing = null)} />{/if}
 
+{#if showInvite}<InviteModal onclose={() => (showInvite = false)} />{/if}
+
 {#if showNewTeam}
   <TeamModal onclose={() => (showNewTeam = false)} />
 {/if}
@@ -309,6 +321,14 @@
   .fold:hover { color: var(--text); }
   .fold .disclosure { width: 20px; height: 20px; margin-right: 0; }
   .fold .grow { flex: 1; text-align: left; }
+  .fold-row { display: flex; align-items: center; }
+  .fold-row .fold { flex: 1; min-width: 0; }
+  .guest { color: var(--text-tertiary); display: flex; }
+  .account {
+    display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; border: 0; background: none; padding: 2px 4px;
+    margin-left: -4px; border-radius: var(--radius); font: inherit; color: inherit; cursor: pointer; text-align: left;
+  }
+  .account:hover { background: var(--sidebar-hover); }
   .fold-count { font-size: 12px; padding-right: 8px; }
   .disclosure-space { width: 22px; flex-shrink: 0; }
   .sidebar-section-title {
