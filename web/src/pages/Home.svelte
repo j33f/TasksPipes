@@ -56,7 +56,7 @@
   {/each}
 
   {#if app.isGuest && !app.me?.user.totp}
-    <button class="callout warning secure" onclick={() => (app.accountOpen = true)}>
+    <button class="callout warning secure" onclick={() => (app.dialog = "settings")}>
       <Icon name="shield" />
       <span>{t("Secure your account: turn on two-factor authentication (Google Authenticator) besides the e-mail link.")}</span>
     </button>

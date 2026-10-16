@@ -96,7 +96,7 @@ waiting tasks shows in the tab title and, on mobile, as a badge on the menu butt
 
 ## Calendar
 
-**My account** gives a personal link to subscribe to your tasks with a due date in Google Calendar, Apple Calendar or
+**Calendar**, in the account menu, gives a personal link to subscribe to your tasks with a due date in Google Calendar, Apple Calendar or
 any calendar app. Each task is an all-day event with a link back to it, and open tasks carry reminders at 9:00 five
 days before, the day before and on the due date. The link can be renewed if it leaks.
 
@@ -112,7 +112,7 @@ shrunk in the browser. They have no access to Outline documents.
 
 ## Invitations and connections
 
-From **My account** (or the *People* section of the sidebar), invite someone by e-mail, optionally into one of your
+From **Invite people** in the account menu (or the *People* section of the sidebar), invite someone by e-mail, optionally into one of your
 teams:
 
 - **a new address**: an e-mail account is created and gets a sign-in link valid for 7 days; you are connected at once;
@@ -128,10 +128,16 @@ only see their own teams.
 
 Invitations can be turned off for the whole instance (`ALLOW_EMAIL_INVITATIONS=false`).
 
-## Personal settings
+## Account menu and settings
 
-The interface is in English or French, following the browser unless chosen in **My account**, where the theme can
-also be set to automatic, light or dark.
+Your name at the bottom of the sidebar opens a menu, like Outline's:
+
+- **Invite people** — invite someone by e-mail (when invitations are on);
+- **Settings** — language (English or French, following the browser unless chosen), theme (automatic, light or
+  dark), name and picture of e-mail accounts, two-factor authentication, invitations and requests to connect;
+- **Calendar** — your calendar subscription link;
+- **About** — the version, a link to the source code on GitHub and the license;
+- **Sign out**.
 
 ## Access rules
 

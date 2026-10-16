@@ -109,7 +109,7 @@ cannot be used to find out who uses TasksPipes.
 
 ## Calendar subscription
 
-Each person can subscribe to their tasks with a due date from **My account**. The feed is served at
+Each person can subscribe to their tasks with a due date from **Calendar** in the account menu. The feed is served at
 `<APP_URL>/cal/<token>.ics`, outside the API, because calendar apps fetch it without a session: the token is its
 only credential. It can be renewed from the same place, and it is masked in the logs.
 

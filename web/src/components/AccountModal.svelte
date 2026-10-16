@@ -21,31 +21,6 @@
   let busy = $state(false);
   let error = $state("");
 
-  // Calendar subscription link (made on first display).
-  let calendar = $state<string | null>(null);
-  api.get<{ url: string }>("/me/calendar").then((r) => (calendar = r.url)).catch(() => {});
-  const webcal = $derived(calendar?.replace(/^https?:/, "webcal:") ?? "");
-  const googleUrl = $derived(`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}`);
-
-  async function copyCalendar() {
-    try {
-      await navigator.clipboard.writeText(calendar!);
-      app.toast(t("Link copied"));
-    } catch {
-      app.toast(t("Could not copy: select the link"), "error");
-    }
-  }
-
-  async function resetCalendar() {
-    if (!confirm(t("Make a new link? Calendars subscribed with the current one will stop showing your tasks."))) return;
-    try {
-      calendar = (await api.post<{ url: string }>("/me/calendar/reset")).url;
-      app.toast(t("New calendar link made"));
-    } catch (err) {
-      error = errorMessage(err);
-    }
-  }
-
   const loadInvitations = () => api.get<Invitation[]>("/invitations").then((r) => (invitations = r)).catch(() => {});
   loadInvitations();
 
@@ -137,7 +112,7 @@
       .catch((err) => app.toast(errorMessage(err), "error"));
 </script>
 
-<Modal title={t("My account")} {onclose}>
+<Modal title={t("Settings")} {onclose}>
   <div class="profile">
     {#if app.isGuest}
       <button class="avatar-btn" title={t("Change the picture")} onclick={() => picking?.click()}>
@@ -185,25 +160,6 @@
         </div>
       </div>
     </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title"><Icon name="calendar" />{t("Calendar")}</div>
-    <p class="small">{t("Subscribe to your tasks with a due date in Google Calendar, Apple Calendar or any calendar app. The link is personal: keep it to yourself.")}</p>
-    {#if calendar}
-      <div class="row">
-        <input class="input cal-url" readonly value={calendar} aria-label={t("Calendar link")}
-          onfocus={(e) => (e.currentTarget as HTMLInputElement).select()} />
-        <button class="btn neutral small" onclick={copyCalendar}>{t("Copy")}</button>
-      </div>
-      <div class="row wrap cal-actions">
-        <a class="btn small" href={googleUrl} target="_blank" rel="noreferrer">{t("Add to Google Calendar")}</a>
-        <a class="btn small neutral" href={webcal}>{t("Add to Apple Calendar")}</a>
-        <span class="spacer"></span>
-        <button class="btn ghost small" onclick={resetCalendar}>{t("New link…")}</button>
-      </div>
-      <p class="hint">{t("Calendars refresh at their own pace: within the hour for Apple, up to a day for Google.")}</p>
-    {/if}
   </div>
 
   {#if app.isGuest}
@@ -309,8 +265,6 @@
   .qr-row img { border-radius: 6px; background: #fff; }
   .secret { display: block; margin-top: 6px; font-size: 14px; word-break: break-all; color: var(--text); }
   .code { max-width: 140px; font-variant-numeric: tabular-nums; letter-spacing: 0.1em; }
-  .cal-url { font-size: 13px; min-height: 30px; padding: 4px 8px; }
-  .cal-actions { margin-top: 8px; }
   .prefs { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
   .pref .input { min-height: 32px; padding: 4px 8px; font-size: 14px; width: auto; }
   .seg { display: inline-flex; border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; }

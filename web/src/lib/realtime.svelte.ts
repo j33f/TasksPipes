@@ -116,7 +116,7 @@ class Live {
   #handle(e: LiveEvent) {
     app.refresh();
     if (e.type === "connection.request") {
-      return app.toast(t("{name} wants to connect with you", { name: e.by ?? "" }), "info", { label: t("View"), run: () => (app.accountOpen = true) });
+      return app.toast(t("{name} wants to connect with you", { name: e.by ?? "" }), "info", { label: t("View"), run: () => (app.dialog = "settings") });
     }
     if (e.type === "connection.accepted") return app.toast(t("{name} accepted to connect with you", { name: e.by ?? "" }));
     if (e.type === "incoming.changed" || !e.task) return;

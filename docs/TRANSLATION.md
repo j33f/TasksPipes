@@ -1,6 +1,6 @@
 # Translation
 
-TasksPipes is available in English and French. The language follows the browser, unless chosen in **My account**.
+TasksPipes is available in English and French. The language follows the browser, unless chosen in **Settings** (account menu).
 
 ## How it works
 

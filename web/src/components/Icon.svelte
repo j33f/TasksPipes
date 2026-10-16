@@ -48,6 +48,7 @@
     play: "M8 5.5v13l10.5-6.5z",
     grip: "M9.5 6.5h.01M9.5 12h.01M9.5 17.5h.01M14.5 6.5h.01M14.5 12h.01M14.5 17.5h.01",
     skip: "M6 6l7 6-7 6zM17 6v12",
+    info: "M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 11v5M12 8h.01",
     history: "M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4M12 8v4l3 2",
   } as const;
   export type IconName = keyof typeof PATHS;

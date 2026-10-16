@@ -10,6 +10,9 @@
   import Login from "./pages/Login.svelte";
   import MagicLogin from "./pages/MagicLogin.svelte";
   import AccountModal from "./components/AccountModal.svelte";
+  import CalendarModal from "./components/CalendarModal.svelte";
+  import AboutModal from "./components/AboutModal.svelte";
+  import InviteModal from "./components/InviteModal.svelte";
   import Home from "./pages/Home.svelte";
   import SpacePage from "./pages/SpacePage.svelte";
   import PipePage from "./pages/PipePage.svelte";
@@ -132,7 +135,10 @@
       {/if}
     </main>
   </div>
-  {#if app.accountOpen}<AccountModal onclose={() => (app.accountOpen = false)} />{/if}
+  {#if app.dialog === "settings"}<AccountModal onclose={() => (app.dialog = null)} />
+  {:else if app.dialog === "calendar"}<CalendarModal onclose={() => (app.dialog = null)} />
+  {:else if app.dialog === "about"}<AboutModal onclose={() => (app.dialog = null)} />
+  {:else if app.dialog === "invite"}<InviteModal onclose={() => (app.dialog = null)} />{/if}
   {#if taskId}
     {#key taskId}<TaskModal id={taskId} onclose={() => app.openTask(null)} />{/key}
   {/if}

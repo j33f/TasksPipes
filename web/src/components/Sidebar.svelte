@@ -58,7 +58,19 @@
     menu = { pipe, style };
   }
 
+  // Menu of the signed-in person (like Outline's): invite, settings, calendar, about, sign out.
+  let userMenu = $state(false);
+  let userMenuEl = $state<HTMLElement>();
+  function openDialog(d: "invite" | "settings" | "calendar" | "about") {
+    userMenu = false;
+    app.dialog = d;
+    onclose();
+  }
+
   function closeMenuOutside(e: MouseEvent) {
+    if (userMenu && userMenuEl && !userMenuEl.contains(e.target as Node) && !(e.target as Element).closest?.("[data-user-menu]")) {
+      userMenu = false;
+    }
     if (menu && menuEl && !menuEl.contains(e.target as Node) && !(e.target as Element).closest?.("[data-menu-trigger]")) menu = null;
   }
 
@@ -218,15 +230,24 @@
   </div>
 
   <div class="sidebar-footer">
-    <div class="sidebar-link user">
-      <button class="account" title={t("My account, invitations")} onclick={() => (app.accountOpen = true)}>
-        <Avatar user={app.me?.user} size={24} />
-        <span class="label">{app.me?.user.name}</span>
-      </button>
-      <button class="btn ghost icon small" title={t("Sign out")} onclick={() => app.logout()}>
-        <Icon name="logout" size={18} />
-      </button>
-    </div>
+    {#if userMenu}
+      <div class="user-menu" role="menu" bind:this={userMenuEl}>
+        {#if app.me?.features.invitations}
+          <button class="menu-item" role="menuitem" onclick={() => openDialog("invite")}><Icon name="mail" size={16} />{t("Invite people")}</button>
+        {/if}
+        <button class="menu-item" role="menuitem" onclick={() => openDialog("settings")}><Icon name="settings" size={16} />{t("Settings")}</button>
+        <button class="menu-item" role="menuitem" onclick={() => openDialog("calendar")}><Icon name="calendar" size={16} />{t("Calendar")}</button>
+        <button class="menu-item" role="menuitem" onclick={() => openDialog("about")}><Icon name="info" size={16} />{t("About")}</button>
+        <div class="menu-sep"></div>
+        <button class="menu-item" role="menuitem" onclick={() => { userMenu = false; app.logout(); }}><Icon name="logout" size={16} />{t("Sign out")}</button>
+      </div>
+    {/if}
+    <button class="sidebar-link user account" class:menu-open={userMenu} data-user-menu aria-haspopup="menu" aria-expanded={userMenu}
+      title={t("Account menu")} onclick={() => (userMenu = !userMenu)}>
+      <Avatar user={app.me?.user} size={24} />
+      <span class="label">{app.me?.user.name}</span>
+      <Icon name="more" size={16} />
+    </button>
   </div>
 </nav>
 
@@ -271,7 +292,7 @@
   {/if}
 {/snippet}
 
-<svelte:window onmousedown={closeMenuOutside} onkeydown={(e) => e.key === "Escape" && (menu = null)} onresize={() => (menu = null)} />
+<svelte:window onmousedown={closeMenuOutside} onkeydown={(e) => e.key === "Escape" && ((menu = null), (userMenu = false))} onresize={() => (menu = null)} />
 
 {#if menu}
   {@const p = menu.pipe}
@@ -325,11 +346,13 @@
   .fold-row { display: flex; align-items: center; }
   .fold-row .fold { flex: 1; min-width: 0; }
   .guest { color: var(--text-tertiary); display: flex; }
-  .account {
-    display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; border: 0; background: none; padding: 2px 4px;
-    margin-left: -4px; border-radius: var(--radius); font: inherit; color: inherit; cursor: pointer; text-align: left;
+  .sidebar-footer { position: relative; }
+  .sidebar-link.account { color: var(--sidebar-text); }
+  .sidebar-link.account:hover, .sidebar-link.account.menu-open { background: var(--sidebar-hover); color: var(--text); }
+  .user-menu {
+    position: absolute; left: 8px; right: 8px; bottom: calc(100% - 4px); z-index: 60; padding: 6px; border-radius: 8px;
+    background: var(--modal-background); box-shadow: var(--menu-shadow);
   }
-  .account:hover { background: var(--sidebar-hover); }
   .fold-count { font-size: 12px; padding-right: 8px; }
   .disclosure-space { width: 22px; flex-shrink: 0; }
   .sidebar-section-title {
@@ -343,7 +366,6 @@
   }
   .sidebar-link:hover { background: var(--sidebar-hover); text-decoration: none; color: var(--text); }
   .sidebar-link.active { background: var(--sidebar-active); color: var(--text); }
-  .sidebar-link.user:hover { background: none; }
   .has-disclosure { padding-left: 0; gap: 0; }
   .has-disclosure .row-link { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: inherit; text-decoration: none; padding: 0 0 0 2px; }
   .disclosure {
