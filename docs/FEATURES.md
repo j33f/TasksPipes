@@ -184,6 +184,12 @@ Your name at the bottom of the sidebar opens a menu, like Outline's:
 - **About** — the version, a link to the source code on GitHub and the license;
 - **Sign out**.
 
+## Privacy
+
+The app's styles, scripts and font (Inter) are served by TasksPipes itself, so opening the app sends no visitor's
+address to a third party. The only other server the browser reaches is your Outline server, for the profile pictures
+of Outline accounts; links you click (Outline documents, France Compétences pages…) open other sites, of course.
+
 ## Access rules
 
 | Action | Who |
