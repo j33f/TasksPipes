@@ -221,7 +221,6 @@
 </Modal>
 
 <style>
-  .editor { padding: 24px 28px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .hint.top { margin: 0 0 8px; }
   .hint.warn { color: var(--warning); }
@@ -247,7 +246,6 @@
   .check { display: flex; gap: 8px; align-items: center; font-size: 14px; margin: 4px 0; }
   textarea.input { min-height: 90px; }
   @media (max-width: 700px) {
-    .editor { padding: 20px 16px; }
     .grid2 { grid-template-columns: 1fr; }
     .col-row .status { width: 120px; }
   }

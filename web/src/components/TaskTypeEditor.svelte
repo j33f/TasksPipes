@@ -203,7 +203,6 @@
 </Modal>
 
 <style>
-  .editor { padding: 24px 28px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr); gap: 24px; }
   .preview { background: var(--background-secondary); border-radius: 8px; padding: 16px; align-self: start; position: sticky; top: 0; }
@@ -220,7 +219,6 @@
   .up { display: flex; transform: rotate(-90deg); }
   .down { display: flex; transform: rotate(90deg); }
   @media (max-width: 800px) {
-    .editor { padding: 20px 16px; }
     .layout { grid-template-columns: 1fr; }
     .preview { position: static; }
   }

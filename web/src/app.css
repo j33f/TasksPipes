@@ -240,11 +240,21 @@ a.card:hover { text-decoration: none; box-shadow: var(--card-shadow), 0 4px 12px
 /* ---------- Modal ---------- */
 .modal-backdrop {
   position: fixed; inset: 0; background: var(--modal-backdrop); z-index: 100;
-  display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; overflow-y: auto;
+  display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px 0; overflow-y: auto;
   animation: fade 120ms ease;
 }
-.modal { background: var(--modal-background); border-radius: 12px; box-shadow: var(--modal-shadow); width: 100%; max-width: 560px; padding: 24px; position: relative; }
-.modal.large { max-width: 1000px; padding: 0; }
+/* The bottom margin is the dialog's own: a scrolling container's bottom padding is dropped by some browsers. */
+.modal {
+  background: var(--modal-background); border-radius: 12px; box-shadow: var(--modal-shadow); width: 100%; max-width: 560px;
+  padding: 24px; position: relative; flex-shrink: 0; margin-bottom: 6vh;
+}
+.modal.large { max-width: 1000px; }
+.modal.flush { padding: 0; }
+@media (max-width: 600px) {
+  .modal-backdrop { padding: 12px 10px 0; }
+  .modal { padding: 20px 16px; margin-bottom: 12px; }
+  .modal.flush { padding: 0; }
+}
 .modal-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; padding-right: 32px; }
 .modal-close { position: absolute; top: 14px; right: 14px; z-index: 1; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }

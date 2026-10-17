@@ -158,7 +158,7 @@
   const due = $derived(task ? dueState(task.dueDate, task.status) : "");
 </script>
 
-<Modal large {onclose}>
+<Modal large flush {onclose}>
   {#if loadError}
     <div class="pad"><div class="callout danger">{loadError}</div></div>
   {:else if !task}
