@@ -11,6 +11,8 @@ import { authPlugin } from "./auth.js";
 import { apiRoutes, gitWebhooks } from "./routes.js";
 import { realtime } from "./realtime.js";
 import { calendarRoutes } from "./calendar.js";
+import { notificationRoutes } from "./notifications.js";
+import { closeRateLimits } from "./rate-limit.js";
 import { HttpError } from "./errors.js";
 import { OutlineError } from "./outline.js";
 import { localeOf, tr } from "./i18n.js";
@@ -70,8 +72,11 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   await app.register(authPlugin);
   await app.register(realtime);
   await app.register(calendarRoutes);
+  await app.register(notificationRoutes);
   await app.register(apiRoutes, { prefix: "/api" });
   await app.register(gitWebhooks);
+
+  app.addHook("onClose", closeRateLimits);
 
   app.get("/healthz", async () => {
     await pool.query("SELECT 1");

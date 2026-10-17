@@ -5,7 +5,7 @@ TasksPipes is tested with [Vitest](https://vitest.dev) on both sides, at three l
 | Suite | Where | What it covers | Needs |
 | --- | --- | --- | --- |
 | Server unit tests | `server/src/**/*.test.ts` | Pure modules: TOTP (RFC 6238 vectors), field validation, designer rules, the catalog and column resolution, translations, iCalendar text, internal address filtering. | Nothing |
-| Server functional tests | `server/test/functional/*.test.ts` | The whole API on a real database, against the fake Outline of `dev/mock-outline.mjs`: sign-in and servers, tasks and history, incoming buckets, sub-tasks, pipes and archiving, teams and visibility, invitations and requests to connect, TOTP, avatars, models, calendar feed, live updates over WebSocket. | PostgreSQL |
+| Server functional tests | `server/test/functional/*.test.ts` | The whole API on a real database, against the fake Outline of `dev/mock-outline.mjs`: sign-in and servers, tasks and history, incoming buckets, sub-tasks, pipes and archiving, teams and visibility, invitations and requests to connect, TOTP, avatars, models, calendar feed, live updates over WebSocket, e-mail notifications and unsubscribing. | PostgreSQL |
 | Web unit tests | `web/src/**/*.test.ts` | Translations and preferences, dates, history texts, the Next action suggestions, the API client, the version check, and components (checklist, badges, About) with Testing Library. | Nothing (jsdom) |
 
 Translation checks run with the unit tests (`server/src/translations.test.ts`, `web/src/lib/locales/fr.test.ts`): every
@@ -27,7 +27,8 @@ cd web && npm test           # web unit tests
 ### Functional tests
 
 They need a disposable PostgreSQL database: **its schema is wiped** at the start of the run. The simplest way is
-the test stack, which starts one in memory:
+the test stack, which starts one in memory, with a Redis for the rate limits (`TEST_REDIS_URL`; without it, they are
+counted in memory):
 
 ```shell
 docker compose -f dev/docker-compose.test.yml run --rm tests

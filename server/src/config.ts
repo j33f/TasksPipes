@@ -51,6 +51,10 @@ export const config = {
   allowEmailSignup: (process.env.ALLOW_EMAIL_SIGNUP ?? "true") !== "false",
   /** People can invite others by e-mail, or ask people already on the platform to connect. */
   allowEmailInvitations: (process.env.ALLOW_EMAIL_INVITATIONS ?? "true") !== "false",
+  /** Redis holding the rate limit counters (shared by every instance); without it, they are kept in memory. */
+  redisUrl: process.env.REDIS_URL || "",
+  /** Each new offence multiplies the time a client is blocked by this factor (1: always the same). */
+  rateLimitBackoffFactor: Math.max(1, Number(process.env.RATE_LIMIT_BACKOFF_FACTOR || 2) || 2),
   /** Sending e-mails (invitations, sign-in links). Without SMTP_HOST, nothing is sent. */
   smtp: {
     host: process.env.SMTP_HOST || "",

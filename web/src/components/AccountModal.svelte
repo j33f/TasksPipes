@@ -2,7 +2,7 @@
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
   import { formatDate } from "../lib/constants";
-  import type { Invitation } from "../lib/types";
+  import type { Invitation, NotificationKind, NotificationMode, NotificationPrefs } from "../lib/types";
   import Modal from "./Modal.svelte";
   import Avatar from "./Avatar.svelte";
   import Icon from "./Icon.svelte";
@@ -65,6 +65,29 @@
   function setPref(next: { locale?: Locale | null; theme?: Theme | null }) {
     prefs.set(next);
     api.patch("/me", next).then(() => app.init()).catch((err) => (error = errorMessage(err)));
+  }
+
+  // E-mail notifications: one choice per kind, saved at once.
+  let notif = $state<NotificationPrefs | undefined>(app.me?.notificationPrefs);
+  const NOTIFICATION_KINDS = ["received", "assigned", "refused", "comment"] as const;
+  const kindLabel = (k: NotificationKind) =>
+    k === "received" ? t("A task arrives in my incoming or my teams'")
+    : k === "assigned" ? t("I become the owner of a task")
+    : k === "refused" ? t("A task I sent is refused")
+    : k === "comment" ? t("A comment on a task I wrote or own")
+    : t("My due dates");
+  const modeLabel = (m: NotificationMode) => (m === "immediate" ? t("At once") : m === "digest" ? t("Daily digest") : t("Off"));
+  const hourLabel = (h: number) => t("at {hour}", { hour: `${h}:00` });
+
+  function setNotif(change: Partial<NotificationPrefs>) {
+    if (notif) notif = { ...notif, ...change };
+    api
+      .put<{ notificationPrefs: NotificationPrefs }>("/me/notifications", change)
+      .then((r) => {
+        notif = r.notificationPrefs;
+        if (app.me) app.me.notificationPrefs = r.notificationPrefs;
+      })
+      .catch((err) => (error = errorMessage(err)));
   }
 
   async function startSetup() {
@@ -161,6 +184,35 @@
       </div>
     </div>
   </div>
+
+  {#if app.me?.features.notifications && notif}
+    <div class="section">
+      <div class="section-title"><Icon name="mail" />{t("E-mail notifications")}</div>
+      <p class="small muted">{t("Get an e-mail when something needs you, even with TasksPipes closed. Nothing is sent for what you do yourself.")}</p>
+      {#each NOTIFICATION_KINDS as kind (kind)}
+        <div class="notif row">
+          <span class="grow small">{kindLabel(kind)}</span>
+          <div class="seg" role="group" aria-label={kindLabel(kind)}>
+            {#each ["immediate", "digest", "off"] as const as mode (mode)}
+              <button type="button" class:active={notif[kind] === mode} onclick={() => setNotif({ [kind]: mode })}>{modeLabel(mode)}</button>
+            {/each}
+          </div>
+        </div>
+      {/each}
+      <div class="notif row">
+        <span class="grow small">{kindLabel("due")}</span>
+        <select class="input hour" value={notif.due === "off" ? "off" : String(notif.dueHour)} aria-label={kindLabel("due")}
+          onchange={(e) => {
+            const v = (e.currentTarget as HTMLSelectElement).value;
+            setNotif(v === "off" ? { due: "off" } : { due: "immediate", dueHour: Number(v) });
+          }}>
+          {#each Array.from({ length: 24 }, (_, h) => h) as h (h)}<option value={String(h)}>{hourLabel(h)}</option>{/each}
+          <option value="off">{t("Off")}</option>
+        </select>
+      </div>
+      <p class="small muted">{t("The daily digest comes in the evening, with the reports; due dates are reminded in the morning, at the hour chosen.")}</p>
+    </div>
+  {/if}
 
   {#if app.isGuest}
     <div class="section">
@@ -271,4 +323,6 @@
   .seg button { border: 0; background: none; color: var(--text-secondary); font: inherit; font-size: 13px; padding: 6px 12px; cursor: pointer; }
   .seg button.active { background: var(--background-secondary); color: var(--text); font-weight: 500; }
   .inv { padding: 8px 0; border-top: 1px solid var(--divider); }
+  .notif { padding: 6px 0; gap: 12px; flex-wrap: wrap; }
+  .notif .hour { min-height: 32px; padding: 4px 8px; font-size: 14px; width: auto; }
 </style>
