@@ -334,6 +334,8 @@ CREATE INDEX IF NOT EXISTS login_tokens_user_idx ON login_tokens(user_id, create
 -- turns it back on.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_at timestamptz;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_reason text CHECK (disabled_reason IN ('unused_invitation'));
+-- A sign-in link sent by signing up again: using it turns an account disabled for an unused invitation back on.
+ALTER TABLE login_tokens ADD COLUMN IF NOT EXISTS reactivates boolean NOT NULL DEFAULT false;
 
 -- Who sees whom: oneself; Outline accounts of the same server see each other; otherwise, two accounts
 -- see each other once one invited the other and the invitation is accepted. Disabled accounts are seen by no one.

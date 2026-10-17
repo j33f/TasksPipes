@@ -144,13 +144,14 @@ async function createSession(
   reply.setCookie(SESSION_COOKIE, sessionToken, cookieOptions(maxAge));
 }
 
-/** Creates a one-time sign-in link for an e-mail account. */
-export async function createLoginLink(userId: string, minutes: number): Promise<string> {
+/** Creates a one-time sign-in link for an e-mail account (`reactivates`: using it turns the account back on). */
+export async function createLoginLink(userId: string, minutes: number, { reactivates = false } = {}): Promise<string> {
   const token = crypto.randomBytes(32).toString("base64url");
-  await query(`INSERT INTO login_tokens (id, user_id, purpose, expires_at) VALUES ($1, $2, 'magic', $3)`, [
+  await query(`INSERT INTO login_tokens (id, user_id, purpose, expires_at, reactivates) VALUES ($1, $2, 'magic', $3, $4)`, [
     hash(token),
     userId,
     new Date(Date.now() + minutes * 60_000),
+    reactivates,
   ]);
   return `${config.appUrl}/login/magic?token=${token}`;
 }
@@ -284,7 +285,7 @@ async function auth(app: FastifyInstance) {
 
     // The answer is the same whatever happens, so the form does not tell who has an account.
     const existing = await one(
-      `SELECT id, name, auth_kind, locale, disabled_at FROM users WHERE lower(email) = $1 ORDER BY auth_kind = 'email' DESC LIMIT 1`,
+      `SELECT id, name, auth_kind, locale, disabled_at, disabled_reason FROM users WHERE lower(email) = $1 ORDER BY auth_kind = 'email' DESC LIMIT 1`,
       [email]
     );
     const send = (l: Locale, subject: string, lines: string[], link: string, label: string) =>
@@ -295,8 +296,17 @@ async function auth(app: FastifyInstance) {
         tr(l, "Hello {name},", { name: existing.name }),
         tr(l, "You already have an account on TasksPipes with your Outline account: sign in with Outline."),
       ], `${config.appUrl}/login`, tr(l, "Sign in"));
+    } else if (existing?.disabled_reason === "unused_invitation") {
+      // An invitation never used: signing up gets the account back, once the link proves the address.
+      const l: Locale = existing.locale ?? lang;
+      const link = await createLoginLink(existing.id, SIGNUP_LINK_HOURS * 60, { reactivates: true });
+      await send(l, tr(l, "Welcome to TasksPipes"), [
+        tr(l, "Hello {name},", { name: existing.name }),
+        tr(l, "Your account is ready. This link confirms your address and signs you in; it is valid for {hours} hours and works only once.", { hours: SIGNUP_LINK_HOURS }),
+        tr(l, "If you did not ask for this link, just ignore this e-mail."),
+      ], link, tr(l, "Sign in"));
     } else if (existing?.disabled_at) {
-      // A disabled account gets nothing: only a new invitation turns it back on.
+      // Any other disabled account gets nothing.
     } else if (existing) {
       const l: Locale = existing.locale ?? lang;
       const link = await createLoginLink(existing.id, LOGIN_LINK_MINUTES);
@@ -362,14 +372,20 @@ async function auth(app: FastifyInstance) {
     const token = String(req.body?.token || "");
     const row = await one(
       `UPDATE login_tokens SET used_at = now()
-       WHERE id = $1 AND purpose = 'magic' AND used_at IS NULL AND expires_at > now() RETURNING user_id`,
+       WHERE id = $1 AND purpose = 'magic' AND used_at IS NULL AND expires_at > now() RETURNING user_id, reactivates`,
       [hash(token)]
     );
     if (!row) return reply.code(400).send({ error: tr(localeOf(req), "This link is no longer valid (already used or expired). Ask for a new one.") });
-    const user = await one(`SELECT id, totp_secret, disabled_at FROM users WHERE id = $1 AND auth_kind = 'email'`, [row.user_id]);
+    const user = await one(`SELECT id, totp_secret, disabled_at, disabled_reason FROM users WHERE id = $1 AND auth_kind = 'email'`, [row.user_id]);
     if (!user) return reply.code(400).send({ error: tr(localeOf(req), "Account not found") });
-    // A disabled account's links no longer work (same answer as an expired link).
-    if (user.disabled_at) return reply.code(400).send({ error: tr(localeOf(req), "This link is no longer valid (already used or expired). Ask for a new one.") });
+    if (user.disabled_at) {
+      // A link sent by signing up again gets back an account whose invitation was never used; other links of a
+      // disabled account no longer work (same answer as an expired link).
+      if (!row.reactivates || user.disabled_reason !== "unused_invitation") {
+        return reply.code(400).send({ error: tr(localeOf(req), "This link is no longer valid (already used or expired). Ask for a new one.") });
+      }
+      await reenableInvited(user.id);
+    }
     if (user.totp_secret) {
       const pending = crypto.randomBytes(32).toString("base64url");
       await query(`INSERT INTO login_tokens (id, user_id, purpose, expires_at) VALUES ($1, $2, 'totp', now() + interval '10 minutes')`, [

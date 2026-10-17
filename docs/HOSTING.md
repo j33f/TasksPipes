@@ -110,7 +110,8 @@ invitation shows the sign-in link for the inviter to pass on, and people cannot 
 
 - Invitation links are valid 48 hours. Accounts created by an invitation and never used are then disabled (checked
   at start and every hour): they cannot sign in, get no e-mail and no longer appear in the app, until someone sends
-  them a new link or invites them again. Accounts made by signing up are not concerned.
+  them a new link or invites them again, or they sign up with that address and use the link. Accounts made by signing
+  up are not concerned. Invitations are limited to 30 per person and hour, new links to 10.
 - `ALLOW_EMAIL_SIGNUP=false` removes sign-up from the sign-in page: accounts without Outline then come from
   invitations only.
 - `ALLOW_EMAIL_INVITATIONS=false` turns invitations and requests to connect off; existing connections are kept.
