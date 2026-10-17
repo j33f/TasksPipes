@@ -8,7 +8,7 @@ import fastifyStatic from "@fastify/static";
 import { config } from "./config.js";
 import { pool } from "./db.js";
 import { authPlugin } from "./auth.js";
-import { apiRoutes } from "./routes.js";
+import { apiRoutes, gitWebhooks } from "./routes.js";
 import { realtime } from "./realtime.js";
 import { calendarRoutes } from "./calendar.js";
 import { HttpError } from "./errors.js";
@@ -71,6 +71,7 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   await app.register(realtime);
   await app.register(calendarRoutes);
   await app.register(apiRoutes, { prefix: "/api" });
+  await app.register(gitWebhooks);
 
   app.get("/healthz", async () => {
     await pool.query("SELECT 1");

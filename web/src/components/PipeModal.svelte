@@ -9,6 +9,7 @@
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import Icon from "./Icon.svelte";
   import IconPicker from "./IconPicker.svelte";
+  import GitIntegrations from "./GitIntegrations.svelte";
   import { t, tn } from "../lib/i18n.svelte";
 
   let { spaceId, pipe = null, onclose }: { spaceId: string; pipe?: Pipe | null; onclose: () => void } = $props();
@@ -163,6 +164,12 @@
         </div>
       {/if}
     </div>
+    {#if pipe}
+      <details class="field git-section">
+        <summary class="label-text">{t("GitHub / GitLab")}</summary>
+        <GitIntegrations pipeId={pipe.id} />
+      </details>
+    {/if}
     {#if error}<div class="error-text">{error}</div>{/if}
     <div class="modal-actions">
       {#if pipe && !pipe.isDefault}
@@ -190,5 +197,6 @@
   .warn { color: var(--warning, #f08a24); }
   .radio-card:disabled { opacity: 0.45; cursor: not-allowed; }
   .check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 10px; cursor: pointer; }
+  .git-section summary { cursor: pointer; }
   .templates { margin: 6px 0 0; padding-left: 26px; max-height: 160px; overflow-y: auto; font-size: 13px; color: var(--text-tertiary); }
 </style>

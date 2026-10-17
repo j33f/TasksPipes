@@ -206,6 +206,19 @@ export const FR: Record<string, string> = {
   "This type is offered in: {types}. Remove it from these pipe types first.":
     "Ce type est proposé dans : {types}. Retirez-le d'abord de ces types de pipes.",
 
+  // Git integrations
+  "Unknown provider": "Fournisseur inconnu",
+
+  // Model files
+  "Nothing to export": "Rien à exporter",
+  "This file is not valid YAML: {error}": "Ce fichier n'est pas un YAML valide : {error}",
+  "This file is not a TasksPipes model file": "Ce fichier n'est pas un fichier de modèles TasksPipes",
+  "Unsupported model file version: {version}": "Version de fichier de modèles non prise en charge : {version}",
+  "This file holds no model": "Ce fichier ne contient aucun modèle",
+  "{n} models at most per file": "{n} modèles au plus par fichier",
+  "Choose a model file": "Choisissez un fichier de modèles",
+  "This file is too large for a model file": "Ce fichier est trop volumineux pour un fichier de modèles",
+
   // Accounts, invitations, sign-in
   "The name of an Outline account is changed in Outline": "Le nom d'un compte Outline se change dans Outline",
   "Two-factor authentication is for accounts invited by e-mail; an Outline account sets it up in Outline.":

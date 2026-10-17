@@ -16,6 +16,7 @@
   import RefuseDialog from "./RefuseDialog.svelte";
   import AcceptDialog from "./AcceptDialog.svelte";
   import Checklist from "./Checklist.svelte";
+  import DevLinks from "./DevLinks.svelte";
   import { t, tn } from "../lib/i18n.svelte";
 
   let { id, onclose }: { id: string; onclose: () => void } = $props();
@@ -225,6 +226,13 @@
             <div class="section-title"><Icon name="checklist" />{t("Sub-tasks")}</div>
             <Checklist items={task.items} editable={Boolean(perms?.editContent)}
               onadd={items.add} ontoggle={items.toggle} onrename={items.rename} ondelete={items.remove} onmove={items.move} />
+          </div>
+        {/if}
+
+        {#if task.gitConnected || task.links.length}
+          <div class="infos">
+            <div class="section-title"><Icon name="branch" />{t("Development")}</div>
+            <DevLinks taskKey={task.key} title={task.title} links={task.links} />
           </div>
         {/if}
 

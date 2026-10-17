@@ -5,6 +5,7 @@
   import Avatar from "./Avatar.svelte";
   import Icon, { iconOf } from "./Icon.svelte";
   import { t } from "../lib/i18n.svelte";
+  import { GIT_STATE_COLOR, GIT_STATE_LABEL } from "../lib/git";
 
   let { task, draggable = false, dragging = false, ondragstart, ondragend }: {
     task: Task;
@@ -32,6 +33,11 @@
     {#if task.checklist.total}
       <span class="row" class:complete={task.checklist.done === task.checklist.total} style="gap:3px"
         title={t("Sub-tasks")}><Icon name="checklist" size={13} />{task.checklist.done}/{task.checklist.total}</span>
+    {/if}
+    {#if task.gitState && task.gitState !== "pushed"}
+      <span class="row" style="gap:3px;color:{GIT_STATE_COLOR[task.gitState]}" title={t("Pull/merge request: {state}", { state: t(GIT_STATE_LABEL[task.gitState]) })}>
+        <Icon name={task.gitState === "merged" ? "merge" : "branch"} size={13} />{t(GIT_STATE_LABEL[task.gitState])}
+      </span>
     {/if}
     {#if task.commentCount}<span class="row" style="gap:3px"><Icon name="comment" size={13} />{task.commentCount}</span>{/if}
     <span class="spacer"></span>

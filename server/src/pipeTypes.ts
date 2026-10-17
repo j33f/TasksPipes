@@ -368,6 +368,94 @@ export const TASK_TYPES: TaskType[] = [
       f("partie", "Entreprise / stagiaire", "text"), f("formation", "Formation", "text"), f("signature", "Signé le", "date"), f("document", "Document signé", "files"),
     ],
   },
+
+  // Logiciel : UX, design, documentation, traduction, développement, tests
+  {
+    id: "etude_ux", label: "Étude utilisateur", icon: "search", description: "Entretiens, tests utilisateurs, questionnaires : comprendre les besoins.",
+    fields: [
+      f("objectif", "Objectif", "textarea"),
+      f("methode", "Méthode", "select", { options: ["Entretiens", "Test utilisateur", "Questionnaire", "Analytics", "Benchmark", "Atelier"] }),
+      f("participants", "Participants", "number"), f("date", "Date", "date"),
+      f("synthese", "Synthèse", "textarea"), f("livrables", "Livrables", "files"), f("docs", "Documents Outline", "docs"),
+    ],
+  },
+  {
+    id: "persona", label: "Persona / parcours", icon: "user", description: "Profil d'utilisateur type ou parcours utilisateur.",
+    fields: [
+      f("profil", "Profil", "textarea"), f("besoins", "Besoins et irritants", "textarea"),
+      f("parcours", "Étapes du parcours", "textarea"), f("fichiers", "Fichiers", "files"),
+    ],
+  },
+  {
+    id: "maquette", label: "Maquette", icon: "star", description: "Écran ou fonctionnalité à concevoir, du wireframe à la maquette validée.",
+    fields: [
+      f("ecran", "Écran / fonctionnalité", "text"), f("lien", "Lien vers la maquette (Figma…)", "url"),
+      f("plateformes", "Plateformes", "multiselect", { options: ["Web", "iOS", "Android", "Desktop"] }),
+      f("fidelite", "Fidélité", "select", { options: ["Wireframe", "Maquette", "Prototype"] }),
+      f("accessibilite", "Accessibilité vérifiée", "checkbox"), f("fichiers", "Fichiers", "files"),
+    ],
+  },
+  {
+    id: "composant_ui", label: "Composant UI", icon: "folder", description: "Composant du design system.",
+    fields: [
+      f("nom", "Nom du composant", "text"), f("lien", "Lien vers le design system", "url"),
+      f("etats", "États et variantes", "textarea"), f("accessibilite", "Accessibilité vérifiée", "checkbox"),
+    ],
+  },
+  {
+    id: "page_doc", label: "Page de documentation", icon: "doc", description: "Page de documentation produit, technique ou d'API.",
+    fields: [
+      f("public", "Public", "select", { options: ["Utilisateur", "Administrateur", "Développeur", "API", "Interne"] }),
+      f("version", "Version du produit", "text"), f("lien", "Page publiée", "url"), f("docs", "Documents Outline", "docs"),
+    ],
+  },
+  {
+    id: "traduction", label: "Lot de traduction", icon: "globe", description: "Textes à traduire dans une ou plusieurs langues.",
+    fields: [
+      f("langues", "Langues", "multiselect", {
+        options: ["Français", "Anglais", "Espagnol", "Allemand", "Italien", "Portugais", "Néerlandais", "Arabe", "Chinois", "Japonais"],
+      }),
+      f("chaines", "Nombre de chaînes", "number"),
+      f("outil", "Outil", "select", { options: ["Crowdin", "Lokalise", "Weblate", "Transifex", "Fichiers"] }),
+      f("lien", "Lien", "url"), f("fichiers", "Fichiers", "files"),
+    ],
+  },
+  {
+    id: "user_story", label: "User story", icon: "user", description: "Un besoin exprimé du point de vue de l'utilisateur.",
+    fields: [
+      f("role", "En tant que…", "text"), f("besoin", "Je veux…", "textarea"), f("benefice", "Afin de…", "textarea"),
+      f("criteres", "Critères d'acceptation", "textarea"), f("points", "Points", "number"),
+      f("priorite", "Priorité", "select", { options: ["Critique", "Haute", "Moyenne", "Basse"] }),
+    ],
+  },
+  {
+    id: "bug", label: "Bug", icon: "flag", description: "Un défaut à corriger.",
+    fields: [
+      f("severite", "Sévérité", "select", { options: ["Bloquant", "Critique", "Majeur", "Mineur"] }),
+      f("environnement", "Environnement", "select", { options: ["Production", "Recette", "Développement"] }),
+      f("version", "Version", "text"), f("etapes", "Étapes pour reproduire", "textarea"),
+      f("attendu", "Résultat attendu", "textarea"), f("observe", "Résultat observé", "textarea"), f("captures", "Captures", "files"),
+    ],
+  },
+  {
+    id: "tache_technique", label: "Tâche technique", icon: "settings", description: "Refactoring, mise à jour, infrastructure…",
+    fields: [f("composant", "Composant", "text"), f("points", "Points", "number"), f("notes", "Notes techniques", "textarea")],
+  },
+  {
+    id: "release", label: "Version", icon: "bolt", description: "Une version à livrer.",
+    fields: [
+      f("version", "Numéro de version", "text"), f("date", "Date de livraison", "date"),
+      f("notes", "Notes de version", "textarea"), f("lien", "Lien de la version", "url"),
+    ],
+  },
+  {
+    id: "campagne_test", label: "Campagne de test", icon: "check", description: "Tests manuels ou automatisés d'une version ou d'une fonctionnalité.",
+    fields: [
+      f("version", "Version testée", "text"),
+      f("type", "Type", "select", { options: ["Fonctionnel", "Non-régression", "Performance", "Sécurité", "Accessibilité"] }),
+      f("cas", "Nombre de cas", "number"), f("reussis", "Cas réussis", "number"), f("rapport", "Rapport", "files"),
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -586,6 +674,93 @@ export const PIPE_TYPES: PipeType[] = [
       col("annule", "Annulé", "abandoned", "#a2b2c3"),
     ],
     taskTypes: ["facture", "financement", "convention"], templates: [],
+  },
+  {
+    id: "ux", label: "Recherche UX", group: "Logiciel",
+    description: "Comprendre les utilisateurs : entretiens, tests, questionnaires, personas et parcours.",
+    color: "#FF4DFA", icon: "search",
+    columns: [
+      col("a_explorer", "À explorer", "backlog", "#66778F"),
+      col("planifie", "Planifié", "ready", "#2BC2FF"),
+      col("en_recherche", "En recherche", "started", "#9E5CF7"),
+      col("synthese", "Synthèse", "ongoing", "#0366d6"),
+      col("bloque", "Bloqué", "blocked", "#ed2651"),
+      col("partage", "Partagé", "done", "#3ad984"),
+      col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["etude_ux", "persona"], templates: [],
+  },
+  {
+    id: "design", label: "Design UI", group: "Logiciel",
+    description: "Maquettes, prototypes et composants du design system.",
+    color: "#9E5CF7", icon: "star",
+    columns: [
+      col("a_concevoir", "À concevoir", "backlog", "#66778F"),
+      col("pret", "Prêt à concevoir", "ready", "#2BC2FF"),
+      col("maquettage", "Maquettage", "started", "#9E5CF7"),
+      col("revue", "Revue design", "ongoing", "#0366d6"),
+      col("corrections", "Corrections", "blocked", "#f08a24"),
+      col("valide", "Validé", "done", "#3ad984"),
+      col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["maquette", "composant_ui"], templates: [],
+  },
+  {
+    id: "doc_produit", label: "Documentation produit", group: "Logiciel",
+    description: "Documentation utilisateur, technique et d'API, à jour des versions.",
+    color: "#3633FF", icon: "doc",
+    columns: [
+      col("a_rediger", "À rédiger", "backlog", "#66778F"),
+      col("redaction", "Rédaction", "started", "#9E5CF7"),
+      col("revue", "Relecture", "ongoing", "#0366d6"),
+      col("bloque", "Bloqué", "blocked", "#ed2651"),
+      col("publie", "Publié", "done", "#3ad984"),
+      col("obsolete", "Obsolète", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["page_doc"], templates: [],
+  },
+  {
+    id: "i18n", label: "Traduction / i18n", group: "Logiciel",
+    description: "Traduction et localisation de l'interface et des contenus.",
+    color: "#2BC2FF", icon: "globe",
+    columns: [
+      col("a_traduire", "À traduire", "backlog", "#66778F"),
+      col("en_traduction", "En traduction", "started", "#9E5CF7"),
+      col("revue", "Relecture", "ongoing", "#0366d6"),
+      col("bloque", "Bloqué", "blocked", "#ed2651"),
+      col("livre", "Livré", "done", "#3ad984"),
+      col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["traduction"], templates: [],
+  },
+  {
+    id: "dev", label: "Développement logiciel", group: "Logiciel",
+    description: "User stories, bugs et versions, reliés aux pull requests GitHub et merge requests GitLab.",
+    color: "#0366d6", icon: "bolt",
+    columns: [
+      col("backlog", "Backlog", "backlog", "#66778F"),
+      col("a_faire", "À faire", "ready", "#2BC2FF"),
+      col("en_cours", "En cours", "started", "#9E5CF7"),
+      col("revue", "En revue", "ongoing", "#0366d6"),
+      col("bloque", "Bloqué", "blocked", "#ed2651"),
+      col("termine", "Terminé", "done", "#3ad984"),
+      col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["user_story", "bug", "tache_technique", "release"], templates: [],
+  },
+  {
+    id: "qa", label: "Tests / QA", group: "Logiciel",
+    description: "Campagnes de test et suivi des anomalies avant livraison.",
+    color: "#3ad984", icon: "check",
+    columns: [
+      col("a_tester", "À tester", "backlog", "#66778F"),
+      col("en_test", "En test", "started", "#9E5CF7"),
+      col("retours", "Retours", "blocked", "#f08a24"),
+      col("revue", "Validation", "ongoing", "#0366d6"),
+      col("valide", "Validé", "done", "#3ad984"),
+      col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["campagne_test", "bug"], templates: [],
   },
 ];
 

@@ -7,6 +7,9 @@ import {
   DEFAULT_PIPE_TYPE, allPipeTypes, allTaskTypes, pipeTypeById, resolveStage, stageLabel, taskTypeById, usableBy, type TaskType,
 } from "./pipeTypes.js";
 import { validatePipeType, validateTaskType } from "./designer.js";
+import { exportModels, importModels } from "./models-io.js";
+import { PROVIDERS, TASK_KEY_PREFIX, gitItems, verifyGithub, verifyGitlab, type GitItem, type Provider } from "./git.js";
+import crypto from "node:crypto";
 import { cleanFields } from "./fields.js";
 import { LOCALES, localeOf, localize, localizePipeType, localizeTaskType, tr, type Locale } from "./i18n.js";
 import QRCode from "qrcode";
@@ -126,6 +129,7 @@ const TASK_SELECT = `
          asg.name AS assignee_name, asg.avatar_url AS assignee_avatar,
          se.name AS sender_name, se.avatar_url AS sender_avatar,
          (SELECT count(*) FROM task_events e WHERE e.task_id = t.id AND e.type = 'comment') AS comment_count,
+         (SELECT l.state FROM task_links l WHERE l.task_id = t.id AND l.kind <> 'commit' ORDER BY l.updated_at DESC LIMIT 1) AS git_state,
          (SELECT json_build_object('total', count(*), 'done', count(*) FILTER (WHERE i.done),
                    'next', (array_agg(json_build_object('id', i.id, 'text', i.text) ORDER BY i.position, i.created_at)
                             FILTER (WHERE NOT i.done))[1])
@@ -163,6 +167,8 @@ function presentTask(t: Row) {
     sender: t.sender_id ? { id: t.sender_id, name: t.sender_name, avatarUrl: t.sender_avatar } : null,
     outlineDoc: t.outline_doc_id ? { id: t.outline_doc_id, title: t.outline_doc_title, url: t.outline_doc_url } : null,
     commentCount: t.comment_count,
+    // State of the latest pull/merge request naming the task.
+    gitState: t.git_state ?? null,
     checklist: t.checklist ?? { total: 0, done: 0, next: null },
     createdAt: t.created_at,
     updatedAt: t.updated_at,
@@ -971,6 +977,26 @@ export async function apiRoutes(app: FastifyInstance) {
     return row;
   }
 
+  // Models as YAML files: export the given types (and the custom task types their pipe types offer)…
+  app.get("/catalog/export", async (req: Req, reply) => {
+    const ids = (v: unknown) => String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const yaml = exportModels(ids(req.query.pipeTypes), ids(req.query.taskTypes), me(req), localeOf(req));
+    return reply
+      .type("application/yaml; charset=utf-8")
+      .header("Content-Disposition", 'attachment; filename="taskspipes-models.yml"')
+      .send(yaml);
+  });
+
+  // …and import a file as new private models, all or nothing.
+  app.post("/catalog/import", async (req: Req) => {
+    const text = typeof req.body?.yaml === "string" ? req.body.yaml : "";
+    if (!text.trim()) throw bad("Choose a model file");
+    if (text.length > 512 * 1024) throw bad("This file is too large for a model file");
+    const created = await tx((client) => importModels(client, text, me(req)));
+    await loadCustomTypes();
+    return { created };
+  });
+
   app.post("/catalog/:kind", async (req: Req) => {
     const kind = catalogKind(req.params.kind);
     const definition = kind === "pipe" ? validatePipeType(req.body, me(req)) : validateTaskType(req.body);
@@ -1258,7 +1284,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.get("/tasks/:id", async (req: Req) => {
     const { t, perms } = await loadTaskFor(req.params.id, me(req));
-    const [events, files, items] = await Promise.all([
+    const [events, files, items, links] = await Promise.all([
       getEvents(t.id, localeOf(req)),
       query(
         `SELECT f.id, f.field, f.name, f.mime, f.size, f.created_at, u.name AS uploaded_by_name
@@ -1266,12 +1292,23 @@ export async function apiRoutes(app: FastifyInstance) {
         [t.id]
       ),
       getItems(t.id),
+      query(
+        `SELECT provider, kind, url, number, title, state, repo, author, updated_at FROM task_links
+         WHERE task_id = $1 ORDER BY kind = 'commit', updated_at DESC LIMIT 100`,
+        [t.id]
+      ),
     ]);
     return {
       ...presentTask(t),
       permissions: perms,
       events,
       items,
+      key: `${TASK_KEY_PREFIX}-${t.number}`,
+      gitConnected: Boolean(t.pipe_id && (await one(`SELECT 1 FROM pipe_integrations WHERE pipe_id = $1 LIMIT 1`, [t.pipe_id]))),
+      links: links.rows.map((l) => ({
+        provider: l.provider, kind: l.kind, url: l.url, number: l.number, title: l.title, state: l.state,
+        repo: l.repo, author: l.author, updatedAt: l.updated_at,
+      })),
       files: files.rows.map((f) => ({
         id: f.id, field: f.field, name: f.name, mime: f.mime, size: f.size, createdAt: f.created_at, uploadedBy: f.uploaded_by_name,
       })),
@@ -1425,6 +1462,49 @@ export async function apiRoutes(app: FastifyInstance) {
       await recordEvent(client, t.id, me(req), "comment", s, s, body);
       await client.query(`UPDATE tasks SET updated_at = now() WHERE id = $1`, [t.id]);
     });
+    return { ok: true };
+  });
+
+  // ----- Git integrations of a pipe (GitHub / GitLab webhooks) -------------
+
+  const integrationOut = (r: Row) => ({
+    provider: r.provider,
+    url: `${config.appUrl}/hooks/${r.provider}/${r.token}`,
+    secret: decrypt(r.secret),
+    createdAt: r.created_at,
+    lastEventAt: r.last_event_at,
+  });
+
+  /** Only the members of the pipe's space see and manage its connections (they hold secrets). */
+  async function pipeForIntegrations(req: Req) {
+    const { p, role } = await loadPipeFor(req.params.id, me(req));
+    if (!role) throw forbidden();
+    return p;
+  }
+
+  app.get("/pipes/:id/integrations", async (req: Req) => {
+    const p = await pipeForIntegrations(req);
+    const { rows } = await query(`SELECT * FROM pipe_integrations WHERE pipe_id = $1 ORDER BY provider`, [p.id]);
+    return rows.map(integrationOut);
+  });
+
+  // Connects a repository, or renews the secret of a connection.
+  app.post("/pipes/:id/integrations", async (req: Req) => {
+    const p = await pipeForIntegrations(req);
+    const provider = req.body?.provider;
+    if (!PROVIDERS.includes(provider)) throw bad("Unknown provider");
+    const row = await one(
+      `INSERT INTO pipe_integrations (pipe_id, provider, token, secret, created_by) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (pipe_id, provider) DO UPDATE SET secret = EXCLUDED.secret
+       RETURNING *`,
+      [p.id, provider, crypto.randomBytes(18).toString("base64url"), encrypt(crypto.randomBytes(24).toString("base64url")), me(req)]
+    );
+    return integrationOut(row!);
+  });
+
+  app.delete("/pipes/:id/integrations/:provider", async (req: Req) => {
+    const p = await pipeForIntegrations(req);
+    await query(`DELETE FROM pipe_integrations WHERE pipe_id = $1 AND provider = $2`, [p.id, req.params.provider]);
     return { ok: true };
   });
 
@@ -1588,5 +1668,87 @@ export async function apiRoutes(app: FastifyInstance) {
       await recordEvent(client, t.id, uid, "updated", snapshot(t), snapshot(row!), null);
     });
     return doc;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Git webhooks (outside /api: GitHub and GitLab call them without a session)
+
+/** System accounts recorded as the authors of the moves made by GitHub and GitLab. */
+const BOT: Record<Provider, string> = {
+  github: "00000000-0000-4000-8000-0000000000a1",
+  gitlab: "00000000-0000-4000-8000-0000000000a2",
+};
+
+/** Links pull/merge requests and commits to the tasks of a pipe they name, and moves those tasks. */
+export async function applyGitItems(pipeId: string, provider: Provider, items: GitItem[]) {
+  let linked = 0;
+  let moved = 0;
+  for (const item of items) {
+    for (const number of item.keys) {
+      const t = await one(`${TASK_SELECT} WHERE t.number = $1 AND t.pipe_id = $2`, [number, pipeId]);
+      if (!t) continue;
+      const { link } = item;
+      const details = { provider, kind: link.kind, url: link.url, number: link.number, title: link.title, repo: link.repo, action: item.action };
+      await tx(async (client) => {
+        const known = await one(`SELECT id FROM task_links WHERE task_id = $1 AND url = $2`, [t.id, link.url], client);
+        await client.query(
+          `INSERT INTO task_links (task_id, provider, kind, url, number, title, state, repo, author)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (task_id, url) DO UPDATE SET title = EXCLUDED.title, state = EXCLUDED.state, updated_at = now()`,
+          [t.id, provider, link.kind, link.url, link.number, link.title, link.state, link.repo, link.author]
+        );
+        const before = snapshot(t);
+        if (!known) {
+          await recordEvent(client, t.id, BOT[provider], "linked", before, before, null, details);
+          linked++;
+        }
+        // A dropped task stays where it is.
+        if (item.move && t.status !== "abandoned") {
+          const c = resolveStage(t.pipe_kind, null, item.move);
+          if (c.id !== t.stage) {
+            await client.query(`UPDATE tasks SET stage = $2, status = $3, updated_at = now() WHERE id = $1`, [t.id, c.id, c.status]);
+            const row = await getTaskRow(t.id, client);
+            await recordEvent(client, t.id, BOT[provider], "status", before, snapshot(row!), null, details);
+            moved++;
+          }
+        }
+      });
+      notifySpace(t.space_id, { type: "task.updated" });
+    }
+  }
+  return { linked, moved };
+}
+
+export async function gitWebhooks(app: FastifyInstance) {
+  // The signature covers the raw body: keep it as it came.
+  app.removeAllContentTypeParsers();
+  app.addContentTypeParser("*", { parseAs: "buffer", bodyLimit: 10 * 1024 * 1024 }, (_req, body, done) => done(null, body));
+
+  app.post<{ Params: { provider: string; token: string } }>("/hooks/:provider/:token", async (req, reply) => {
+    const provider = req.params.provider as Provider;
+    if (!PROVIDERS.includes(provider)) return reply.code(404).send({ error: "Not found" });
+    const integ = await one(`SELECT id, pipe_id, secret FROM pipe_integrations WHERE provider = $1 AND token = $2`, [provider, req.params.token]);
+    if (!integ) return reply.code(404).send({ error: "Not found" });
+    const body = req.body as Buffer;
+    const secret = decrypt(integ.secret)!;
+    const ok =
+      provider === "github"
+        ? verifyGithub(secret, body, req.headers["x-hub-signature-256"] as string | undefined)
+        : verifyGitlab(secret, req.headers["x-gitlab-token"] as string | undefined);
+    if (!ok) return reply.code(401).send({ error: "Invalid signature" });
+
+    let payload: unknown;
+    try {
+      const text = body.toString("utf8");
+      // GitHub can also send form-encoded payloads.
+      payload = JSON.parse(String(req.headers["content-type"]).includes("form") ? new URLSearchParams(text).get("payload") ?? "" : text);
+    } catch {
+      return reply.code(400).send({ error: "Invalid payload" });
+    }
+    await query(`UPDATE pipe_integrations SET last_event_at = now() WHERE id = $1`, [integ.id]);
+    const event = (provider === "github" ? req.headers["x-github-event"] : req.headers["x-gitlab-event"]) as string | undefined;
+    if (event === "ping") return { ok: true };
+    return { ok: true, ...(await applyGitItems(integ.pipe_id, provider, gitItems(provider, event, payload))) };
   });
 }

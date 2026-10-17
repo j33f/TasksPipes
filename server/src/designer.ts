@@ -51,8 +51,11 @@ function withIds<T extends { id?: unknown; label: string }>(items: T[], what: st
   return items.map((it) => ({ ...it, id: typeof it.id === "string" && it.id ? it.id : slug(it.label, taken) }));
 }
 
-/** `previous`: the type being edited, whose task types stay allowed even if they became private. */
-export function validatePipeType(input: unknown, userId: string, previous?: PipeType): Definition<PipeType> {
+/**
+ * `previous`: the type being edited, whose task types stay allowed even if they became private.
+ * `extraTaskTypes`: ids of task types about to be created with it (an import).
+ */
+export function validatePipeType(input: unknown, userId: string, previous?: PipeType, extraTaskTypes: string[] = []): Definition<PipeType> {
   const b = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const label = str(b.label, "Name", { required: true, max: 60 });
   const color = str(b.color, "Colour") || "#2BC2FF";
@@ -70,7 +73,10 @@ export function validatePipeType(input: unknown, userId: string, previous?: Pipe
   if (!rawColumns.some((c) => c.status === "done")) throw bad("At least one “done” column is needed");
   const columns: Column[] = withIds(rawColumns, "column");
 
-  const known = new Set(allTaskTypes().filter((t) => usableBy(t, userId) || previous?.taskTypes.includes(t.id)).map((t) => t.id));
+  const known = new Set([
+    ...allTaskTypes().filter((t) => usableBy(t, userId) || previous?.taskTypes.includes(t.id)).map((t) => t.id),
+    ...extraTaskTypes,
+  ]);
   const taskTypes = [...new Set(list(b.taskTypes, "Task types", 40).map(String))].filter((id) => id !== "task");
   for (const id of taskTypes) if (!known.has(id)) throw bad("Unknown task type: {id}", { id });
 

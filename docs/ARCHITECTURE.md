@@ -26,6 +26,8 @@ Outline through its RPC-style API.
 | `routes.ts` | The JSON API under `/api`: spaces, pipes, tasks, sub-tasks, files, invitations, designer… |
 | `pipeTypes.ts` | Built-in catalog of pipe and task types, and the custom types made with the designer. |
 | `designer.ts` | Validation of custom pipe and task types. |
+| `models-io.ts` | Export and import of models as YAML files. |
+| `git.ts` | GitHub / GitLab webhooks: task keys, signatures, what events mean (the routes are in `routes.ts`). |
 | `fields.ts` | Validation of task field values. |
 | `realtime.ts` | WebSocket at `/api/events`, notifying people of tasks sent to them or refused. |
 | `calendar.ts` | iCalendar feed at `/cal/<token>.ics`. |
@@ -51,13 +53,14 @@ follow Outline's design tokens (`web/src/app.css`).
 
 | Table | Holds |
 | --- | --- |
-| `users`, `user_avatars` | Outline accounts (keyed by Outline server and id) and e-mail accounts; preferences; uploaded pictures. |
+| `users`, `user_avatars` | Outline accounts (keyed by Outline server and id), e-mail accounts and the "GitHub" / "GitLab" system accounts that author automatic moves; preferences; uploaded pictures. |
 | `spaces`, `space_members` | Personal spaces (one per person) and team spaces, with roles. |
 | `pipes`, `pipe_pins` | Pipes (type, visibility, archiving) and the pipes people pinned. |
 | `tasks` | Tasks: place (space, pipe or incoming), column and generic status, owner, due date, type and field values. |
 | `task_items`, `task_files` | Sub-tasks and files of tasks. |
 | `task_events` | History of every task, with the state before and after each change. |
 | `custom_types` | Pipe and task types made with the designer. |
+| `pipe_integrations`, `task_links` | Repositories connected to pipes (webhook token, encrypted secret), and the pull/merge requests and commits linked to tasks. |
 | `sessions`, `login_tokens`, `invitations` | Sessions, e-mail sign-in links and TOTP steps, invitations and requests to connect (pending, accepted, refused). |
 
 Ids are UUIDv7 (`gen_uuidv7()`), except for accounts of the configured Outline server, which keep their Outline id.

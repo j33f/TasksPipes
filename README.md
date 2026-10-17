@@ -25,8 +25,12 @@ follows Outline's look and feel.
 - **Pipes** — kanban boards with their own columns, personal or shared with a team, private or open to everyone.
 - **Incoming buckets** — send a task to someone or to a team; they accept it into a pipe or refuse it with a reason.
 - **My tasks** and **Next action** — everything assigned to you across pipes, and a GTD view suggesting what to start next.
-- **Task types and fields** — course design, sales opportunity, application… with dates, amounts, files and Outline documents.
-- **Models** — design your own pipe and task types, from scratch or from an existing one.
+- **Task types and fields** — course design, sales opportunity, user story, bug… with dates, amounts, files and Outline documents.
+- **Software teams** — UX research, UI design, product documentation, translation, development and QA pipes, with
+  [GitHub and GitLab integration](docs/GIT-INTEGRATION.md): pull/merge requests naming a task move it to review,
+  then to done when merged.
+- **Models** — design your own pipe and task types, from scratch or from an existing one, and share them as
+  [YAML files](docs/MODELS.md).
 - **Calendar** — subscribe to your tasks with a due date in Google Calendar, Apple Calendar or any calendar app,
   with reminders five days before, the day before and on the day.
 - **Your Outline workspace, ready** — once connected to Outline, everyone in the workspace is there straight away:
@@ -42,8 +46,9 @@ follows Outline's look and feel.
 
 TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:
 course design, admissions, exams, Qualiopi quality, funding… But nothing ties it to training: the general,
-sales, prospecting, communication and admin pipes fit any business, the Personal pipe and the Next action view
-make it a good personal to-do list, and the designer lets you create the pipe and task types you need.
+sales, prospecting, communication and admin pipes fit any business, the software pipes fit product teams, the
+Personal pipe and the Next action view make it a good personal to-do list, and the designer lets you create the
+pipe and task types you need.
 See [the feature guide](docs/FEATURES.md) for the details.
 
 # Installation

@@ -244,6 +244,44 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_token text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_token_hash text;
 CREATE UNIQUE INDEX IF NOT EXISTS users_calendar_idx ON users(calendar_token_hash) WHERE calendar_token_hash IS NOT NULL;
 
+-- Repositories connected to a pipe (GitHub / GitLab webhooks): the token routes the webhook, the secret
+-- (encrypted) checks it.
+CREATE TABLE IF NOT EXISTS pipe_integrations (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  pipe_id uuid NOT NULL REFERENCES pipes(id) ON DELETE CASCADE,
+  provider text NOT NULL CHECK (provider IN ('github', 'gitlab')),
+  token text NOT NULL UNIQUE,
+  secret text NOT NULL,
+  created_by uuid REFERENCES users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_event_at timestamptz,
+  UNIQUE (pipe_id, provider)
+);
+
+-- Pull/merge requests and commits that name a task (TP-123).
+CREATE TABLE IF NOT EXISTS task_links (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  provider text NOT NULL,
+  kind text NOT NULL CHECK (kind IN ('pull_request', 'merge_request', 'commit')),
+  url text NOT NULL,
+  number integer,
+  title text NOT NULL DEFAULT '',
+  state text NOT NULL,
+  repo text NOT NULL DEFAULT '',
+  author text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (task_id, url)
+);
+CREATE INDEX IF NOT EXISTS tasks_number_idx ON tasks(number);
+
+-- System accounts that author the moves made by GitHub and GitLab (they never sign in nor appear in lists).
+INSERT INTO users (id, name, auth_kind) VALUES
+  ('00000000-0000-4000-8000-0000000000a1', 'GitHub', 'system'),
+  ('00000000-0000-4000-8000-0000000000a2', 'GitLab', 'system')
+ON CONFLICT (id) DO NOTHING;
+
 -- Who invited whom: the two accounts see each other.
 CREATE TABLE IF NOT EXISTS invitations (
   inviter_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,

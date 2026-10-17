@@ -6,6 +6,9 @@ TasksPipes was designed for an adult training centre, but fits other uses just a
   disability follow-up, Qualiopi quality, funding and invoicing.
 - **Business** — sales (quotes, negotiation, won / lost), prospecting, communication and admin pipes, with fields for
   clients, amounts and documents, and incoming buckets to pass work between people and teams.
+- **Software teams** — UX research, UI design, product documentation, translation / i18n, software development and
+  QA pipes, with user stories, bugs, mock-ups, translation batches, releases and test campaigns, and the
+  [GitHub / GitLab integration](GIT-INTEGRATION.md).
 - **Personal organisation** — a Personal pipe in every space, *My tasks* across all pipes, a GTD *Next action* view,
   sub-tasks and a calendar subscription with reminders.
 
@@ -48,6 +51,9 @@ communication, instructional design, documentation, trainers & schedule, learner
 quality & Qualiopi, admin & finance, and processes (recruitment / admission, session start, exams / certification,
 session end) that can fill their first column with starter tasks.
 
+The *Software* group covers product teams: UX research, UI design, product documentation, translation / i18n,
+software development (with an *In review* column) and testing / QA.
+
 - **Confidential** types (learner follow-up) are always private.
 - **Team-only** types (disability follow-up) exist only in team spaces; their tasks cannot be sent or moved out of
   the team, and people who leave the team lose access to them, even as authors.
@@ -65,6 +71,9 @@ types (fields, with a live preview), from scratch or from an existing model. A m
 used by its author only — and can be made **public**; it is filed in a category. Only its author can change it.
 A type in use cannot be deleted, and the kind of a saved field cannot change.
 
+Models can be **exported and imported as YAML files**, to share them between instances or keep them under version
+control (see [model files](MODELS.md)).
+
 Each person can **turn off** the pipe types they do not need (all but *General tasks*): they are no longer offered
 when creating a pipe, and the task types offered only by turned-off pipe types are turned off too. Existing pipes of
 those types keep working. This is a personal choice: others still see every type.
@@ -77,6 +86,9 @@ those types keep working. This is a personal choice: others still see every type
   drop; progress shows on cards.
 - **History**: every change is recorded with the state before and after — place, column, owner, due date, linked
   document, fields, files, checked items — and its comment. Tasks are never deleted, they are moved to *Dropped*.
+- **GitHub / GitLab**: a pipe connected to repositories links the pull/merge requests and commits naming a task (its key,
+  `TP-123`) and moves the task along: in progress for a draft, in review for an open request, done when merged. See
+  [the integration guide](GIT-INTEGRATION.md).
 - **Outline**: search documents or paste a URL, link and unlink, or create an Outline document from a task.
 - **Markdown** in descriptions, comments and refusal reasons, with a preview.
 

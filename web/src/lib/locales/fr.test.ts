@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { FR } from "./fr";
 import { FIELD_TYPE_LABELS, STATUSES } from "../constants";
 import { GROUPS } from "../gtd";
+import { GIT_STATE_LABEL } from "../git";
+import { GIT_ACTIONS } from "../events";
 
 // Every source file of the app, as text (tests and the dictionaries left out).
 const sources = import.meta.glob<string>(["../../**/*.{ts,svelte}", "!../../**/*.test.ts", "!../locales/**"], {
@@ -31,6 +33,8 @@ const used = new Set<string>([
   ...STATUSES.map((s) => s.label),
   ...Object.values(FIELD_TYPE_LABELS),
   ...GROUPS.flatMap((g) => [g.label, g.hint]),
+  ...Object.values(GIT_STATE_LABEL),
+  ...Object.values(GIT_ACTIONS),
   // Theme choices (AccountModal: t(label) over a literal list).
   "Automatic", "Light", "Dark",
 ]);

@@ -97,6 +97,8 @@ export interface Task {
   sender: UserRef | null;
   outlineDoc: DocRef | null;
   commentCount: number;
+  /** State of the latest pull/merge request naming the task. */
+  gitState: TaskLink["state"] | null;
   /** Sub-tasks: how many, how many checked, and the first one left. */
   checklist: { total: number; done: number; next: { id: string; text: string } | null };
   createdAt: string;
@@ -124,7 +126,7 @@ export interface EventSide {
 
 export interface TaskEvent {
   id: number;
-  type: "created" | "sent" | "accepted" | "moved" | "status" | "refused" | "updated" | "edited" | "comment" | "fields" | "file" | "checklist";
+  type: "created" | "sent" | "accepted" | "moved" | "status" | "refused" | "updated" | "edited" | "comment" | "fields" | "file" | "checklist" | "linked";
   comment: string | null;
   details: {
     fields?: string[];
@@ -134,6 +136,14 @@ export interface TaskEvent {
     field?: string;
     item?: string;
     done?: boolean;
+    /** Pull/merge request or commit (events "linked", and moves made by GitHub / GitLab). */
+    provider?: "github" | "gitlab";
+    kind?: TaskLink["kind"];
+    url?: string;
+    number?: number | null;
+    title?: string;
+    repo?: string;
+    action?: string;
   } | null;
   createdAt: string;
   actor: UserRef;
@@ -146,6 +156,11 @@ export interface TaskDetail extends Task {
   events: TaskEvent[];
   files: TaskFile[];
   items: ChecklistItem[];
+  /** Key to name the task in branches, PR/MR titles and commits (TP-123). */
+  key: string;
+  links: TaskLink[];
+  /** The task's pipe is connected to GitHub or GitLab. */
+  gitConnected: boolean;
 }
 
 export interface TaskFile {
@@ -256,4 +271,26 @@ export interface Invitation {
   /** A person already on the platform answers the request; a new address is accepted at once. */
   status: "pending" | "accepted" | "refused";
   createdAt: string;
+}
+
+/** A pull/merge request or a commit naming a task. */
+export interface TaskLink {
+  provider: "github" | "gitlab";
+  kind: "pull_request" | "merge_request" | "commit";
+  url: string;
+  number: number | null;
+  title: string;
+  state: "draft" | "open" | "merged" | "closed" | "pushed";
+  repo: string;
+  author: string | null;
+  updatedAt: string;
+}
+
+export interface GitIntegration {
+  provider: "github" | "gitlab";
+  /** Webhook URL to give to GitHub / GitLab, and its secret. */
+  url: string;
+  secret: string;
+  createdAt: string;
+  lastEventAt: string | null;
 }

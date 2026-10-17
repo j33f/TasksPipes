@@ -80,6 +80,8 @@ describe("English catalog", () => {
     "Instagram", "Newsletter", "Forum", "Job dating", "Date", "E-learning", "Document", "Guide", "Intervention", "Module", "Absences",
     "Action", "Session", "Audit", "Commercial", "Prospection", "Communication", "Backlog", "Initial", "Surveillance", "Oral",
     "Post, article, newsletter…", "Syllabus / programme", "Programme", "Satisfaction (/10)", "Corrections", "Documentation",
+    "Questionnaire", "Analytics", "Benchmark", "Participants", "Web", "iOS", "Android", "Desktop", "Wireframe", "Prototype", "API",
+    "Crowdin", "Lokalise", "Weblate", "Transifex", "User story", "Points", "Bug", "Production", "Version", "Performance", "Validation",
   ]);
 
   it("translates every label of the built-in types", () => {

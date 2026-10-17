@@ -1,6 +1,20 @@
 import { STATUS_BY_ID, formatDate } from "./constants";
 import type { EventSide, TaskEvent } from "./types";
 import { t } from "./i18n.svelte";
+import { gitKindLabel } from "./git";
+
+/** "#12 “Title”" for a pull/merge request, "“Title”" for a commit. */
+const gitRef = (e: TaskEvent) => {
+  const d = e.details;
+  const num = d?.number ? `${d.kind === "merge_request" ? "!" : "#"}${d.number} ` : "";
+  return `${num}“${d?.title ?? ""}”`;
+};
+
+/** What a pull/merge request did (GitHub / GitLab actions, shown with t()). */
+export const GIT_ACTIONS: Record<string, string> = {
+  opened: "opened", reopened: "reopened", ready_for_review: "ready for review", converted_to_draft: "back to draft",
+  merged: "merged", closed: "closed", pushed: "pushed", update: "updated",
+};
 
 type Loc = NonNullable<EventSide["location"]>;
 
@@ -37,6 +51,8 @@ export function eventSummary(e: TaskEvent): string {
       return e.details?.added
         ? t("added the file “{name}”", { name: e.details.added })
         : t("removed the file “{name}”", { name: e.details?.removed ?? "" });
+    case "linked":
+      return t("linked the {kind} {ref}", { kind: gitKindLabel(e.details?.kind ?? "commit"), ref: gitRef(e) });
     case "checklist":
       return t(e.details?.done ? "checked “{item}”" : "unchecked “{item}”", { item: e.details?.item ?? "" });
     default:
@@ -71,6 +87,11 @@ export function eventChanges(e: TaskEvent): string[] {
     const doc = (d: { title: string } | null) => d?.title ?? t("no document");
     out.push(initial ? t("Outline document: {to}", { to: doc(e.to.doc) }) : t("Outline document: {from} → {to}", { from: doc(e.from.doc), to: doc(e.to.doc) }));
   }
+  if (e.type === "status" && e.details?.url) {
+    out.push(t("{kind} {ref}: {action}", {
+      kind: gitKindLabel(e.details.kind ?? "pull_request"), ref: gitRef(e), action: t(GIT_ACTIONS[e.details.action ?? ""] ?? e.details.action ?? ""),
+    }));
+  }
   if (e.details?.taskType) out.push(t("Type: {from} → {to}", { from: e.details.taskType.from, to: e.details.taskType.to }));
   if (e.details?.fields?.length) out.push(t("Details: {fields}", { fields: e.details.fields.join(", ") }));
   return out;
@@ -78,6 +99,6 @@ export function eventChanges(e: TaskEvent): string[] {
 
 export function eventIcon(type: TaskEvent["type"]) {
   return (
-    { created: "plus", sent: "send", accepted: "check", moved: "arrow", status: "pipe", refused: "return", edited: "edit", updated: "edit", comment: "comment", fields: "edit", file: "doc", checklist: "checklist" } as const
+    { created: "plus", sent: "send", accepted: "check", moved: "arrow", status: "pipe", refused: "return", edited: "edit", updated: "edit", comment: "comment", fields: "edit", file: "doc", checklist: "checklist", linked: "branch" } as const
   )[type] ?? "history";
 }

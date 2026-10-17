@@ -117,6 +117,11 @@ Open tasks carry reminders (five days before, the day before and on the due date
 the alerts of subscribed calendars unless "Alerts" is unticked under "Remove" when subscribing; Google Calendar
 ignores them and applies its own default notifications.
 
+## GitHub and GitLab webhooks
+
+Pipes connected to repositories receive webhooks at `<APP_URL>/hooks/github/…` and `<APP_URL>/hooks/gitlab/…`:
+GitHub or GitLab must be able to reach `APP_URL`. See [the integration guide](GIT-INTEGRATION.md).
+
 ## Upgrading
 
 Pull the new version and rebuild: the database schema is upgraded at start-up.

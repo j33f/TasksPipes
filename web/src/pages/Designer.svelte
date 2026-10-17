@@ -8,7 +8,7 @@
   import PipeIcon from "../components/PipeIcon.svelte";
   import PipeTypeEditor from "../components/PipeTypeEditor.svelte";
   import TaskTypeEditor from "../components/TaskTypeEditor.svelte";
-  import { t, tn } from "../lib/i18n.svelte";
+  import { prefs, t, tn } from "../lib/i18n.svelte";
 
   const tab = $derived(router.params.get("tab") === "tasks" ? "tasks" : "pipes");
 
@@ -32,6 +32,46 @@
   const offeredIn = (id: string) => app.pipeTypes.filter((p) => p.taskTypes.includes(id)).map((p) => p.label);
 
   let busy = $state(false);
+
+  // ----- Model files (YAML) -----
+  let importing = $state<HTMLInputElement>();
+  const mineAll = $derived({
+    pipes: app.pipeTypes.filter((ty) => mine(ty)).map((ty) => ty.id),
+    tasks: app.taskTypes.filter((ty) => mine(ty)).map((ty) => ty.id),
+  });
+
+  /** Downloads a model file (fetched, so that it comes in the language of the page). */
+  async function download(pipeTypes: string[], taskTypes: string[], name: string) {
+    try {
+      const qs = new URLSearchParams({ pipeTypes: pipeTypes.join(","), taskTypes: taskTypes.join(",") });
+      const res = await fetch(`/api/catalog/export?${qs}`, { headers: { "X-Locale": prefs.lang } });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t("Error {n}", { n: res.status }));
+      const url = URL.createObjectURL(await res.blob());
+      const a = Object.assign(document.createElement("a"), {
+        href: url,
+        download: `${name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w-]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "models"}.yml`,
+      });
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    }
+  }
+
+  async function importFile(file: File | undefined) {
+    if (!file) return;
+    busy = true;
+    try {
+      const { created } = await api.post<{ created: { kind: string; label: string }[] }>("/catalog/import", { yaml: await file.text() });
+      await app.loadCatalog();
+      loadUsage();
+      app.toast(tn(created.length, "{n} model imported, private for now", "{n} models imported, private for now"));
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    } finally {
+      busy = false;
+    }
+  }
   async function toggle(ty: PipeType) {
     busy = true;
     try {
@@ -75,6 +115,13 @@
         {t("Design your pipe types (columns, task types, confidentiality) and your task types (fields), from scratch or from an existing model.")}
       </div>
     </div>
+    <button class="btn neutral" disabled={busy} onclick={() => importing?.click()}>{t("Import…")}</button>
+    <input bind:this={importing} type="file" accept=".yml,.yaml,application/yaml,text/yaml" hidden
+      onchange={(e) => { importFile((e.currentTarget as HTMLInputElement).files?.[0]); (e.currentTarget as HTMLInputElement).value = ""; }} />
+    {#if mineAll.pipes.length || mineAll.tasks.length}
+      <button class="btn neutral" disabled={busy} title={t("Download all your models as a YAML file")}
+        onclick={() => download(mineAll.pipes, mineAll.tasks, "taskspipes-models")}>{t("Export my models")}</button>
+    {/if}
     {#if tab === "pipes"}
       <button class="btn" onclick={() => (pipeEditor = {})}><Icon name="plus" size={18} />{t("New pipe type")}</button>
     {:else}
@@ -110,6 +157,8 @@
               </div>
               <div class="row actions">
                 <button class="btn ghost small" onclick={() => (pipeEditor = { base: ty })}>{t("Duplicate")}</button>
+                <button class="btn ghost small" title={t("Download as a YAML file, with the custom task types it offers")}
+                  onclick={() => download([ty.id], [], ty.label)}>{t("Export")}</button>
                 {#if ty.id !== "general"}
                   <button class="btn ghost small" disabled={busy}
                     title={ty.disabled ? t("Offer this type again when creating a pipe") : t("Stop offering this type when creating a pipe; existing pipes keep working")}
@@ -152,6 +201,7 @@
             </div>
             <div class="row actions">
               <button class="btn ghost small" onclick={() => (taskEditor = { base: ty })}>{t("Duplicate")}</button>
+              <button class="btn ghost small" title={t("Download as a YAML file")} onclick={() => download([], [ty.id], ty.label)}>{t("Export")}</button>
               {#if mine(ty)}
                 <button class="btn ghost small" onclick={() => (taskEditor = { editing: ty })}><Icon name="edit" size={14} />{t("Edit")}</button>
                 <button class="btn ghost small" disabled={Boolean(usage.taskTypes[ty.id])} onclick={() => remove("task-types", ty)}>
