@@ -1,4 +1,7 @@
 import dns from "node:dns/promises";
+import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from "node:dns";
+import http from "node:http";
+import https from "node:https";
 import net from "node:net";
 import { config } from "./config.js";
 import type { Params } from "./errors.js";
@@ -89,27 +92,80 @@ export async function normalizeOutlineUrl(input: unknown): Promise<string> {
   return url;
 }
 
+type LookupCallback = (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
+
+/**
+ * DNS lookup for the connections to user-given servers: the address actually connected to is the one checked, so a
+ * name that resolves to a public address when checked and to an internal one when connecting (DNS rebinding) fails.
+ */
+export function publicLookup(hostname: string, options: LookupOptions, callback: LookupCallback) {
+  dnsLookup(hostname, { ...options, all: true }, (err, addresses) => {
+    if (err) return callback(err, []);
+    if (!config.outlineAllowPrivate && addresses.some((a) => isPrivateIp(a.address))) {
+      return callback(Object.assign(new Error("internal address"), { code: "EPRIVATE" }), []);
+    }
+    if (options.all) return callback(null, addresses);
+    callback(null, addresses[0].address, addresses[0].family);
+  });
+}
+
+const MAX_RESPONSE = 20 * 1024 * 1024;
+
+/** POSTs JSON to a user-given server, through publicLookup, without following redirects. */
+function postToUserServer(url: string, headers: Record<string, string>, body: string): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const req = (u.protocol === "https:" ? https : http).request(
+      u,
+      { method: "POST", headers: { ...headers, "Content-Length": String(Buffer.byteLength(body)) }, lookup: publicLookup, timeout: 15_000 },
+      (res) => {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        res.on("data", (c: Buffer) => {
+          size += c.length;
+          if (size > MAX_RESPONSE) req.destroy(new Error("response too large"));
+          else chunks.push(c);
+        });
+        res.on("end", () => resolve({ status: res.statusCode ?? 502, text: Buffer.concat(chunks).toString("utf8") }));
+        res.on("error", reject);
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
 /** Calls an Outline RPC-style API method (POST /api/<method>) on a server (the configured one by default). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function outlineApi<T = any>(token: string, method: string, body: object = {}, instance = config.outlineUrl): Promise<{ data: T }> {
-  if (!isDefault(instance)) await assertPublicHost(instance);
-  const base = isDefault(instance) ? config.outlineApiUrl : instance;
-  const res = await fetch(`${base}/api/${method}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(body),
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
-  }).catch((err: Error & { cause?: { message?: string } }) => {
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" };
+  const unreachable = (err: Error & { cause?: { message?: string }; code?: string }) => {
+    if (err.code === "EPRIVATE") throw new OutlineError(400, "This Outline server is not allowed (internal address).");
     throw new OutlineError(502, "Outline server unreachable: {cause}", { cause: err.cause?.message ?? err.message });
-  });
-  const json = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string; error?: string; data: T };
-  if (!res.ok || json.ok === false) {
-    throw new OutlineError(res.status, json.message || json.error || `Outline API error ${res.status}`);
+  };
+  let status: number;
+  let text: string;
+  if (isDefault(instance)) {
+    // The server configured by the instance (possibly on an internal address, OUTLINE_API_URL).
+    const res = await fetch(`${config.outlineApiUrl}/api/${method}`, {
+      method: "POST", headers, body: JSON.stringify(body), redirect: "error", signal: AbortSignal.timeout(15_000),
+    }).catch(unreachable);
+    status = res.status;
+    text = await res.text().catch(() => "");
+  } else {
+    // A server typed on the sign-in page: checked by name first (clear errors), then at each connection.
+    await assertPublicHost(instance);
+    ({ status, text } = await postToUserServer(`${instance}/api/${method}`, headers, JSON.stringify(body)).catch(unreachable));
+  }
+  let json: { ok?: boolean; message?: string; error?: string; data: T };
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = {} as typeof json;
+  }
+  if (status < 200 || status >= 300 || json.ok === false) {
+    throw new OutlineError(status, json.message || json.error || `Outline API error ${status}`);
   }
   return json;
 }

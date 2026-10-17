@@ -6,7 +6,7 @@ const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf
 describe("LICENSE", () => {
   it("licenses the current release (see scripts/release.mjs)", () => {
     const { version } = JSON.parse(read("../package.json"));
-    expect(read("../../LICENSE")).toMatch(new RegExp(`Licensed Work:\\s+TasksPipes ${version.replace(/\./g, "\\.")}\\n`));
+    expect(read("../../LICENSE")).toMatch(new RegExp(`Licensed Work:\\s+TasksPipes ${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n`));
   });
 
   it("names its licensor and keeps the web app on the same version", () => {
