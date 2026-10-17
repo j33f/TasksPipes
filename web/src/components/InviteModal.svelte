@@ -56,7 +56,7 @@
   {#if link}
     <div class="callout warning">
       <Icon name="mail" />
-      <span>{t("E-mail sending is not set up. Pass this link on to {email} yourself: it signs them in directly, once, for 7 days.", { email })}</span>
+      <span>{t("E-mail sending is not set up. Pass this link on to {email} yourself: it signs them in directly, once, for 48 hours.", { email })}</span>
     </div>
     <input class="input" readonly value={link} onfocus={(e) => (e.currentTarget as HTMLInputElement).select()} />
     <div class="modal-actions">

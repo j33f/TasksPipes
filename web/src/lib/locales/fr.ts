@@ -157,7 +157,7 @@ export const FR: Record<string, string> = {
   "e-mail account": "compte e-mail",
   "E-mail address": "Adresse e-mail",
   "E-mail is not set up: new link copied, pass it on yourself": "E-mail non configuré : nouveau lien copié, à transmettre vous-même",
-  "E-mail sending is not set up. Pass this link on to {email} yourself: it signs them in directly, once, for 7 days.": "L'envoi d'e-mails n'est pas configuré. Transmettez vous-même ce lien à {email} : il le ou la connecte directement, une seule fois, pendant 7 jours.",
+  "E-mail sending is not set up. Pass this link on to {email} yourself: it signs them in directly, once, for 48 hours.": "L'envoi d'e-mails n'est pas configuré. Transmettez vous-même ce lien à {email} : il le ou la connecte directement, une seule fois, pendant 48 heures.",
   "E.g.: Company visit": "Ex. : Visite en entreprise",
   "E.g.: Work-study": "Ex. : Alternance",
   "Edit": "Modifier",
@@ -613,4 +613,5 @@ export const FR: Record<string, string> = {
   "E-mail notifications": "Notifications par e-mail",
   "Get an e-mail when something needs you, even with TasksPipes closed. Nothing is sent for what you do yourself.": "Recevez un e-mail quand quelque chose vous attend, même TasksPipes fermé. Rien n'est envoyé pour ce que vous faites vous-même.",
   "The daily digest comes in the evening, with the reports; due dates are reminded in the morning, at the hour chosen.": "Le résumé quotidien arrive le soir, avec les rapports ; les échéances sont rappelées le matin, à l'heure choisie.",
+  "invitation expired: send a new link to let them in": "invitation expirée : envoyez un nouveau lien pour lui donner accès",
 };

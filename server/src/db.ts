@@ -329,14 +329,21 @@ CREATE TABLE IF NOT EXISTS login_tokens (
 );
 CREATE INDEX IF NOT EXISTS login_tokens_user_idx ON login_tokens(user_id, created_at);
 
+-- Disabled accounts cannot sign in, get no e-mail and are seen by nobody but themselves. 'unused_invitation': an
+-- account created by an invitation and never signed in, once its link expired (48 hours); inviting it again
+-- turns it back on.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_reason text CHECK (disabled_reason IN ('unused_invitation'));
+
 -- Who sees whom: oneself; Outline accounts of the same server see each other; otherwise, two accounts
--- see each other once one invited the other and the invitation is accepted.
+-- see each other once one invited the other and the invitation is accepted. Disabled accounts are seen by no one.
 CREATE OR REPLACE FUNCTION user_visible(viewer uuid, target uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT viewer = target
-    OR EXISTS (SELECT 1 FROM users v JOIN users t ON t.id = target
-               WHERE v.id = viewer AND v.auth_kind = 'outline' AND t.auth_kind = 'outline' AND t.outline_url = v.outline_url)
-    OR EXISTS (SELECT 1 FROM invitations i WHERE i.status = 'accepted'
-               AND ((i.inviter_id = viewer AND i.invitee_id = target) OR (i.inviter_id = target AND i.invitee_id = viewer)))
+    OR (EXISTS (SELECT 1 FROM users t WHERE t.id = target AND t.disabled_at IS NULL) AND (
+      EXISTS (SELECT 1 FROM users v JOIN users t ON t.id = target
+              WHERE v.id = viewer AND v.auth_kind = 'outline' AND t.auth_kind = 'outline' AND t.outline_url = v.outline_url)
+      OR EXISTS (SELECT 1 FROM invitations i WHERE i.status = 'accepted'
+                 AND ((i.inviter_id = viewer AND i.invitee_id = target) OR (i.inviter_id = target AND i.invitee_id = viewer)))))
 $$;
 
 -- Spaces one may reach: visible people's personal spaces; teams one belongs to, or, for an Outline account,

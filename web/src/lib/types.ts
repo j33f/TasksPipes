@@ -278,6 +278,8 @@ export interface Invitation {
   /** Only for the people I invited. */
   email: string | null;
   active: boolean;
+  /** Invited by me, never signed in and the link expired: the account is disabled until a new link is sent. */
+  expired: boolean;
   invitedByMe: boolean;
   avatarUrl: string | null;
   /** A person already on the platform answers the request; a new address is accepted at once. */
