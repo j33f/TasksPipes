@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { signIn, signInWithLink, startApp, stopApp, agent, type Agent } from "./helpers.js";
 import { pool } from "../../src/db.js";
 import { createLoginLink, disableUnusedInvitations } from "../../src/auth.js";
+import { resetRate } from "../../src/rate-limit.js";
 
 let alice: Agent, bob: Agent;
 let bobId: string;
@@ -101,6 +102,18 @@ describe("invitations not used within 48 hours", () => {
     await signInWithLink(res.body.link);
   });
 
+  it("come back when the person signs up again and uses the link", async () => {
+    const { id } = await invite(alice, "signup-again@example.com");
+    await age(id);
+    await disableUnusedInvitations();
+    // Signing up sends a link that turns the account back on once used (SMTP is needed to send it: made here).
+    const link = await createLoginLink(id, 60, { reactivates: true });
+    const guest = await signInWithLink(link);
+    expect((await guest.get("/api/me")).body.user.id).toBe(id);
+    expect(await disabled(id)).toBe(false);
+    expect(await peopleOf(alice)).toContain(id);
+  });
+
   it("leave accounts made by signing up alone", async () => {
     const { rows: [u] } = await pool.query(
       `INSERT INTO users (id, name, email, auth_kind, created_at) VALUES (gen_uuidv7(), 'Self', 'self@example.com', 'email', now() - interval '10 days') RETURNING id`
@@ -116,5 +129,19 @@ describe("invitations not used within 48 hours", () => {
     await pool.query(`UPDATE users SET disabled_at = now(), disabled_reason = 'unused_invitation' WHERE id = $1`, [id]);
     expect((await guest.get("/api/me")).status).toBe(401);
     await pool.query(`UPDATE users SET disabled_at = NULL, disabled_reason = NULL WHERE id = $1`, [id]);
+  });
+});
+
+describe("invitations", () => {
+  it("are rate limited per person", async () => {
+    const aliceId = (await alice.get("/api/me")).body.user.id;
+    await resetRate({ name: "invitations" }, aliceId);
+    for (let i = 0; i < 30; i++) expect((await alice.post("/api/invitations", { email: "not an address" })).status).toBe(400);
+    const blocked = await alice.post("/api/invitations", { email: "not an address" });
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error).toBe("Too many requests: please try again later");
+    // Someone else is not blocked.
+    expect((await bob.post("/api/invitations", { email: "not an address" })).status).toBe(400);
+    await resetRate({ name: "invitations" }, aliceId);
   });
 });

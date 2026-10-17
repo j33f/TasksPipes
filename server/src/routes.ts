@@ -20,6 +20,7 @@ import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
 import { sendLinkMail } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
 import { calendarUrl } from "./calendar.js";
+import { rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, type TaskPermissions } from "./access.js";
 
@@ -571,7 +572,9 @@ export async function apiRoutes(app: FastifyInstance) {
     return sent ? { sent: true } : { sent: false, link };
   }
 
-  app.post("/invitations", async (req: Req) => {
+  // Invitations send e-mails: a few per person and hour.
+  const byPerson = (req: FastifyRequest) => req.user?.id ?? req.ip;
+  app.post("/invitations", rateLimited({ name: "invitations", max: 30, timeWindow: 3_600_000, keyGenerator: byPerson }), async (req: Req) => {
     if (!config.allowEmailInvitations) throw forbidden("Invitations by e-mail are turned off on this instance");
     const uid = me(req);
     const email = text(req.body?.email, "E-mail", { required: true, max: 254 }).toLowerCase();
@@ -672,7 +675,7 @@ export async function apiRoutes(app: FastifyInstance) {
   app.post("/invitations/:id/accept", (req: Req) => answerRequest(req, true));
   app.post("/invitations/:id/refuse", (req: Req) => answerRequest(req, false));
 
-  app.post("/invitations/:id/resend", async (req: Req) => {
+  app.post("/invitations/:id/resend", rateLimited({ name: "invitation-links", max: 10, timeWindow: 3_600_000, keyGenerator: byPerson }), async (req: Req) => {
     const invitee = await one(
       `SELECT u.id, u.name, u.email, u.locale FROM invitations i JOIN users u ON u.id = i.invitee_id
        WHERE i.inviter_id = $1 AND i.invitee_id = $2 AND i.status = 'accepted' AND u.auth_kind = 'email'`,
