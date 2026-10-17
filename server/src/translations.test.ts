@@ -82,6 +82,7 @@ describe("English catalog", () => {
     "Post, article, newsletter…", "Syllabus / programme", "Programme", "Satisfaction (/10)", "Corrections", "Documentation",
     "Questionnaire", "Analytics", "Benchmark", "Participants", "Web", "iOS", "Android", "Desktop", "Wireframe", "Prototype", "API",
     "Crowdin", "Lokalise", "Weblate", "Transifex", "User story", "Points", "Bug", "Production", "Version", "Performance", "Validation",
+    "Budget", "Notes", "Photos", "Freelance", "Parking", "Transport", "Transaction",
   ]);
 
   it("translates every label of the built-in types", () => {

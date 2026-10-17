@@ -29,6 +29,8 @@ follows Outline's look and feel.
 - **Software teams** — UX research, UI design, product documentation, translation, development and QA pipes, with
   [GitHub and GitLab integration](docs/GIT-INTEGRATION.md): pull/merge requests naming a task move it to review,
   then to done when merged.
+- **Personal life** — chores (flat share, couple, family), moving house, shared custody, home improvement, party
+  planning, job search, house hunting, health care, paperwork and trips, with shared expenses and starter tasks.
 - **Models** — design your own pipe and task types, from scratch or from an existing one, and share them as
   [YAML files](docs/MODELS.md).
 - **Calendar** — subscribe to your tasks with a due date in Google Calendar, Apple Calendar or any calendar app,
@@ -49,7 +51,7 @@ follows Outline's look and feel.
 TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:
 course design, admissions, exams, Qualiopi quality, funding… But nothing ties it to training: the general,
 sales, prospecting, communication and admin pipes fit any business, the software pipes fit product teams, the
-Personal pipe and the Next action view make it a good personal to-do list, and the designer lets you create the
+personal life pipes and the Next action view make it a good household and personal to-do list, and the designer lets you create the
 pipe and task types you need.
 See [the feature guide](docs/FEATURES.md) for the details.
 

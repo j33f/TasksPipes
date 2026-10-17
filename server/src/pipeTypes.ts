@@ -91,6 +91,15 @@ const CHECKLIST: Column[] = [
   col("na", "Non applicable", "abandoned", "#a2b2c3"),
 ];
 
+const HOUSEHOLD: Column[] = [
+  col("a_faire", "À faire", "backlog", "#66778F"),
+  col("semaine", "Cette semaine", "ready", "#2BC2FF"),
+  col("en_cours", "En cours", "ongoing", "#0366d6"),
+  col("en_attente", "En attente", "blocked", "#F5BE31"),
+  col("fait", "Fait", "done", "#3ad984"),
+  col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
+];
+
 // ---------------------------------------------------------------------------
 // Fields shared by several task types
 
@@ -467,6 +476,172 @@ export const TASK_TYPES: TaskType[] = [
       f("cas", "Nombre de cas", "number"), f("reussis", "Cas réussis", "number"), f("rapport", "Rapport", "files"),
     ],
   },
+
+  // Vie personnelle : foyer, déménagement, garde alternée, travaux, fêtes, emploi, logement, santé, papiers, voyages
+  {
+    id: "corvee", label: "Tâche ménagère", icon: "home", description: "Une tâche du foyer, avec qui s'en charge, où et à quel rythme.",
+    fields: [
+      f("qui", "Qui s'en charge", "user"), f("membre", "Ou membre du foyer", "text", { hint: "Pour un·e enfant ou une personne sans compte." }),
+      f("piece", "Pièce / zone", "select", {
+        options: ["Cuisine", "Salle de bain", "Toilettes", "Salon", "Chambres", "Entrée", "Linge", "Courses", "Poubelles", "Animaux", "Extérieur / jardin", "Toute la maison"],
+      }),
+      f("frequence", "Fréquence", "select", {
+        options: ["Quotidienne", "Plusieurs fois par semaine", "Hebdomadaire", "Toutes les deux semaines", "Mensuelle", "Saisonnière", "Ponctuelle"],
+      }),
+      f("duree", "Durée estimée (minutes)", "number"), f("points", "Points / récompense", "number", { hint: "Pour équilibrer la charge ou motiver les enfants." }),
+      f("consignes", "Consignes", "textarea"),
+    ],
+  },
+  {
+    id: "depense_partagee", label: "Dépense partagée", icon: "euro", description: "Une dépense commune, qui l'a payée et comment la répartir.",
+    fields: [
+      f("montant", "Montant", "money"), f("paye_par", "Payé par", "text"), f("date", "Date", "date"),
+      f("categorie", "Catégorie", "select", {
+        options: ["Courses", "Loyer / charges", "Énergie", "Internet / téléphone", "Produits ménagers", "Équipement", "Enfants", "Loisirs", "Autre"],
+      }),
+      f("repartition", "Répartition", "select", { options: ["À parts égales", "Au prorata des revenus", "Personnalisée"] }),
+      f("parts", "Part de chacun·e", "textarea"), f("rembourse", "Remboursé", "checkbox"), f("justificatif", "Justificatif", "files"),
+    ],
+  },
+  {
+    id: "achat", label: "Achat", icon: "euro", description: "Un article à acheter : courses, matériel, décoration, cadeau…",
+    fields: [
+      f("quantite", "Quantité", "number"), f("magasin", "Magasin / site", "text"), f("lien", "Lien", "url"),
+      f("prix", "Prix", "money"), f("paye_par", "Payé par", "text"),
+    ],
+  },
+  {
+    id: "demarche", label: "Démarche administrative", icon: "clipboard", description: "Changement d'adresse, résiliation, impôts, aides, papiers d'identité…",
+    fields: [
+      f("organisme", "Organisme", "text"),
+      f("objet", "Objet", "select", {
+        options: ["Changement d'adresse", "Souscription", "Résiliation", "Impôts", "Aides / allocations", "Assurance", "Banque", "Papiers d'identité", "Santé / mutuelle", "École", "Autre"],
+      }),
+      f("reference", "N° de dossier / référence", "text"), f("limite", "Date limite", "date"),
+      f("lien", "Espace en ligne", "url", { hint: "Ne notez jamais de mot de passe ici." }),
+      f("contact", "Contact", "text"), f("phone", "Téléphone", "phone"), f("pieces", "Pièces / justificatifs", "files"),
+    ],
+  },
+  {
+    id: "devis_prestataire", label: "Prestataire / devis", icon: "briefcase", description: "Un artisan, un déménageur, un traiteur… et son devis.",
+    fields: [
+      f("prestataire", "Prestataire", "text"), f("prestation", "Prestation", "text"),
+      f("contact", "Contact", "text"), f("phone", "Téléphone", "phone"), f("email", "E-mail", "email"),
+      f("montant", "Montant du devis", "money"), f("date", "Date d'intervention", "date"), f("retenu", "Retenu", "checkbox"),
+      f("devis", "Devis", "files"), f("facture", "Facture", "files"),
+    ],
+  },
+  {
+    id: "echange_garde", label: "Échange de garde", icon: "calendar", description: "Une période de garde, un échange ou des vacances, à caler avec l'autre parent.",
+    fields: [
+      f("enfants", "Enfant(s)", "text"), f("debut", "Du", "date"), f("fin", "Au", "date"), f("chez", "Chez", "text"),
+      f("motif", "Motif", "select", { options: ["Planning habituel", "Vacances scolaires", "Échange de week-end", "Imprévu", "Événement familial", "Autre"] }),
+      f("accord", "Accord de l'autre parent", "select", { options: ["En attente", "Accepté", "Refusé"] }),
+      f("transmission", "Affaires et informations à transmettre", "textarea"),
+    ],
+  },
+  {
+    id: "chantier", label: "Chantier", icon: "settings", description: "Des travaux dans une pièce ou sur la maison, du devis à la réception.",
+    fields: [
+      f("piece", "Pièce / zone", "text"),
+      f("metiers", "Corps de métier", "multiselect", {
+        options: ["Maçonnerie", "Plomberie", "Électricité", "Menuiserie", "Peinture", "Sols", "Isolation", "Chauffage", "Toiture", "Cuisine / salle de bain", "Extérieur / jardin", "Autre"],
+      }),
+      f("realisation", "Réalisation", "select", { options: ["Nous-mêmes", "Artisan", "Mixte"] }),
+      f("budget", "Budget", "money"), f("cout", "Coût réel", "money"), f("debut", "Début", "date"), f("fin", "Fin", "date"),
+      f("aides", "Aides et subventions", "textarea"), f("garantie", "Fin de garantie", "date"), f("photos", "Photos (avant / après)", "files"),
+    ],
+  },
+  {
+    id: "invite", label: "Invité·e", icon: "user", description: "Une personne invitée et sa réponse.",
+    fields: [
+      f("email", "E-mail", "email"), f("phone", "Téléphone", "phone"),
+      f("reponse", "Réponse", "select", { options: ["En attente", "Oui", "Non", "Peut-être"] }),
+      f("personnes", "Nombre de personnes", "number"), f("regime", "Régime / allergies", "text"),
+      f("notes", "Notes (cadeau, covoiturage, hébergement…)", "textarea"),
+    ],
+  },
+  {
+    id: "offre_emploi", label: "Offre d'emploi", icon: "briefcase", description: "Un poste visé, de l'annonce à la réponse.",
+    fields: [
+      f("entreprise", "Entreprise", "text"), f("poste", "Poste", "text"), f("lien", "Lien de l'annonce", "url"),
+      f("source", "Source", "select", {
+        options: ["Site d'emploi", "Site de l'entreprise", "LinkedIn", "France Travail", "Réseau", "Candidature spontanée", "Cabinet / agence", "Autre"],
+      }),
+      f("contrat", "Contrat", "select", { options: ["CDI", "CDD", "Intérim", "Alternance", "Stage", "Freelance", "Temps partiel"] }),
+      f("lieu", "Lieu / télétravail", "text"), f("salaire", "Salaire", "text"),
+      f("contact", "Contact", "text"), f("email", "E-mail", "email"),
+      f("envoi", "Candidature envoyée le", "date"), f("relance", "Relance prévue le", "date"), f("entretien", "Date d'entretien", "date"),
+      f("documents", "CV et lettre envoyés", "files"), f("notes", "Notes d'entretien", "textarea"),
+    ],
+  },
+  {
+    id: "contact_reseau", label: "Contact réseau", icon: "users", description: "Une personne de son réseau à solliciter ou à relancer.",
+    fields: [
+      f("entreprise", "Entreprise", "text"), f("fonction", "Fonction", "text"), f("email", "E-mail", "email"), f("phone", "Téléphone", "phone"),
+      f("profil", "Profil (LinkedIn…)", "url"), f("echange", "Dernier échange", "date"), f("notes", "Notes", "textarea"),
+    ],
+  },
+  {
+    id: "logement", label: "Logement", icon: "home", description: "Une annonce de location ou de vente, de la visite au dossier.",
+    fields: [
+      f("transaction", "Transaction", "select", { options: ["Location", "Colocation", "Achat"] }),
+      f("adresse", "Adresse / quartier", "text"), f("lien", "Lien de l'annonce", "url"),
+      f("prix", "Loyer ou prix", "money"), f("charges", "Charges", "money"), f("surface", "Surface (m²)", "number"), f("pieces", "Pièces", "number"),
+      f("contact", "Agence / propriétaire", "text"), f("phone", "Téléphone", "phone"), f("visite", "Date de visite", "date"),
+      f("atouts", "Atouts", "multiselect", {
+        options: ["Lumineux", "Calme", "Extérieur", "Parking", "Ascenseur", "Proche des transports", "Proche des écoles", "Meublé", "Animaux acceptés"],
+      }),
+      f("avis", "Avis après la visite", "textarea"), f("dossier", "Dossier envoyé", "checkbox"), f("photos", "Photos", "files"),
+    ],
+  },
+  {
+    id: "rdv_sante", label: "Rendez-vous de santé", icon: "heart", description: "Une consultation, un examen ou une séance.",
+    fields: [
+      f("patient", "Pour qui", "text"), f("praticien", "Praticien·ne", "text"),
+      f("specialite", "Spécialité", "select", {
+        options: ["Médecin généraliste", "Spécialiste", "Dentiste", "Ophtalmologiste", "Kinésithérapeute", "Psychologue", "Pédiatre", "Gynécologue", "Analyses / imagerie", "Hôpital", "Autre"],
+      }),
+      f("date", "Date du rendez-vous", "date"), f("lieu", "Lieu / téléconsultation", "text"), f("phone", "Téléphone", "phone"),
+      f("questions", "Motif et questions à poser", "textarea"), f("documents", "Ordonnances et comptes rendus", "files"),
+    ],
+  },
+  {
+    id: "traitement", label: "Traitement", icon: "heart", description: "Un traitement à suivre et son ordonnance à renouveler.",
+    fields: [
+      f("patient", "Pour qui", "text"), f("medicament", "Traitement / médicament", "text"), f("posologie", "Posologie", "textarea"),
+      f("debut", "Début", "date"), f("fin", "Fin", "date"), f("renouvellement", "Renouvellement de l'ordonnance", "date"),
+      f("prescripteur", "Prescripteur·rice", "text"),
+    ],
+  },
+  {
+    id: "remboursement_sante", label: "Remboursement santé", icon: "euro", description: "Des frais de santé avancés, jusqu'au remboursement.",
+    fields: [
+      f("patient", "Pour qui", "text"), f("montant", "Montant payé", "money"),
+      f("secu", "Remboursé par l'Assurance maladie", "money"), f("mutuelle", "Remboursé par la mutuelle", "money"),
+      f("envoi", "Envoyé le", "date"), f("justificatifs", "Factures et feuilles de soins", "files"),
+    ],
+  },
+  {
+    id: "contrat_foyer", label: "Contrat / abonnement", icon: "folder", description: "Énergie, internet, assurance, banque, abonnement… et son échéance.",
+    fields: [
+      f("fournisseur", "Fournisseur", "text"),
+      f("categorie", "Catégorie", "select", {
+        options: ["Énergie", "Eau", "Internet / téléphone", "Assurance habitation", "Assurance auto", "Mutuelle", "Banque / crédit", "Abonnement", "Autre"],
+      }),
+      f("numero", "N° de contrat / client", "text"), f("montant", "Montant mensuel", "money"),
+      f("echeance", "Échéance / renouvellement", "date"), f("preavis", "Préavis de résiliation", "text"), f("contrat", "Contrat", "files"),
+    ],
+  },
+  {
+    id: "reservation", label: "Réservation", icon: "globe", description: "Un transport, un hébergement ou une activité réservés.",
+    fields: [
+      f("type", "Type", "select", { options: ["Transport", "Hébergement", "Location de voiture", "Activité / visite", "Assurance voyage", "Autre"] }),
+      f("prestataire", "Prestataire", "text"), f("debut", "Du", "date"), f("fin", "Au", "date"),
+      f("numero", "N° de réservation", "text"), f("montant", "Montant", "money"), f("lien", "Lien", "url"),
+      f("documents", "Billets et confirmations", "files"),
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -787,6 +962,244 @@ export const PIPE_TYPES: PipeType[] = [
       col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
     ],
     taskTypes: ["campagne_test", "bug"], templates: [],
+  },
+  {
+    id: "menage_coloc", label: "Ménage en colocation", group: "Vie personnelle",
+    description: "Tâches communes, tours de ménage, courses et dépenses partagées entre colocataires.",
+    color: "#2BC2FF", icon: "users", columns: HOUSEHOLD, taskTypes: ["corvee", "depense_partagee", "achat"],
+    templates: [
+      "Lister les tâches communes et leur fréquence",
+      "Répartir les tâches et fixer un tour de rôle",
+      "Sortir les poubelles et le tri",
+      "Nettoyer la cuisine (plans de travail, plaques, évier)",
+      "Nettoyer la salle de bain et les toilettes",
+      "Aspirer et laver les sols des parties communes",
+      "Vider et nettoyer le réfrigérateur",
+      "Racheter les produits ménagers et les consommables communs",
+      "Faire les comptes des dépenses communes",
+      "Faire le point en réunion de coloc",
+    ],
+  },
+  {
+    id: "menage_couple", label: "Ménage en couple", group: "Vie personnelle",
+    description: "Partage des tâches du foyer et de la charge mentale, budget commun.",
+    color: "#FF5C80", icon: "home", columns: HOUSEHOLD, taskTypes: ["corvee", "depense_partagee", "achat"],
+    templates: [
+      "Lister les tâches du foyer, y compris les invisibles (rendez-vous, cadeaux, papiers)",
+      "Répartir les tâches selon le temps et les préférences de chacun·e",
+      "Planifier les menus de la semaine",
+      "Faire les courses",
+      "Lessive : laver, étendre, plier, ranger",
+      "Changer les draps",
+      "Nettoyer la cuisine et la salle de bain",
+      "Passer l'aspirateur et la serpillière",
+      "Faire le point sur le budget commun",
+      "Revoir la répartition chaque mois",
+    ],
+  },
+  {
+    id: "menage_famille", label: "Ménage en famille", group: "Vie personnelle",
+    description: "Tâches des parents et des enfants, adaptées à l'âge de chacun, avec des points ou des récompenses.",
+    color: "#3ad984", icon: "star", columns: HOUSEHOLD, taskTypes: ["corvee", "achat"],
+    templates: [
+      "Choisir des tâches adaptées à l'âge de chaque enfant",
+      "Afficher le tableau des tâches de la semaine",
+      "Ranger sa chambre",
+      "Mettre et débarrasser la table",
+      "Remplir et vider le lave-vaisselle",
+      "Trier et ranger le linge propre",
+      "Nourrir et sortir les animaux",
+      "Préparer son cartable la veille",
+      "Faire le grand ménage du week-end ensemble",
+      "Faire le bilan des points et des récompenses",
+    ],
+  },
+  {
+    id: "demenagement", label: "Déménagement", group: "Vie personnelle",
+    description: "Du préavis à l'état des lieux : cartons, déménageurs, contrats à transférer et changements d'adresse.",
+    color: "#f08a24", icon: "send", columns: CHECKLIST, taskTypes: ["demarche", "devis_prestataire", "achat"],
+    templates: [
+      "Donner son préavis au propriétaire (ou fixer la date de la vente)",
+      "Demander des devis de déménageurs ou réserver un utilitaire",
+      "Poser un jour de congé pour le déménagement",
+      "Trier, donner ou vendre ce qui ne suit pas",
+      "Récupérer des cartons et du matériel d'emballage",
+      "Faire suivre son courrier",
+      "Résilier ou transférer l'énergie, l'eau et internet",
+      "Assurer le nouveau logement",
+      "Demander une autorisation de stationnement pour le camion",
+      "Faire les cartons pièce par pièce, en les étiquetant",
+      "Faire l'état des lieux de sortie et relever les compteurs",
+      "Faire l'état des lieux d'entrée et relever les compteurs",
+      "Déclarer le changement d'adresse (impôts, CAF, Assurance maladie, banque, employeur…)",
+      "Modifier l'adresse de la carte grise",
+      "Inscrire les enfants à l'école et à la cantine",
+      "Récupérer le dépôt de garantie",
+    ],
+  },
+  {
+    id: "garde_alternee", label: "Garde alternée", group: "Vie personnelle",
+    description: "Planning de garde, échanges, vacances, affaires à transmettre et frais partagés entre les deux foyers.",
+    color: "#9E5CF7", icon: "calendar",
+    columns: [
+      col("a_organiser", "À organiser", "backlog", "#66778F"),
+      col("propose", "Proposé à l'autre parent", "started", "#9E5CF7"),
+      col("accepte", "Accepté · planifié", "ongoing", "#0366d6"),
+      col("a_rediscuter", "À rediscuter", "blocked", "#ed2651"),
+      col("fait", "Fait", "done", "#3ad984"),
+      col("annule", "Annulé", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["echange_garde", "depense_partagee"], confidential: true,
+    templates: [
+      "Caler le planning des vacances scolaires de l'année",
+      "Partager le calendrier des activités et des rendez-vous des enfants",
+      "Tenir à jour la liste des affaires qui suivent les enfants",
+      "Faire les comptes des frais partagés du mois",
+    ],
+  },
+  {
+    id: "travaux", label: "Travaux", group: "Vie personnelle",
+    description: "Rénovation, bricolage et chantiers : devis, artisans, achats de matériel, budget et garanties.",
+    color: "#F5BE31", icon: "settings",
+    columns: [
+      col("idees", "Idées", "backlog", "#66778F"),
+      col("devis", "Devis demandés", "ready", "#2BC2FF"),
+      col("planifie", "Planifié", "started", "#9E5CF7"),
+      col("en_cours", "En cours", "ongoing", "#0366d6"),
+      col("en_attente", "En attente (artisan, matériaux…)", "blocked", "#F5BE31"),
+      col("termine", "Terminé · réceptionné", "done", "#3ad984"),
+      col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["chantier", "devis_prestataire", "achat", "demarche"], templates: [],
+  },
+  {
+    id: "fete", label: "Organisation d'une fête", group: "Vie personnelle",
+    description: "Anniversaire, mariage, crémaillère… : invité·es, lieu, menu, achats et prestataires.",
+    color: "#FF4DFA", icon: "star", columns: CHECKLIST, taskTypes: ["invite", "achat", "devis_prestataire", "depense_partagee"],
+    templates: [
+      "Fixer la date, le budget et le nombre d'invité·es",
+      "Réserver le lieu",
+      "Établir la liste des invité·es",
+      "Envoyer les invitations et suivre les réponses",
+      "Choisir le menu (en tenant compte des allergies)",
+      "Commander le traiteur, le gâteau ou faire les courses",
+      "Prévoir la décoration",
+      "Préparer la musique et les animations",
+      "Prévoir la vaisselle, les tables et les chaises",
+      "Prévenir les voisin·es",
+      "Répartir les rôles le jour J (accueil, cuisine, rangement)",
+      "Ranger, rendre le matériel et faire les comptes",
+      "Remercier les invité·es et partager les photos",
+    ],
+  },
+  {
+    id: "recherche_emploi", label: "Recherche d'emploi", group: "Vie personnelle",
+    description: "Une carte par offre, de l'annonce repérée à la réponse, avec les relances, les entretiens et le réseau.",
+    color: "#0366d6", icon: "briefcase",
+    columns: [
+      col("reperee", "Repérée", "backlog", "#66778F"),
+      col("a_postuler", "À postuler", "ready", "#2BC2FF"),
+      col("envoyee", "Candidature envoyée", "started", "#9E5CF7"),
+      col("relancee", "Relancée", "ongoing", "#0366d6"),
+      col("entretien", "Entretien", "ongoing", "#2930FF"),
+      col("attente", "En attente de réponse", "blocked", "#F5BE31"),
+      col("acceptee", "Offre acceptée", "done", "#3ad984"),
+      col("refusee", "Refusée / sans suite", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["offre_emploi", "contact_reseau"], confidential: true,
+    templates: [
+      "Mettre à jour son CV",
+      "Rédiger une lettre de motivation type",
+      "Mettre à jour son profil LinkedIn",
+      "S'inscrire ou actualiser sa situation sur France Travail",
+      "Définir les postes, secteurs et zones visés",
+      "Créer des alertes sur les sites d'emploi",
+      "Préparer les réponses aux questions d'entretien courantes",
+    ],
+  },
+  {
+    id: "recherche_logement", label: "Recherche de logement", group: "Vie personnelle",
+    description: "Annonces, visites et dossiers de location ou d'achat, jusqu'au bail ou au compromis signé.",
+    color: "#3633FF", icon: "home",
+    columns: [
+      col("repere", "Repéré", "backlog", "#66778F"),
+      col("a_visiter", "Visite à planifier", "ready", "#2BC2FF"),
+      col("visite", "Visite prévue", "started", "#9E5CF7"),
+      col("dossier", "Dossier déposé", "ongoing", "#0366d6"),
+      col("attente", "En attente de réponse", "blocked", "#F5BE31"),
+      col("retenu", "Retenu · bail ou compromis signé", "done", "#3ad984"),
+      col("ecarte", "Écarté", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["logement", "demarche"], confidential: true,
+    templates: [
+      "Fixer le budget (loyer ou prix, charges, frais)",
+      "Lister les critères indispensables et les quartiers visés",
+      "Préparer le dossier (pièce d'identité, bulletins de salaire, avis d'imposition)",
+      "Trouver un garant ou demander la garantie Visale",
+      "Créer des alertes sur les sites d'annonces",
+    ],
+  },
+  {
+    id: "sante", label: "Suivi de soins", group: "Vie personnelle",
+    description: "Rendez-vous médicaux, traitements, ordonnances et remboursements, pour soi ou pour ses proches.",
+    color: "#ed2651", icon: "heart",
+    columns: [
+      col("a_prendre", "Rendez-vous à prendre", "backlog", "#66778F"),
+      col("pris", "Rendez-vous pris", "ready", "#2BC2FF"),
+      col("en_cours", "Soins en cours", "ongoing", "#0366d6"),
+      col("remboursement", "Remboursement en attente", "blocked", "#F5BE31"),
+      col("termine", "Terminé", "done", "#3ad984"),
+      col("annule", "Annulé", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["rdv_sante", "traitement", "remboursement_sante"], confidential: true,
+    templates: [
+      "Déclarer son médecin traitant",
+      "Vérifier que les vaccins sont à jour",
+      "Prendre rendez-vous chez le dentiste (contrôle annuel)",
+      "Prendre rendez-vous chez l'ophtalmologiste",
+      "Vérifier les garanties de la mutuelle",
+      "Mettre à jour la carte Vitale",
+    ],
+  },
+  {
+    id: "papiers", label: "Papiers & budget", group: "Vie personnelle",
+    description: "Démarches administratives, impôts, aides, contrats et abonnements du foyer, avec leurs échéances.",
+    color: "#66778F", icon: "folder",
+    columns: [
+      col("a_traiter", "À traiter", "backlog", "#66778F"),
+      col("en_cours", "En cours", "ongoing", "#0366d6"),
+      col("envoye", "Envoyé / déposé", "ongoing", "#9E5CF7"),
+      col("attente", "En attente de réponse", "blocked", "#F5BE31"),
+      col("clos", "Clos", "done", "#3ad984"),
+      col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["demarche", "contrat_foyer"], confidential: true,
+    templates: [
+      "Déclarer ses revenus",
+      "Renouveler la carte d'identité ou le passeport",
+      "Comparer les assurances et les fournisseurs d'énergie",
+      "Faire le tri dans les abonnements",
+      "Classer et archiver les papiers de l'année",
+      "Mettre à jour le budget mensuel",
+    ],
+  },
+  {
+    id: "voyage", label: "Voyage / vacances", group: "Vie personnelle",
+    description: "Préparer un voyage : réservations, papiers, bagages et dépenses partagées.",
+    color: "#2930FF", icon: "globe", columns: CHECKLIST, taskTypes: ["reservation", "depense_partagee", "achat"],
+    templates: [
+      "Fixer les dates, la destination et le budget",
+      "Vérifier la validité des passeports et les visas",
+      "Réserver le transport",
+      "Réserver l'hébergement",
+      "Souscrire une assurance voyage (ou vérifier celle de sa carte bancaire)",
+      "Demander la carte européenne d'assurance maladie",
+      "Faire garder les animaux et arroser les plantes",
+      "Préparer la liste des bagages",
+      "Programmer son absence au travail et la réponse automatique",
+      "Télécharger les billets et les confirmations",
+      "Faire les comptes des dépenses partagées au retour",
+    ],
   },
 ];
 

@@ -10,7 +10,8 @@ TasksPipes was designed for an adult training centre, but fits other uses just a
   and QA pipes, with user stories, bugs, experiments, mock-ups, translation batches, releases and test campaigns, and the
   [GitHub / GitLab integration](GIT-INTEGRATION.md).
 - **Personal organisation** — a Personal pipe in every space, *My tasks* across all pipes, a GTD *Next action* view,
-  sub-tasks and a calendar subscription with reminders.
+  sub-tasks and a calendar subscription with reminders, and [personal life](#pipe-types) pipes for the household,
+  moving house, shared custody, home improvement, parties, job and house hunting, health care, paperwork and trips.
 
 Other needs are covered by the [models](#models): design your own pipe and task types.
 
@@ -55,7 +56,15 @@ The *Software* group covers product teams: UX research, UI design, product docum
 R&D (hypotheses, experiments and prototypes), software development (with an *In review* column) and testing / QA.
 R&D and software development pipes get the weekly time report.
 
-- **Confidential** types (learner follow-up) are always private.
+The *Personal life* group covers everyday life: chores in a flat share, as a couple or as a family (who does it,
+room, frequency, points for the kids), moving house, shared custody (swaps agreed with the other parent), home
+improvement (projects, quotes, supplies), party planning (guests and their answers), job search (one card per
+offer), house hunting (listings and viewings), health care (appointments, treatments, refunds), paperwork & budget
+(contracts and subscriptions with their renewal dates) and trips (bookings). Shared expenses can be tracked in the
+household, custody, party and trip pipes. Shared custody, job search, house hunting, health care and paperwork
+pipes are confidential.
+
+- **Confidential** types (learner follow-up, and personal life types holding private data) are always private.
 - **Team-only** types (disability follow-up) exist only in team spaces; their tasks cannot be sent or moved out of
   the team, and people who leave the team lose access to them, even as authors.
 
