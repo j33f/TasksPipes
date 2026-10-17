@@ -82,9 +82,10 @@ export async function savePrefs(userId: string, change: Partial<Prefs>): Promise
 
 /**
  * Accounts that may get e-mails: with an address, not a system account, and for e-mail accounts, signed in at
- * least once (an invitation not taken up gets nothing more). `u` is the users table.
+ * least once (an invitation not taken up gets nothing more); never disabled accounts. `u` is the users table.
  */
-const ELIGIBLE = `u.email IS NOT NULL AND u.auth_kind <> 'system' AND NOT (u.auth_kind = 'email' AND u.last_login_at IS NULL)`;
+const ELIGIBLE = `u.email IS NOT NULL AND u.auth_kind <> 'system' AND u.disabled_at IS NULL
+  AND NOT (u.auth_kind = 'email' AND u.last_login_at IS NULL)`;
 
 type RowKind = "received" | "assigned" | "refused" | "comment" | "overdue";
 const prefKind = (k: RowKind): Kind => (k === "overdue" ? "due" : k);

@@ -185,7 +185,11 @@ shrunk in the browser. They have no access to Outline documents.
 From **Invite people** in the account menu (or the *People* section of the sidebar), invite someone by e-mail, optionally into one of your
 teams:
 
-- **a new address**: an e-mail account is created and gets a sign-in link valid for 7 days; you are connected at once;
+- **a new address**: an e-mail account is created and gets a sign-in link valid for 48 hours; you are connected at once.
+  If the link is not used in time, the account is **disabled**: the link no longer works, nobody sees the account any
+  more (lists, teams, owner pickers) and it gets no e-mail. Your settings show the invitation as expired: sending a
+  new link, or inviting the address again, turns it back on — and so does the person signing up with that address,
+  once they use the link they get;
 - **someone already on TasksPipes**: they get a **request to connect**, by e-mail, live notification and on their
   dashboard, which they **accept or refuse**. If they had already asked you, your invitation accepts their request.
   The answer is the same whether or not the address has an account, so invitations do not reveal who uses TasksPipes;
