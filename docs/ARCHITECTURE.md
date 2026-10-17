@@ -26,7 +26,7 @@ Outline through its RPC-style API.
 | `routes.ts` | The JSON API under `/api`: spaces, pipes, tasks, sub-tasks, files, invitations, designer… |
 | `access.ts` | Who may see and do what on a task (`taskPermissions`), shared by the API and the notifications. |
 | `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |
-| `rate-limit.ts` | Rate limits with a growing block, counted in Redis (or in memory without `REDIS_URL`). |
+| `rate-limit.ts` | Rate limits ([@fastify/rate-limit](https://github.com/fastify/fastify-rate-limit), opted in per route) with a growing block, counted in Redis (or in memory without `REDIS_URL`). |
 | `pipeTypes.ts` | Built-in catalog of pipe and task types, and the custom types made with the designer. |
 | `designer.ts` | Validation of custom pipe and task types. |
 | `models-io.ts` | Export and import of models as YAML files. |

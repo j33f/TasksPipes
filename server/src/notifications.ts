@@ -19,7 +19,7 @@ import { mailEnabled, sendHtmlMail } from "./mail.js";
 import { allPipeTypes, pipeTypeById, stageLabel } from "./pipeTypes.js";
 import { TASK_KEY_PREFIX } from "./git.js";
 import { dailyPeriod, addDays, localDay, zonedInstant } from "./time.js";
-import { rateLimit, type Limit } from "./rate-limit.js";
+import { rateLimited, type Limit } from "./rate-limit.js";
 
 export const KINDS = ["received", "assigned", "refused", "comment", "due"] as const;
 export type Kind = (typeof KINDS)[number];
@@ -257,7 +257,7 @@ export function verifyUnsubscribe(u: unknown, k: unknown, s: unknown): { userId:
   return { userId: u, kinds: kinds as Kind[] };
 }
 
-const UNSUBSCRIBE_LIMIT: Limit = { name: "unsubscribe", limit: 20, windowMs: 60_000, blockMs: 60_000 };
+export const UNSUBSCRIBE_LIMIT: Limit = { name: "unsubscribe", max: 20, timeWindow: 60_000 };
 
 const KIND_LABELS: Record<Kind, string> = {
   received: "Tasks received",
@@ -301,7 +301,7 @@ export async function notificationRoutes(app: FastifyInstance) {
     if (user) await savePrefs(link.userId, Object.fromEntries(link.kinds.map((k) => [k, "off"])));
     return unsubscribePage(lang, tr(lang, "Unsubscribed"), tr(lang, "You will no longer get e-mails about: {what}. You can turn them back on in the settings of TasksPipes.", { what }));
   };
-  const limited = { preHandler: rateLimit(UNSUBSCRIBE_LIMIT) };
+  const limited = rateLimited(UNSUBSCRIBE_LIMIT);
   app.get<Link>("/notifications/unsubscribe", limited, handle(false));
   app.post<Link>("/notifications/unsubscribe", limited, handle(true));
 }

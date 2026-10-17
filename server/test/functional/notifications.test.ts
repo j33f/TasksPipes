@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { agent, signIn, signInWithLink, startApp, stopApp, type Agent } from "./helpers.js";
 import { pool } from "../../src/db.js";
-import { notificationState, runNotifications, type Mail } from "../../src/notifications.js";
+import { UNSUBSCRIBE_LIMIT, notificationState, runNotifications, type Mail } from "../../src/notifications.js";
 import { resetRate } from "../../src/rate-limit.js";
 import { addDays, localDay } from "../../src/time.js";
 
@@ -219,7 +219,7 @@ describe("unsubscribing", () => {
   });
 
   it("is rate limited", async () => {
-    const limit = { name: "unsubscribe", limit: 20, windowMs: 60_000, blockMs: 60_000 };
+    const limit = UNSUBSCRIBE_LIMIT;
     await resetRate(limit, "127.0.0.1");
     const app = await startApp();
     const hit = () => app.inject({ method: "GET", url: "/notifications/unsubscribe?u=x&k=comment&s=x" });

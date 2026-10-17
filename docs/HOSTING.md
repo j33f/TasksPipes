@@ -133,8 +133,8 @@ already sent invalid.
 
 ## Rate limits
 
-Routes that accept a token from outside, such as the unsubscribe links, are rate limited per client address: past
-the limit, the address is blocked for a minute, then longer at each new offence (`RATE_LIMIT_BACKOFF_FACTOR`), up to
+Routes that accept a token from outside, such as the unsubscribe links, and `/healthz` are rate limited per client
+address: past the limit, the address is blocked for a minute, then longer at each new offence (`RATE_LIMIT_BACKOFF_FACTOR`), up to
 a day. Counters live in the Redis service of `docker-compose.yml`, which keeps nothing on disk; with several instances
 of the app, they share it. If Redis cannot be reached, requests go through and a warning is logged. The client address
 comes from the reverse proxy (`X-Forwarded-For`): keep the app reachable only through it.

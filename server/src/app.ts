@@ -12,7 +12,7 @@ import { apiRoutes, gitWebhooks } from "./routes.js";
 import { realtime } from "./realtime.js";
 import { calendarRoutes } from "./calendar.js";
 import { notificationRoutes } from "./notifications.js";
-import { closeRateLimits } from "./rate-limit.js";
+import { rateLimited, rateLimits } from "./rate-limit.js";
 import { HttpError } from "./errors.js";
 import { OutlineError } from "./outline.js";
 import { localeOf, tr } from "./i18n.js";
@@ -68,6 +68,8 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
     if (req.url.startsWith("/api/")) reply.header("X-App-Version", config.version);
   });
 
+  // Before the routes: it limits those that ask for it.
+  await rateLimits(app);
   await app.register(cookie);
   await app.register(authPlugin);
   await app.register(realtime);
@@ -76,9 +78,8 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   await app.register(apiRoutes, { prefix: "/api" });
   await app.register(gitWebhooks);
 
-  app.addHook("onClose", closeRateLimits);
-
-  app.get("/healthz", async () => {
+  // Container health checks call it every 30 s; it reaches the database, so it is limited too.
+  app.get("/healthz", rateLimited({ name: "healthz", max: 120, timeWindow: 60_000 }), async () => {
     await pool.query("SELECT 1");
     return { ok: true };
   });
