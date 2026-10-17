@@ -11,6 +11,7 @@ import { one, query, type Row } from "./db.js";
 import { decrypt, encrypt, hash } from "./auth.js";
 import { localize, tr, type Locale } from "./i18n.js";
 import { stageLabel } from "./pipeTypes.js";
+import { LIMITS, rateLimited } from "./rate-limit.js";
 
 /** Link of someone's feed, created on first use. */
 export async function calendarUrl(userId: string, { reset = false } = {}): Promise<string> {
@@ -95,7 +96,8 @@ function event(t: Row, lang: Locale): string {
 }
 
 export async function calendarRoutes(app: FastifyInstance) {
-  app.get<{ Params: { file: string } }>("/cal/:file", async (req, reply) => {
+  // Counted per feed: calendar services fetch many people's feeds from the same addresses.
+  app.get<{ Params: { file: string } }>("/cal/:file", rateLimited(LIMITS.calendar), async (req, reply) => {
     const token = req.params.file.replace(/\.ics$/, "");
     const user = token.length >= 20 ? await one(`SELECT id, name, locale FROM users WHERE calendar_token_hash = $1`, [hash(token)]) : null;
     if (!user) return reply.code(404).type("text/plain").send("Not found");

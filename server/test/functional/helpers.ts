@@ -2,6 +2,7 @@
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.js";
 import { migrate, pool } from "../../src/db.js";
+import { resetAllRates } from "../../src/rate-limit.js";
 
 let app: FastifyInstance | undefined;
 
@@ -9,6 +10,8 @@ export async function startApp() {
   if (!app) {
     app = await buildApp({ logger: false, web: false });
     await migrate(app.log);
+    // Each file starts with fresh rate limits (they count per address, and every test comes from the same one).
+    await resetAllRates();
   }
   return app;
 }

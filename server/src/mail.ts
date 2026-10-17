@@ -13,20 +13,41 @@ const transport = mailEnabled
     })
   : null;
 
+/**
+ * A plausible e-mail address (one @, a dotted domain, no spaces), at most 254 characters. The domain is matched label
+ * by label, so the check stays linear whatever the input (no backtracking on "a@a.a.a.a…").
+ */
+export const isEmail = (s: string) => s.length <= 254 && /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(s);
+
 const escape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /** Sends an e-mail made of HTML (a report, a notification); the text version is derived from it. */
-export async function sendHtmlMail(lang: Locale, to: string, subject: string, html: string, headers: Record<string, string> = {}) {
-  if (!transport) return false;
-  const text = html
+/** Removes tags until none is left (a single pass could leave one made of the pieces of others). */
+function stripTags(s: string): string {
+  let out = s;
+  for (let prev = ""; prev !== out; ) {
+    prev = out;
+    out = out.replace(/<[^<>]*>/g, "");
+  }
+  return out.replace(/[<>]/g, "");
+}
+
+/** The plain-text version of an HTML e-mail: links spelled out, list items and paragraphs on their own lines. */
+export function htmlToText(html: string): string {
+  const lines = html
     .replace(/<a href="([^"]+)"[^>]*>([^<]*)<\/a>/g, (_, url, label) => (label === url ? url : `${label} (${url})`))
     .replace(/<li>/g, "\n- ")
-    .replace(/<\/(h2|h3|p|tr)>/g, "\n")
-    .replace(/<[^>]+>/g, "")
+    .replace(/<\/(h2|h3|p|tr)>/g, "\n");
+  return stripTags(lines)
     .replace(/&#(\d+);/g, (_, c) => String.fromCharCode(Number(c)))
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  await transport.sendMail({ from: config.smtp.from, to, subject, html, text: `${text}\n\n— TasksPipes`, headers: { "Content-Language": lang, ...headers } });
+}
+
+export async function sendHtmlMail(lang: Locale, to: string, subject: string, html: string, headers: Record<string, string> = {}) {
+  if (!transport) return false;
+  const text = `${htmlToText(html)}\n\n— TasksPipes`;
+  await transport.sendMail({ from: config.smtp.from, to, subject, html, text, headers: { "Content-Language": lang, ...headers } });
   return true;
 }
 

@@ -5,7 +5,8 @@ import fp from "fastify-plugin";
 import { config } from "./config.js";
 import { ensureDefaultPipes, one, pool, query, tx, type Queryable, type Row } from "./db.js";
 import { absoluteOutlineUrl, normalizeOutlineUrl, outlineApi, outlineToken, OutlineError, type OutlineUser } from "./outline.js";
-import { mailEnabled, sendLinkMail } from "./mail.js";
+import { isEmail, mailEnabled, sendLinkMail } from "./mail.js";
+import { LIMITS, rateLimited } from "./rate-limit.js";
 import { verifyTotp } from "./totp.js";
 import { localeOf, tr, type Locale } from "./i18n.js";
 
@@ -270,18 +271,13 @@ async function auth(app: FastifyInstance) {
   // ----- Sign-up with an e-mail address and a name -----------------------------
 
   // A few sign-ups per address per hour, so the form cannot be used to flood mailboxes.
-  const signups = new Map<string, number[]>();
-  app.post<{ Body: { email?: string; name?: string } }>("/api/auth/signup", async (req, reply) => {
+  app.post<{ Body: { email?: string; name?: string } }>("/api/auth/signup", rateLimited(LIMITS.signup), async (req, reply) => {
     const lang = localeOf(req);
     if (!config.allowEmailSignup || !mailEnabled) return reply.code(403).send({ error: tr(lang, "Sign-up is turned off on this instance") });
     const email = String(req.body?.email || "").trim().toLowerCase();
     const name = String(req.body?.name || "").trim().slice(0, 120);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return reply.code(400).send({ error: tr(lang, "Invalid e-mail address") });
+    if (!isEmail(email)) return reply.code(400).send({ error: tr(lang, "Invalid e-mail address") });
     if (!name) return reply.code(400).send({ error: tr(lang, "{label} is required", { label: "Name" }) });
-    const now = Date.now();
-    const recent = (signups.get(req.ip) ?? []).filter((t) => now - t < 3_600_000);
-    if (recent.length >= 10) return { ok: true };
-    signups.set(req.ip, [...recent, now]);
 
     // The answer is the same whatever happens, so the form does not tell who has an account.
     const existing = await one(
@@ -337,13 +333,13 @@ async function auth(app: FastifyInstance) {
 
   // ----- Accounts invited by e-mail: sign-in link, then TOTP if enabled -----
 
-  app.post<{ Body: { email?: string } }>("/api/auth/email", async (req, reply) => {
+  app.post<{ Body: { email?: string } }>("/api/auth/email", rateLimited(LIMITS.signInLink), async (req, reply) => {
     const lang = localeOf(req);
     if (!mailEnabled) {
       return reply.code(503).send({ error: tr(lang, "E-mail sending is not set up: ask the person who invited you for a link.") });
     }
     const email = String(req.body?.email || "").trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: tr(lang, "Invalid e-mail address") });
+    if (!isEmail(email)) return reply.code(400).send({ error: tr(lang, "Invalid e-mail address") });
     const user = await one(`SELECT id, name, locale FROM users WHERE auth_kind = 'email' AND lower(email) = $1 AND disabled_at IS NULL`, [email]);
     // Same answer whether the address is known or not; at most 5 links per hour.
     if (user) {
@@ -368,7 +364,7 @@ async function auth(app: FastifyInstance) {
   });
 
   // The link opens a page that posts the token: e-mail scanners that follow links do not consume it.
-  app.post<{ Body: { token?: string } }>("/api/auth/magic", async (req, reply) => {
+  app.post<{ Body: { token?: string } }>("/api/auth/magic", rateLimited(LIMITS.magic), async (req, reply) => {
     const token = String(req.body?.token || "");
     const row = await one(
       `UPDATE login_tokens SET used_at = now()
@@ -401,7 +397,7 @@ async function auth(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.post<{ Body: { code?: string } }>("/api/auth/totp", async (req, reply) => {
+  app.post<{ Body: { code?: string } }>("/api/auth/totp", rateLimited(LIMITS.totp), async (req, reply) => {
     const pending = req.cookies[TOTP_COOKIE];
     const row = pending
       ? await one(
@@ -428,7 +424,7 @@ async function auth(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.get("/auth/outline", async (req, reply) => {
+  app.get("/auth/outline", rateLimited(LIMITS.oauth), async (req, reply) => {
     if (!config.oauthEnabled) return reply.code(404).send(tr(localeOf(req), "OAuth is not set up"));
     const state = crypto.randomBytes(16).toString("hex");
     reply.setCookie(STATE_COOKIE, state, cookieOptions(600));
@@ -441,7 +437,7 @@ async function auth(app: FastifyInstance) {
     return reply.redirect(url.toString());
   });
 
-  app.get<{ Querystring: Record<string, string | undefined> }>("/auth/outline/callback", async (req, reply) => {
+  app.get<{ Querystring: Record<string, string | undefined> }>("/auth/outline/callback", rateLimited(LIMITS.oauth), async (req, reply) => {
     const fail = (msg: string) => reply.redirect(`/login?error=${encodeURIComponent(msg)}`);
     try {
       if (req.query.error) return fail(req.query.error_description || req.query.error);
@@ -465,7 +461,7 @@ async function auth(app: FastifyInstance) {
     }
   });
 
-  app.post<{ Body: { token?: string; outlineUrl?: string } }>("/api/auth/apikey", async (req, reply) => {
+  app.post<{ Body: { token?: string; outlineUrl?: string } }>("/api/auth/apikey", rateLimited(LIMITS.apiKey), async (req, reply) => {
     if (!config.allowApiKeyLogin) return reply.code(404).send({ error: tr(localeOf(req), "API key sign-in is disabled") });
     const token = String(req.body?.token || "").trim();
     if (!token) return reply.code(400).send({ error: tr(localeOf(req), "API key required") });
