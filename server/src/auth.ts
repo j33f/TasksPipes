@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { CookieSerializeOptions } from "@fastify/cookie";
 import fp from "fastify-plugin";
 import { config } from "./config.js";
-import { ensureDefaultPipes, one, query, tx, type Queryable, type Row } from "./db.js";
+import { ensureDefaultPipes, one, pool, query, tx, type Queryable, type Row } from "./db.js";
 import { absoluteOutlineUrl, normalizeOutlineUrl, outlineApi, outlineToken, OutlineError, type OutlineUser } from "./outline.js";
 import { mailEnabled, sendLinkMail } from "./mail.js";
 import { verifyTotp } from "./totp.js";
@@ -13,7 +13,8 @@ const SESSION_COOKIE = "tp_session";
 const STATE_COOKIE = "tp_oauth_state";
 const TOTP_COOKIE = "tp_2fa";
 /** Validity of a sign-in link: an invitation, or a link asked from the login page. */
-export const INVITE_LINK_DAYS = 7;
+/** Sign-in link of an invitation; an account that never used it is then disabled (disableUnusedInvitations). */
+export const INVITE_LINK_HOURS = 48;
 const LOGIN_LINK_MINUTES = 20;
 const SIGNUP_LINK_HOURS = 24;
 const key = crypto.createHash("sha256").update(config.appSecret).digest();
@@ -244,7 +245,7 @@ async function auth(app: FastifyInstance) {
     const session = await one(
       `SELECT s.*, u.name, u.email, u.avatar_url, u.auth_kind, u.totp_secret IS NOT NULL AS totp, u.locale, u.theme
        FROM sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.id = $1 AND s.expires_at > now()`,
+       WHERE s.id = $1 AND s.expires_at > now() AND u.disabled_at IS NULL`,
       [hash(token)]
     );
     if (!session) return;
@@ -282,7 +283,10 @@ async function auth(app: FastifyInstance) {
     signups.set(req.ip, [...recent, now]);
 
     // The answer is the same whatever happens, so the form does not tell who has an account.
-    const existing = await one(`SELECT id, name, auth_kind, locale FROM users WHERE lower(email) = $1 ORDER BY auth_kind = 'email' DESC LIMIT 1`, [email]);
+    const existing = await one(
+      `SELECT id, name, auth_kind, locale, disabled_at FROM users WHERE lower(email) = $1 ORDER BY auth_kind = 'email' DESC LIMIT 1`,
+      [email]
+    );
     const send = (l: Locale, subject: string, lines: string[], link: string, label: string) =>
       sendLinkMail(l, email, subject, lines, { label, url: link }).catch((err) => req.log.error({ err }, "Sign-up e-mail failed"));
     if (existing?.auth_kind === "outline") {
@@ -291,6 +295,8 @@ async function auth(app: FastifyInstance) {
         tr(l, "Hello {name},", { name: existing.name }),
         tr(l, "You already have an account on TasksPipes with your Outline account: sign in with Outline."),
       ], `${config.appUrl}/login`, tr(l, "Sign in"));
+    } else if (existing?.disabled_at) {
+      // A disabled account gets nothing: only a new invitation turns it back on.
     } else if (existing) {
       const l: Locale = existing.locale ?? lang;
       const link = await createLoginLink(existing.id, LOGIN_LINK_MINUTES);
@@ -328,7 +334,7 @@ async function auth(app: FastifyInstance) {
     }
     const email = String(req.body?.email || "").trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return reply.code(400).send({ error: tr(lang, "Invalid e-mail address") });
-    const user = await one(`SELECT id, name, locale FROM users WHERE auth_kind = 'email' AND lower(email) = $1`, [email]);
+    const user = await one(`SELECT id, name, locale FROM users WHERE auth_kind = 'email' AND lower(email) = $1 AND disabled_at IS NULL`, [email]);
     // Same answer whether the address is known or not; at most 5 links per hour.
     if (user) {
       const recent = await one(
@@ -360,8 +366,10 @@ async function auth(app: FastifyInstance) {
       [hash(token)]
     );
     if (!row) return reply.code(400).send({ error: tr(localeOf(req), "This link is no longer valid (already used or expired). Ask for a new one.") });
-    const user = await one(`SELECT id, totp_secret FROM users WHERE id = $1 AND auth_kind = 'email'`, [row.user_id]);
+    const user = await one(`SELECT id, totp_secret, disabled_at FROM users WHERE id = $1 AND auth_kind = 'email'`, [row.user_id]);
     if (!user) return reply.code(400).send({ error: tr(localeOf(req), "Account not found") });
+    // A disabled account's links no longer work (same answer as an expired link).
+    if (user.disabled_at) return reply.code(400).send({ error: tr(localeOf(req), "This link is no longer valid (already used or expired). Ask for a new one.") });
     if (user.totp_secret) {
       const pending = crypto.randomBytes(32).toString("base64url");
       await query(`INSERT INTO login_tokens (id, user_id, purpose, expires_at) VALUES ($1, $2, 'totp', now() + interval '10 minutes')`, [
@@ -391,7 +399,7 @@ async function auth(app: FastifyInstance) {
       reply.clearCookie(TOTP_COOKIE, { path: "/" });
       return reply.code(400).send({ error: tr(localeOf(req), "Verification expired or too many attempts: sign in again with a new link.") });
     }
-    const user = await one(`SELECT id, totp_secret, totp_last_step FROM users WHERE id = $1`, [row.user_id]);
+    const user = await one(`SELECT id, totp_secret, totp_last_step FROM users WHERE id = $1 AND disabled_at IS NULL`, [row.user_id]);
     const step = user?.totp_secret
       ? verifyTotp(decrypt(user.totp_secret)!, String(req.body?.code || ""), user.totp_last_step === null ? null : Number(user.totp_last_step))
       : null;
@@ -472,6 +480,27 @@ async function auth(app: FastifyInstance) {
 
 /** Not encapsulated: the session hook and request decorators apply to every route. */
 export const authPlugin = fp(auth, { name: "auth" });
+
+/**
+ * Disables the accounts created by an invitation that were never used: no sign-in, no valid link left, and made
+ * more than INVITE_LINK_HOURS ago. Accounts made by signing up are left alone (nobody sees them). Returns how many.
+ */
+export async function disableUnusedInvitations(): Promise<number> {
+  const { rowCount } = await query(
+    `UPDATE users u SET disabled_at = now(), disabled_reason = 'unused_invitation'
+     WHERE u.auth_kind = 'email' AND u.last_login_at IS NULL AND u.disabled_at IS NULL
+       AND u.created_at < now() - make_interval(hours => $1)
+       AND EXISTS (SELECT 1 FROM invitations i WHERE i.invitee_id = u.id)
+       AND NOT EXISTS (SELECT 1 FROM login_tokens l WHERE l.user_id = u.id AND l.purpose = 'magic' AND l.used_at IS NULL AND l.expires_at > now())`,
+    [INVITE_LINK_HOURS]
+  );
+  return rowCount ?? 0;
+}
+
+/** Turns an account disabled for an unused invitation back on (it is being invited again). */
+export async function reenableInvited(userId: string, db: Queryable = pool) {
+  await db.query(`UPDATE users SET disabled_at = NULL, disabled_reason = NULL WHERE id = $1 AND disabled_reason = 'unused_invitation'`, [userId]);
+}
 
 export async function cleanupSessions() {
   await query(`DELETE FROM sessions WHERE expires_at < now()`);

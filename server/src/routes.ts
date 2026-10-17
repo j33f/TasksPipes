@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 import { cleanFields } from "./fields.js";
 import { LOCALES, localeOf, localize, localizePipeType, localizeTaskType, tr, type Locale } from "./i18n.js";
 import QRCode from "qrcode";
-import { INVITE_LINK_DAYS, createLoginLink, decrypt, encrypt, ensurePersonalSpace } from "./auth.js";
+import { INVITE_LINK_HOURS, createLoginLink, decrypt, encrypt, ensurePersonalSpace, reenableInvited } from "./auth.js";
 import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
 import { sendLinkMail } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
@@ -342,7 +342,8 @@ async function keptAssignee(spaceId: string, assigneeId: string | null, db?: Que
 
 /** Like keptAssignee, but rejects an assignee that was explicitly asked for and cannot be kept. */
 async function checkAssignee(spaceId: string, assigneeId: string | null, db?: Queryable): Promise<string | null> {
-  if (!assigneeId || (await keptAssignee(spaceId, assigneeId, db))) return assigneeId;
+  const disabled = assigneeId && (await one(`SELECT 1 FROM users WHERE id = $1 AND disabled_at IS NOT NULL`, [assigneeId], db));
+  if (!assigneeId || (!disabled && (await keptAssignee(spaceId, assigneeId, db)))) return assigneeId;
   const s = await one(`SELECT kind FROM spaces WHERE id = $1`, [spaceId], db);
   throw bad(
     s?.kind === "team"
@@ -532,7 +533,7 @@ export async function apiRoutes(app: FastifyInstance) {
   // My invitations both ways, with their state. Someone asked to connect is only named once they accept.
   app.get("/invitations", async (req) => {
     const { rows } = await query(
-      `SELECT u.id, u.name, u.email, u.avatar_url, u.last_login_at, i.created_at, i.status, i.inviter_id = $1 AS mine
+      `SELECT u.id, u.name, u.email, u.avatar_url, u.last_login_at, u.disabled_reason, i.created_at, i.status, i.inviter_id = $1 AS mine
        FROM invitations i JOIN users u ON u.id = CASE WHEN i.inviter_id = $1 THEN i.invitee_id ELSE i.inviter_id END
        WHERE (i.inviter_id = $1 OR i.invitee_id = $1) AND NOT (i.invitee_id = $1 AND i.status = 'refused')
        ORDER BY i.status = 'pending' AND i.invitee_id = $1 DESC, i.created_at DESC`,
@@ -546,6 +547,8 @@ export async function apiRoutes(app: FastifyInstance) {
         email: r.mine ? r.email : null,
         avatarUrl: hidden ? null : r.avatar_url,
         active: Boolean(r.last_login_at),
+        // Invited by me, never signed in, link expired: sending a new link turns the account back on.
+        expired: r.mine && r.disabled_reason === "unused_invitation",
         invitedByMe: r.mine,
         status: r.status,
         createdAt: r.created_at,
@@ -555,13 +558,15 @@ export async function apiRoutes(app: FastifyInstance) {
 
   /** E-mails an invitation (a sign-in link); without e-mail configured, returns the link to pass on by hand. */
   async function sendInvitation(req: Req, invitee: Row) {
-    const link = await createLoginLink(invitee.id, INVITE_LINK_DAYS * 24 * 60);
+    // A new link gives an account disabled for not using the previous one another chance.
+    await reenableInvited(invitee.id);
+    const link = await createLoginLink(invitee.id, INVITE_LINK_HOURS * 60);
     // In the invitee's language if known, else the inviter's.
     const lang: Locale = invitee.locale ?? localeOf(req);
     const sent = await sendLinkMail(lang, invitee.email, tr(lang, "{name} invites you to TasksPipes", { name: req.user!.name }), [
       tr(lang, "Hello {name},", { name: invitee.name }),
       tr(lang, "{name} invites you to share tasks with them on TasksPipes.", { name: req.user!.name }),
-      tr(lang, "This link signs you in directly; it is valid for {days} days and works only once. Afterwards, ask for a new link from the sign-in page with your e-mail address.", { days: INVITE_LINK_DAYS }),
+      tr(lang, "This link signs you in directly; it is valid for {hours} hours and works only once. Afterwards, ask for a new link from the sign-in page with your e-mail address.", { hours: INVITE_LINK_HOURS }),
     ], { label: tr(lang, "Join TasksPipes"), url: link });
     return sent ? { sent: true } : { sent: false, link };
   }
@@ -578,10 +583,24 @@ export async function apiRoutes(app: FastifyInstance) {
 
     // Someone already on the platform (an e-mail account first, else an Outline account of this server).
     const existing = await one(
-      `SELECT id, name, email, locale FROM users WHERE lower(email) = $1 AND id <> $2
+      `SELECT id, name, email, locale, disabled_reason FROM users WHERE lower(email) = $1 AND id <> $2
        ORDER BY auth_kind = 'email' DESC, outline_url = $3 DESC NULLS LAST LIMIT 1`,
       [email, uid, config.outlineUrl]
     );
+
+    // An account disabled because its invitation was never used is invited again, like a new address.
+    if (existing?.disabled_reason === "unused_invitation") {
+      await tx(async (client) => {
+        await reenableInvited(existing.id, client);
+        await client.query(
+          `INSERT INTO invitations (inviter_id, invitee_id, status) VALUES ($1, $2, 'accepted')
+           ON CONFLICT (inviter_id, invitee_id) DO UPDATE SET status = 'accepted', responded_at = now()`,
+          [uid, existing.id]
+        );
+        if (teamId) await addMember(client, teamId, existing.id, uid);
+      });
+      return { created: true, ...(await sendInvitation(req, existing)) };
+    }
 
     if (!existing) {
       const invitee = await tx(async (client) => {
@@ -727,7 +746,8 @@ export async function apiRoutes(app: FastifyInstance) {
     const { rows } = await query(
       `SELECT s.id, s.kind, s.user_id, ${SPACE_NAME} AS name, s.description, s.color, su.avatar_url,
               su.last_login_at, su.auth_kind = 'email' AS guest, m.role AS my_role,
-              (SELECT count(*) FROM space_members sm WHERE sm.space_id = s.id) AS member_count,
+              (SELECT count(*) FROM space_members sm JOIN users mu ON mu.id = sm.user_id
+                 WHERE sm.space_id = s.id AND mu.disabled_at IS NULL) AS member_count,
               CASE WHEN m.role IS NOT NULL THEN
                 (SELECT count(*) FROM tasks t WHERE t.space_id = s.id AND t.pipe_id IS NULL) END AS incoming_count,
               (SELECT count(*) FROM pipes p WHERE p.space_id = s.id AND p.archived_at IS NULL
@@ -789,7 +809,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const [members, pipes, incoming] = await Promise.all([
       query(
         `SELECT u.id, u.name, u.avatar_url, m.role FROM space_members m JOIN users u ON u.id = m.user_id
-         WHERE m.space_id = $1 ORDER BY m.role, lower(u.name)`,
+         WHERE m.space_id = $1 AND u.disabled_at IS NULL ORDER BY m.role, lower(u.name)`,
         [s.id]
       ),
       query(
