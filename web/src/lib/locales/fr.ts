@@ -600,4 +600,17 @@ export const FR: Record<string, string> = {
   "“{name}” turned off, with the task types only it offered": "« {name} » désactivé, ainsi que les types de tâches qu'il était seul à proposer",
   "“{title}” done": "« {title} » terminée",
   "“{title}” will be put in the recipient's incoming, who can accept or refuse it.": "« {title} » sera déposée dans l'incoming du destinataire, qui pourra l'accepter ou la refuser.",
+  // E-mail notifications
+  "A task arrives in my incoming or my teams'": "Une tâche arrive dans mon incoming ou celui de mes équipes",
+  "I become the owner of a task": "Une tâche m'est confiée",
+  "A task I sent is refused": "Une tâche que j'ai envoyée est refusée",
+  "A comment on a task I wrote or own": "Un commentaire sur une tâche que j'ai créée ou qui m'est confiée",
+  "My due dates": "Mes échéances",
+  "At once": "Tout de suite",
+  "Daily digest": "Résumé quotidien",
+  "Off": "Désactivé",
+  "at {hour}": "à {hour}",
+  "E-mail notifications": "Notifications par e-mail",
+  "Get an e-mail when something needs you, even with TasksPipes closed. Nothing is sent for what you do yourself.": "Recevez un e-mail quand quelque chose vous attend, même TasksPipes fermé. Rien n'est envoyé pour ce que vous faites vous-même.",
+  "The daily digest comes in the evening, with the reports; due dates are reminded in the morning, at the hour chosen.": "Le résumé quotidien arrive le soir, avec les rapports ; les échéances sont rappelées le matin, à l'heure choisie.",
 };

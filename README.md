@@ -46,6 +46,8 @@ follows Outline's look and feel.
   other in the app; the rest of the workspace does not see them, unless you add them to a team.
 - **Time and reports** — time spent in each step of a task, a daily activity report per pipe and a weekly time
   report per task type for development pipes, readable in the app and sent by e-mail at 18:00 if asked.
+- **Notifications by e-mail** — tasks sent to you, given to you or refused, comments and due dates, at once, in a
+  daily digest or not at all, as each person chooses.
 - **Sub-tasks, history, live updates**, English and French, light and dark themes.
 
 TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:

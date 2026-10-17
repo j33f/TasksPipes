@@ -20,6 +20,8 @@ import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
 import { sendLinkMail } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
 import { calendarUrl } from "./calendar.js";
+import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
+import { SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, type TaskPermissions } from "./access.js";
 
 export const STATUSES = ["backlog", "ready", "started", "ongoing", "blocked", "abandoned", "done"] as const;
 type Status = (typeof STATUSES)[number];
@@ -102,13 +104,6 @@ function assertTaskTypeUsable(type: TaskType, userId: string, pipeKindId: string
 // ---------------------------------------------------------------------------
 // Data access helpers
 
-const SPACE_NAME = `COALESCE(su.name, s.name)`;
-
-async function memberRole(spaceId: string, userId: string, db?: Queryable): Promise<string | null> {
-  const r = await one(`SELECT role FROM space_members WHERE space_id = $1 AND user_id = $2`, [spaceId, userId], db);
-  return r?.role ?? null;
-}
-
 function getSpace(id: string, userId: string) {
   return one(
     `SELECT s.id, s.kind, s.user_id, ${SPACE_NAME} AS name, s.description, s.color,
@@ -123,26 +118,6 @@ function getSpace(id: string, userId: string) {
 
 const personalSpaceId = async (userId: string, db?: Queryable): Promise<string> =>
   (await one(`SELECT id FROM spaces WHERE user_id = $1`, [userId], db))?.id;
-
-const TASK_SELECT = `
-  SELECT t.*, p.name AS pipe_name, p.visibility AS pipe_visibility, p.kind AS pipe_kind,
-         ${SPACE_NAME} AS space_name, s.kind AS space_kind, s.user_id AS space_user_id, su.avatar_url AS space_user_avatar,
-         au.name AS author_name, au.avatar_url AS author_avatar,
-         asg.name AS assignee_name, asg.avatar_url AS assignee_avatar,
-         se.name AS sender_name, se.avatar_url AS sender_avatar,
-         (SELECT count(*) FROM task_events e WHERE e.task_id = t.id AND e.type = 'comment') AS comment_count,
-         (SELECT l.state FROM task_links l WHERE l.task_id = t.id AND l.kind <> 'commit' ORDER BY l.updated_at DESC LIMIT 1) AS git_state,
-         (SELECT json_build_object('total', count(*), 'done', count(*) FILTER (WHERE i.done),
-                   'next', (array_agg(json_build_object('id', i.id, 'text', i.text) ORDER BY i.position, i.created_at)
-                            FILTER (WHERE NOT i.done))[1])
-          FROM task_items i WHERE i.task_id = t.id) AS checklist
-  FROM tasks t
-  JOIN spaces s ON s.id = t.space_id
-  LEFT JOIN users su ON su.id = s.user_id
-  LEFT JOIN pipes p ON p.id = t.pipe_id
-  JOIN users au ON au.id = t.author_id
-  LEFT JOIN users asg ON asg.id = t.assignee_id
-  LEFT JOIN users se ON se.id = t.sender_id`;
 
 function presentTask(t: Row) {
   return {
@@ -202,32 +177,6 @@ function presentPipe(p: Row) {
 const PIPE_COUNTS = `(SELECT json_object_agg(status, n) FROM
   (SELECT status, count(*) AS n FROM tasks t WHERE t.pipe_id = p.id GROUP BY status) c) AS counts`;
 
-const getTaskRow = (id: string, db?: Queryable) => one(`${TASK_SELECT} WHERE t.id = $1`, [id], db);
-
-interface TaskPermissions {
-  view: boolean;
-  manage: boolean;
-  editContent: boolean;
-  comment: boolean;
-  refuse: boolean;
-}
-
-async function taskPermissions(t: Row, userId: string): Promise<TaskPermissions> {
-  const isMember = Boolean(await memberRole(t.space_id, userId));
-  // An open pipe is open to those who can reach its space (not to people unknown to its owner).
-  const openPipe = t.pipe_visibility === "open" && (isMember || (await spaceVisible(t.space_id, userId)));
-  // In a pipe reserved to a team (PSH…), only the team's members see the task, not even its author or sender.
-  const involved = (t.author_id === userId || t.sender_id === userId) && !pipeTypeById(t.pipe_kind)?.teamOnly;
-  return {
-    view: isMember || openPipe || involved,
-    manage: isMember,
-    editContent: isMember || (t.author_id === userId && openPipe),
-    comment: isMember || openPipe || involved,
-    // A task can be refused only from an incoming bucket, and only if someone else sent it.
-    refuse: isMember && !t.pipe_id && Boolean(t.sender_id) && t.sender_id !== userId,
-  };
-}
-
 async function loadTaskFor(id: string, userId: string, need?: keyof TaskPermissions) {
   const t = await getTaskRow(uuid(id, "Task"));
   if (!t) throw notFound("Task not found");
@@ -236,10 +185,6 @@ async function loadTaskFor(id: string, userId: string, need?: keyof TaskPermissi
   if (need && !perms[need]) throw forbidden();
   return { t, perms };
 }
-
-/** Whether someone may reach a space (see space_visible in the schema). */
-const spaceVisible = async (spaceId: string, userId: string, db?: Queryable) =>
-  Boolean((await one(`SELECT space_visible($2, $1) AS ok`, [spaceId, userId], db))?.ok);
 
 async function loadPipeFor(id: unknown, userId: string) {
   const p = await one(
@@ -273,7 +218,7 @@ const snapshot = (t: Row): Snapshot => ({
   doc: t.outline_doc_id ? { id: t.outline_doc_id, title: t.outline_doc_title, url: t.outline_doc_url } : null,
 });
 
-/** Writes one entry of a task's history, with the state before and after the change. */
+/** Writes one entry of a task's history, with the state before and after the change, and queues its notifications. */
 async function recordEvent(
   db: Queryable,
   taskId: string,
@@ -284,12 +229,12 @@ async function recordEvent(
   comment: string | null = null,
   details: object | null = null
 ) {
-  await db.query(
+  const { rows } = await db.query(
     `INSERT INTO task_events (task_id, actor_id, type, comment,
        from_space_id, to_space_id, from_pipe_id, to_pipe_id, from_status, to_status,
        from_assignee_id, to_assignee_id, from_due_date, to_due_date, from_doc, to_doc,
        from_stage, to_stage, details)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
     [
       taskId, actorId, type, comment || null,
       before?.space_id ?? null, after.space_id,
@@ -303,6 +248,8 @@ async function recordEvent(
       details ? JSON.stringify(details) : null,
     ]
   );
+  // E-mail notifications it causes, in the same transaction.
+  await queueNotifications(db, Number(rows[0].id));
 }
 
 async function nextPosition(db: Queryable, spaceId: string, pipeId: string | null, stage: string | null): Promise<number> {
@@ -462,8 +409,17 @@ export async function apiRoutes(app: FastifyInstance) {
     user: req.user,
     personalSpaceId: await personalSpaceId(me(req)),
     outlineUrl: req.outlineUrl,
-    features: { invitations: config.allowEmailInvitations },
+    features: { invitations: config.allowEmailInvitations, notifications: notificationState.enabled },
+    // E-mail notifications are only offered when e-mail is set up.
+    ...(notificationState.enabled
+      ? { notificationPrefs: prefsOf((await one(`SELECT notification_prefs FROM users WHERE id = $1`, [me(req)]))?.notification_prefs) }
+      : {}),
   }));
+
+  app.put("/me/notifications", async (req: Req) => {
+    if (!notificationState.enabled) throw notFound("Not found");
+    return { notificationPrefs: await savePrefs(me(req), cleanPrefs(req.body)) };
+  });
 
   // ----- Avatar of e-mail accounts (Outline accounts use their Outline picture) ----
 

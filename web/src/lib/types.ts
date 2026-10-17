@@ -25,8 +25,14 @@ export interface Me {
   personalSpaceId: string;
   outlineUrl: string;
   /** What this instance allows. */
-  features: { invitations: boolean };
+  features: { invitations: boolean; notifications: boolean };
+  /** E-mail notification choices, when e-mail is set up on the instance. */
+  notificationPrefs?: NotificationPrefs;
 }
+
+export type NotificationMode = "immediate" | "digest" | "off";
+export type NotificationKind = "received" | "assigned" | "refused" | "comment" | "due";
+export type NotificationPrefs = Record<NotificationKind, NotificationMode> & { dueHour: number };
 
 export interface SpaceSummary {
   id: string;

@@ -139,6 +139,31 @@ waiting tasks shows in the tab title and, on mobile, as a badge on the menu butt
 After the server is updated, open pages notice the new version and reload themselves — at once if nothing is being
 edited, otherwise once the edit is over, with a banner offering to reload.
 
+## E-mail notifications
+
+With e-mail set up on the instance, TasksPipes tells people by e-mail what needs them, even with the app closed:
+
+| Notification | Who gets it | By default |
+| --- | --- | --- |
+| A task arrives in an incoming | the person, or the members of the team | at once |
+| A task becomes yours | its new owner | at once |
+| A task you sent is refused | the sender, with the reason | at once |
+| A comment (also one written while moving or sending a task) | the task's author and owner | daily digest |
+| Due dates | the owner: overdue tasks (once), and those due today and tomorrow | in the morning, at 8:00 |
+
+- **Settings** (account menu) let each person choose, for each kind, *at once*, *daily digest* (sent at the report
+  hour, with the reports) or *off*, and the hour of the morning reminder.
+- E-mails sent at once wait two minutes, so that what follows (a comment after sending a task…) comes in the same
+  e-mail, and a task sends at most one e-mail every 15 minutes to a person; what happens meanwhile is grouped in the
+  next one.
+- Nothing is sent for what you do yourself, nor to e-mail accounts that never signed in.
+- Access is checked again when sending: someone who can no longer see a task (who left the team, for instance) gets
+  nothing about it.
+- **Confidential** and **team-only** tasks are only named by their key (`TP-123`) and a link: their title, place,
+  comments and reasons stay in the app.
+- Every e-mail has an **unsubscribe** link, and supports the one-click unsubscribe of mail apps.
+- Without e-mail on the instance, nothing is sent and the settings are not shown.
+
 ## Calendar
 
 **Calendar**, in the account menu, gives a personal link to subscribe to your tasks with a due date in Google Calendar, Apple Calendar or

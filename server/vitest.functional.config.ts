@@ -23,6 +23,8 @@ export default defineConfig({
       MOCK_OUTLINE_PORT: String(port),
       DEFAULT_LOCALE: "en",
       LOG_LEVEL: "silent",
+      // Rate limits in Redis when the test stack provides one, else in memory.
+      REDIS_URL: process.env.TEST_REDIS_URL || "",
     },
     coverage: {
       provider: "v8",

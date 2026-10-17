@@ -362,6 +362,29 @@ ALTER TABLE tasks ALTER COLUMN id SET DEFAULT gen_uuidv7();
 -- Tasks in a personal space belong to that person: no explicit assignee there.
 UPDATE tasks t SET assignee_id = NULL FROM spaces s
 WHERE s.id = t.space_id AND s.kind = 'user' AND t.assignee_id IS NOT NULL;
+
+-- E-mail notifications (notifications.ts): each person's choices per kind ({"comment": "off", "dueHour": 7}…;
+-- missing keys take the defaults), and the local day of their last due-date reminder (sent once a day).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS due_reminded_on date;
+-- Notifications waiting to be e-mailed (written with the history entry that causes them), then sent or dropped.
+CREATE TABLE IF NOT EXISTS notifications (
+  id bigserial PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  kind text NOT NULL CHECK (kind IN ('received', 'assigned', 'refused', 'comment', 'overdue')),
+  event_id bigint REFERENCES task_events(id) ON DELETE CASCADE,
+  -- Overdue tasks: the due date they were reminded of, once.
+  due_date date,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  -- How it went out ('immediate', 'digest', 'due'), or why not (dropped: turned off, access lost…).
+  channel text,
+  sent_at timestamptz,
+  dropped_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS notifications_pending_idx ON notifications(user_id, task_id) WHERE sent_at IS NULL AND dropped_at IS NULL;
+CREATE INDEX IF NOT EXISTS notifications_sent_idx ON notifications(user_id, task_id, sent_at) WHERE channel = 'immediate';
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_overdue_idx ON notifications(user_id, task_id, due_date) WHERE kind = 'overdue';
 `;
 
 /**
