@@ -94,7 +94,9 @@ Accounts are tied to their server: the same Outline account id on two
 servers makes two accounts, and accounts of one server see neither the people nor the teams of another.
 
 As the server contacts the addresses people type, only public `https` servers are accepted, checked on every call;
-internal addresses (`localhost`, `10.x`, `192.168.x`…) are refused unless `OUTLINE_ALLOW_PRIVATE=true`. Use
+internal addresses (`localhost`, `10.x`, `192.168.x`…) are refused unless `OUTLINE_ALLOW_PRIVATE=true`. The address
+is checked again when each connection opens, so a name that resolves elsewhere between the check and the call (DNS
+rebinding) is refused too. Redirects are not followed. Use
 `OUTLINE_ALLOWED_HOSTS` to accept only some servers.
 
 ## E-mail accounts and invitations
@@ -137,10 +139,23 @@ already sent invalid.
 
 ## Rate limits
 
-Routes that accept a token from outside, such as the unsubscribe links, and `/healthz` are rate limited per client
-address: past the limit, the address is blocked for a minute, then longer at each new offence (`RATE_LIMIT_BACKOFF_FACTOR`), up to
+Routes that sign people in, accept a secret or check a code are rate limited: past the limit, the client is blocked for
+the length of the window, then longer at each new offence (`RATE_LIMIT_BACKOFF_FACTOR`), up to
 a day. Counters live in the Redis service of `docker-compose.yml`, which keeps nothing on disk; with several instances
-of the app, they share it. If Redis cannot be reached, requests go through and a warning is logged. The client address
+of the app, they share it. If Redis cannot be reached, requests go through and a warning is logged.
+
+| Routes | Limit | Counted per |
+| --- | --- | --- |
+| Sign-in with an API key, a sign-in link or a two-factor code; asking for a sign-in link | 20 per 15 minutes each | address |
+| Outline OAuth sign-in | 30 per 15 minutes | address |
+| Sign-up | 10 per hour | address |
+| Unsubscribe links | 20 per minute | address |
+| Two-factor settings (set up, turn on or off) | 10 per 15 minutes | person |
+| Invitations, new invitation links | 30 and 10 per hour | person |
+| GitHub / GitLab webhooks | 600 per minute | pipe token |
+| Calendar feeds | 60 per minute | feed |
+| `/healthz` | 120 per minute | address |
+ The client address
 comes from the reverse proxy (`X-Forwarded-For`): keep the app reachable only through it.
 
 ## Calendar subscription
