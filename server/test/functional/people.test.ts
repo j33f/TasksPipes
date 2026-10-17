@@ -25,6 +25,22 @@ describe("teams", () => {
     expect((await carol.get(`/api/pipes/${pipe}`)).status).toBe(404);
   });
 
+  it("only take members their creator can see", async () => {
+    // Someone invited by Bob: Alice does not see them.
+    const res = await bob.post("/api/invitations", { email: "hidden-member@example.com", name: "Hidden" });
+    const hidden = await signInWithLink(res.body.link);
+    const hiddenId = (await hidden.get("/api/me")).body.user.id;
+    expect(await names(alice)).not.toContain("Hidden");
+    const before = (await alice.get("/api/spaces")).body.length;
+    const created = await alice.post("/api/spaces", { name: "With a stranger", members: [{ userId: hiddenId }] });
+    expect(created.status).toBe(400);
+    expect(created.body.error).toBe("Unknown user");
+    // Nothing was created, and the person learns of nothing.
+    expect((await alice.get("/api/spaces")).body.length).toBe(before);
+    const theirs = ((await hidden.get("/api/spaces")).body as { name: string }[]).map((x) => x.name);
+    expect(theirs).not.toContain("With a stranger");
+  });
+
   it("keep at least one admin", async () => {
     const team = (await carol.post("/api/spaces", { name: "Solo", members: [] })).body.id;
     const carolId = (await carol.get("/api/me")).body.user.id;

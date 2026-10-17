@@ -797,6 +797,8 @@ export async function apiRoutes(app: FastifyInstance) {
       for (const m of members) {
         if (m.userId === uid) continue;
         await ensureUser(m.userId, client);
+        // Only people one can see, as when adding a member to an existing team.
+        if (!(await one(`SELECT user_visible($1, $2) AS ok`, [uid, m.userId], client))?.ok) throw bad("Unknown user");
         await client.query(
           `INSERT INTO space_members (space_id, user_id, role, added_by) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
           [space!.id, m.userId, m.role === "admin" ? "admin" : "member", uid]
