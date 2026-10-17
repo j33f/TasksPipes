@@ -6,8 +6,8 @@ TasksPipes was designed for an adult training centre, but fits other uses just a
   disability follow-up, Qualiopi quality, funding and invoicing.
 - **Business** — sales (quotes, negotiation, won / lost), prospecting, communication and admin pipes, with fields for
   clients, amounts and documents, and incoming buckets to pass work between people and teams.
-- **Software teams** — UX research, UI design, product documentation, translation / i18n, software development and
-  QA pipes, with user stories, bugs, mock-ups, translation batches, releases and test campaigns, and the
+- **Software teams** — UX research, UI design, product documentation, translation / i18n, R&D, software development
+  and QA pipes, with user stories, bugs, experiments, mock-ups, translation batches, releases and test campaigns, and the
   [GitHub / GitLab integration](GIT-INTEGRATION.md).
 - **Personal organisation** — a Personal pipe in every space, *My tasks* across all pipes, a GTD *Next action* view,
   sub-tasks and a calendar subscription with reminders.
@@ -52,7 +52,8 @@ quality & Qualiopi, admin & finance, and processes (recruitment / admission, ses
 session end) that can fill their first column with starter tasks.
 
 The *Software* group covers product teams: UX research, UI design, product documentation, translation / i18n,
-software development (with an *In review* column) and testing / QA.
+R&D (hypotheses, experiments and prototypes), software development (with an *In review* column) and testing / QA.
+R&D and software development pipes get the weekly time report.
 
 - **Confidential** types (learner follow-up) are always private.
 - **Team-only** types (disability follow-up) exist only in team spaces; their tasks cannot be sent or moved out of

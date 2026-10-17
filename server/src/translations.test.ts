@@ -75,7 +75,7 @@ describe("English catalog", () => {
     [p.label, p.group, p.description, ...p.templates, ...p.columns.map((c) => c.label)].forEach((s) => strings.add(s));
   }
   // Names and terms that read the same in English.
-  const SAME = new Set([
+  const SAME = new Set(["R&D", 
     "OPCO", "CPF", "France Travail", "Transitions Pro", "Contact", "E-mail", "LinkedIn", "Source", "Type", "Publication", "Facebook",
     "Instagram", "Newsletter", "Forum", "Job dating", "Date", "E-learning", "Document", "Guide", "Intervention", "Module", "Absences",
     "Action", "Session", "Audit", "Commercial", "Prospection", "Communication", "Backlog", "Initial", "Surveillance", "Oral",

@@ -444,6 +444,15 @@ export const TASK_TYPES: TaskType[] = [
     fields: [f("composant", "Composant", "text"), f("points", "Points", "number"), f("notes", "Notes techniques", "textarea")],
   },
   {
+    id: "experimentation", label: "Expérimentation", icon: "search", description: "Une hypothèse à vérifier par une expérience, un prototype ou une preuve de concept.",
+    fields: [
+      f("hypothese", "Hypothèse", "textarea"), f("protocole", "Protocole", "textarea"),
+      f("critere", "Critère de succès", "textarea"),
+      f("resultat", "Résultat", "select", { options: ["Validée", "Invalidée", "Non concluante"] }),
+      f("conclusions", "Conclusions", "textarea"), f("lien", "Lien vers le prototype", "url"), f("docs", "Documents Outline", "docs"),
+    ],
+  },
+  {
     id: "release", label: "Version", icon: "bolt", description: "Une version à livrer.",
     fields: [
       f("version", "Numéro de version", "text"), f("date", "Date de livraison", "date"),
@@ -749,6 +758,21 @@ export const PIPE_TYPES: PipeType[] = [
       col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
     ],
     taskTypes: ["user_story", "bug", "tache_technique", "release"], templates: [], timeReport: true,
+  },
+  {
+    id: "rnd", label: "R&D", group: "Logiciel",
+    description: "Recherche et développement : hypothèses, expériences et prototypes, avant de passer au développement.",
+    color: "#f08a24", icon: "bolt",
+    columns: [
+      col("idees", "Idées", "backlog", "#66778F"),
+      col("a_explorer", "À explorer", "ready", "#2BC2FF"),
+      col("experimentation", "En expérimentation", "started", "#9E5CF7"),
+      col("analyse", "Analyse", "ongoing", "#0366d6"),
+      col("bloque", "Bloqué", "blocked", "#ed2651"),
+      col("conclu", "Conclu", "done", "#3ad984"),
+      col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["experimentation", "tache_technique", "bug"], templates: [], timeReport: true,
   },
   {
     id: "qa", label: "Tests / QA", group: "Logiciel",
