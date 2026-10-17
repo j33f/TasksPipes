@@ -27,6 +27,10 @@ Put the application behind an HTTPS reverse proxy (Caddy, Traefik, nginx…): wi
 are `Secure`. The proxy must pass WebSocket upgrades through for live updates (`/api/events`); Caddy and Traefik do
 it by default.
 
+The web app loads its styles, scripts and font from the instance itself: the Inter font is bundled with it (SIL Open
+Font License, `web/src/assets/fonts/OFL.txt`). Browsers only reach the Outline server besides, for the profile
+pictures of Outline accounts.
+
 ## Configuration
 
 | Variable | Purpose |

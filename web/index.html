@@ -14,17 +14,6 @@
         document.documentElement.lang = lang === "fr" ? "fr" : "en";
       } catch {}
     </script>
-    <script>
-      // Theme and language chosen in the profile, applied before the page draws (no flash).
-      try {
-        const theme = localStorage.getItem("tp:theme");
-        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
-        const lang = localStorage.getItem("tp:locale") || (navigator.language || "en").slice(0, 2);
-        document.documentElement.lang = lang === "fr" ? "fr" : "en";
-      } catch {}
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="app"></div>
