@@ -282,6 +282,18 @@ INSERT INTO users (id, name, auth_kind) VALUES
   ('00000000-0000-4000-8000-0000000000a2', 'GitLab', 'system')
 ON CONFLICT (id) DO NOTHING;
 
+-- Reports: a pipe can send its daily activity report and, for development pipes, its weekly time report.
+ALTER TABLE pipes ADD COLUMN IF NOT EXISTS daily_report boolean NOT NULL DEFAULT false;
+ALTER TABLE pipes ADD COLUMN IF NOT EXISTS weekly_report boolean NOT NULL DEFAULT false;
+-- Each scheduled sending, so that it happens once.
+CREATE TABLE IF NOT EXISTS report_runs (
+  kind text NOT NULL,
+  period_end timestamptz NOT NULL,
+  ran_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (kind, period_end)
+);
+CREATE INDEX IF NOT EXISTS task_events_pipe_idx ON task_events(to_pipe_id, created_at);
+
 -- Who invited whom: the two accounts see each other.
 CREATE TABLE IF NOT EXISTS invitations (
   inviter_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,

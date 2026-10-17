@@ -42,6 +42,8 @@ follows Outline's look and feel.
 - **Invitations and connections** — invite people by e-mail (trainers, clients, partners…): a new person gets a
   sign-in link, someone already on TasksPipes gets a request they accept or refuse. Once connected, you see each
   other in the app; the rest of the workspace does not see them, unless you add them to a team.
+- **Time and reports** — time spent in each step of a task, a daily activity report per pipe and a weekly time
+  report per task type for development pipes, readable in the app and sent by e-mail at 18:00 if asked.
 - **Sub-tasks, history, live updates**, English and French, light and dark themes.
 
 TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:

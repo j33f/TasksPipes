@@ -8,6 +8,8 @@ import {
 } from "./pipeTypes.js";
 import { validatePipeType, validateTaskType } from "./designer.js";
 import { exportModels, importModels } from "./models-io.js";
+import { latestReportDay, latestReportWeek, pipeDailyReport, pipeWeeklyReport, reportDay, stepTimes } from "./reports.js";
+import { lastWeekday } from "./time.js";
 import { PROVIDERS, TASK_KEY_PREFIX, gitItems, verifyGithub, verifyGitlab, type GitItem, type Provider } from "./git.js";
 import crypto from "node:crypto";
 import { cleanFields } from "./fields.js";
@@ -186,6 +188,8 @@ function presentPipe(p: Row) {
     icon: p.icon,
     archived: Boolean(p.archived_at),
     isDefault: p.is_default,
+    dailyReport: Boolean(p.daily_report),
+    weeklyReport: Boolean(p.weekly_report),
     color: p.color,
     position: p.position,
     createdBy: p.created_by ? { id: p.created_by, name: p.created_by_name } : null,
@@ -1176,7 +1180,7 @@ export async function apiRoutes(app: FastifyInstance) {
     await client.query(
       `UPDATE pipes SET name = $2, description = $3, visibility = $4, color = $5, kind = $6, icon = $8,
          archived_at = CASE WHEN $7::boolean IS NULL THEN archived_at WHEN $7 THEN COALESCE(archived_at, now()) END,
-         updated_at = now()
+         daily_report = $9, weekly_report = $10, updated_at = now()
        WHERE id = $1`,
       [
         p.id,
@@ -1188,6 +1192,9 @@ export async function apiRoutes(app: FastifyInstance) {
         kind,
         "archived" in b ? Boolean(b.archived) : null,
         "icon" in b ? icon(b.icon) : p.icon,
+        // Reports sent by e-mail: the weekly time report is for development pipes only.
+        "dailyReport" in b ? b.dailyReport === true : p.daily_report,
+        pipeTypeById(kind)?.timeReport ? ("weeklyReport" in b ? b.weeklyReport === true : p.weekly_report) : false,
       ]
     );
     // A new type brings new columns: each task goes to the matching one.
@@ -1304,6 +1311,7 @@ export async function apiRoutes(app: FastifyInstance) {
       events,
       items,
       key: `${TASK_KEY_PREFIX}-${t.number}`,
+      timing: stepTimes(events),
       gitConnected: Boolean(t.pipe_id && (await one(`SELECT 1 FROM pipe_integrations WHERE pipe_id = $1 LIMIT 1`, [t.pipe_id]))),
       links: links.rows.map((l) => ({
         provider: l.provider, kind: l.kind, url: l.url, number: l.number, title: l.title, state: l.state,
@@ -1463,6 +1471,22 @@ export async function apiRoutes(app: FastifyInstance) {
       await client.query(`UPDATE tasks SET updated_at = now() WHERE id = $1`, [t.id]);
     });
     return { ok: true };
+  });
+
+  // ----- Reports of a pipe ------------------------------------------------------
+
+  // Activity of a day (from the day before at the report hour); the latest finished day by default.
+  app.get("/pipes/:id/reports/daily", async (req: Req) => {
+    const { p } = await loadPipeFor(req.params.id, me(req));
+    const day = reportDay(req.query.date, latestReportDay());
+    return { day, hour: config.reportHour, timezone: config.timezone, ...(await pipeDailyReport(p.id, day)) };
+  });
+
+  // Time spent per task type over a week ending on a Friday at the report hour (development pipes).
+  app.get("/pipes/:id/reports/weekly", async (req: Req) => {
+    const { p } = await loadPipeFor(req.params.id, me(req));
+    const day = lastWeekday(reportDay(req.query.date, latestReportWeek()), 5);
+    return { day, hour: config.reportHour, timezone: config.timezone, ...(await pipeWeeklyReport(p.id, day)) };
   });
 
   // ----- Git integrations of a pipe (GitHub / GitLab webhooks) -------------

@@ -59,6 +59,9 @@ export interface Pipe {
   color: string | null;
   createdBy: UserRef | null;
   counts: Partial<Record<Status, number>>;
+  /** Reports sent by e-mail at the report hour: daily activity, weekly time (development pipes). */
+  dailyReport: boolean;
+  weeklyReport: boolean;
 }
 
 export interface Member extends UserRef {
@@ -161,6 +164,7 @@ export interface TaskDetail extends Task {
   links: TaskLink[];
   /** The task's pipe is connected to GitHub or GitLab. */
   gitConnected: boolean;
+  timing: Timing;
 }
 
 export interface TaskFile {
@@ -253,6 +257,8 @@ export interface PipeType extends CustomMeta {
   confidential?: boolean;
   /** Reserved to a team space; its tasks never leave it. */
   teamOnly?: boolean;
+  /** Development pipes: a weekly time report can be sent. */
+  timeReport?: boolean;
   templates: string[];
 }
 
@@ -293,4 +299,46 @@ export interface GitIntegration {
   secret: string;
   createdAt: string;
   lastEventAt: string | null;
+}
+
+/** Time spent per step of a task (computed from its history). */
+export interface Timing {
+  steps: { label: string | null; incoming: boolean; status: Status | null; ms: number }[];
+  current: { label: string | null; incoming: boolean; since: string } | null;
+  leadMs: number;
+  cycleMs: number | null;
+  done: boolean;
+}
+
+export interface ReportTask {
+  id: string;
+  number: number;
+  title: string;
+  taskType: string;
+  owner: string | null;
+  stage?: string | null;
+}
+
+interface ReportPeriod {
+  /** Local day the report ends on, at `hour` in `timezone`. */
+  day: string;
+  hour: number;
+  timezone: string;
+  period: { start: string; end: string };
+}
+
+export interface DailyReport extends ReportPeriod {
+  created: ReportTask[];
+  started: ReportTask[];
+  done: ReportTask[];
+  blocked: ReportTask[];
+  dropped: ReportTask[];
+  inProgress: ReportTask[];
+  stillBlocked: ReportTask[];
+}
+
+export interface WeeklyReport extends ReportPeriod {
+  byType: { taskType: string; activeMs: number; blockedMs: number; tasks: number; done: number }[];
+  tasks: (ReportTask & { activeMs: number; blockedMs: number; done: boolean })[];
+  totalActiveMs: number;
 }

@@ -64,6 +64,8 @@ export interface PipeType extends CustomMeta {
    * and only the team's members see them (not even their author once out of the team).
    */
   teamOnly?: boolean;
+  /** Development pipes: a weekly report of the time spent per task type can be sent. */
+  timeReport?: boolean;
   templates: string[];
 }
 
@@ -746,7 +748,7 @@ export const PIPE_TYPES: PipeType[] = [
       col("termine", "Terminé", "done", "#3ad984"),
       col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
     ],
-    taskTypes: ["user_story", "bug", "tache_technique", "release"], templates: [],
+    taskTypes: ["user_story", "bug", "tache_technique", "release"], templates: [], timeReport: true,
   },
   {
     id: "qa", label: "Tests / QA", group: "Logiciel",

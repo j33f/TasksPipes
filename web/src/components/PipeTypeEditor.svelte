@@ -38,6 +38,7 @@
       taskTypes: [...(src?.taskTypes ?? [])],
       confidential: Boolean(src?.confidential),
       teamOnly: Boolean(src?.teamOnly),
+      timeReport: Boolean(src?.timeReport),
       templates: (src?.templates ?? []).join("\n"),
     };
   }
@@ -204,6 +205,8 @@
         {t("Confidential: pipes of this type always stay private")}</label>
       <label class="check"><input type="checkbox" bind:checked={draft.teamOnly} />
         {t("Reserved to a team: only in a team space, tasks cannot leave it")}</label>
+      <label class="check"><input type="checkbox" bind:checked={draft.timeReport} />
+        {t("Weekly time report: pipes of this type can send the time spent per task type every Friday")}</label>
     </div>
 
     <div class="field">

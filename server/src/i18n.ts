@@ -206,6 +206,34 @@ export const FR: Record<string, string> = {
   "This type is offered in: {types}. Remove it from these pipe types first.":
     "Ce type est proposé dans : {types}. Retirez-le d'abord de ces types de pipes.",
 
+  // Reports
+  "{n} min": "{n} min",
+  "{h} h {m}": "{h} h {m}",
+  "{h} h": "{h} h",
+  "{d} d {h} h": "{d} j {h} h",
+  "{d} d": "{d} j",
+  "New in the pipe": "Nouvelles dans le pipe",
+  "Tasks started": "Tâches démarrées",
+  "Tasks done": "Tâches terminées",
+  "Tasks blocked": "Tâches bloquées",
+  "Tasks dropped": "Tâches abandonnées",
+  Done: "Terminées",
+  Blocked: "Bloquées",
+  "Still in progress": "Toujours en cours",
+  "Still blocked": "Toujours bloquées",
+  "Activity of {pipe} — {day}": "Activité de {pipe} — {day}",
+  "From {start} to {end}.": "Du {start} au {end}.",
+  "Task type": "Type de tâche",
+  "In progress": "En cours",
+  Tasks: "Tâches",
+  "No time recorded this week.": "Aucun temps enregistré cette semaine.",
+  "Tasks that took the most time": "Les tâches qui ont pris le plus de temps",
+  "Time report of {pipe} — week to {day}": "Rapport de temps de {pipe} — semaine au {day}",
+  "Time spent on tasks being worked on, from {start} to {end}: {total}.": "Temps passé sur les tâches en cours, du {start} au {end} : {total}.",
+  "Open the pipe": "Ouvrir le pipe",
+  "You receive this e-mail because the pipe sends its reports to the members of its space.":
+    "Vous recevez cet e-mail parce que le pipe envoie ses rapports aux membres de son espace.",
+
   // Git integrations
   "Unknown provider": "Fournisseur inconnu",
 

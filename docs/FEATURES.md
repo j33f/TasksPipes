@@ -92,6 +92,22 @@ those types keep working. This is a personal choice: others still see every type
 - **Outline**: search documents or paste a URL, link and unlink, or create an Outline document from a task.
 - **Markdown** in descriptions, comments and refusal reasons, with a preview.
 
+## Time and reports
+
+- **Time per step**: each task shows how long it spent in each column (and in incoming buckets), the step it is in
+  and for how long, its lead time (creation to done) and the time it was worked on (first start to done). It is
+  computed from the history, so it covers tasks created before the feature too; times are calendar times.
+- **Daily activity report** (*Reports* on a pipe, or in its menu): for a day, from the day before at the report hour
+  to that day at the report hour — tasks new in the pipe, started, done, blocked, dropped, and those still in
+  progress or blocked at the end. Any day can be shown.
+- **Weekly time report** (development pipes): over a week ending on Friday at the report hour, the time tasks spent
+  in progress and blocked, per task type, the tasks done, and the tasks that took the most time.
+- **By e-mail**: members of a pipe's space can have its daily report sent to them every day at the report hour, and
+  for development pipes the weekly time report every Friday. Each member gets it in their language; a day without
+  any activity sends nothing.
+
+The report hour (18:00 by default) and time zone are set by the instance (`REPORT_HOUR`, `TIMEZONE`).
+
 ## Incoming buckets
 
 Every person and team has an incoming bucket that receives tasks sent by others. A member **accepts** a task into a

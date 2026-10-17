@@ -18,7 +18,7 @@ Outline through its RPC-style API.
 | File | Role |
 | --- | --- |
 | `app.ts` | Builds the Fastify app: error handler (translates errors), plugins, API, static files and the SPA fallback. |
-| `index.ts` | Starts it: database migration, listening, periodic clean-up, graceful shutdown. |
+| `index.ts` | Starts it: database migration, listening, periodic clean-up, report sending, graceful shutdown. |
 | `config.ts` | Environment variables. |
 | `db.ts` | Connection pool, the schema (applied at every start), SQL visibility functions, start-up data fixes. |
 | `auth.ts` | Sessions, Outline sign-in (OAuth and API keys), e-mail sign-up, sign-in links and TOTP. |
@@ -27,6 +27,7 @@ Outline through its RPC-style API.
 | `pipeTypes.ts` | Built-in catalog of pipe and task types, and the custom types made with the designer. |
 | `designer.ts` | Validation of custom pipe and task types. |
 | `models-io.ts` | Export and import of models as YAML files. |
+| `reports.ts`, `time.ts` | Time per step, daily and weekly reports (computed from the history), their e-mails and scheduled sending; local times and periods. |
 | `git.ts` | GitHub / GitLab webhooks: task keys, signatures, what events mean (the routes are in `routes.ts`). |
 | `fields.ts` | Validation of task field values. |
 | `realtime.ts` | WebSocket at `/api/events`, notifying people of tasks sent to them or refused. |
@@ -60,6 +61,7 @@ follow Outline's design tokens (`web/src/app.css`).
 | `task_items`, `task_files` | Sub-tasks and files of tasks. |
 | `task_events` | History of every task, with the state before and after each change. |
 | `custom_types` | Pipe and task types made with the designer. |
+| `report_runs` | Scheduled report sendings already done (one per period). |
 | `pipe_integrations`, `task_links` | Repositories connected to pipes (webhook token, encrypted secret), and the pull/merge requests and commits linked to tasks. |
 | `sessions`, `login_tokens`, `invitations` | Sessions, e-mail sign-in links and TOTP steps, invitations and requests to connect (pending, accepted, refused). |
 

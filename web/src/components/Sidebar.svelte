@@ -8,6 +8,7 @@
   import InviteModal from "./InviteModal.svelte";
   import PipeIcon from "./PipeIcon.svelte";
   import PipeModal from "./PipeModal.svelte";
+  import ReportModal from "./ReportModal.svelte";
   import NewTaskModal from "./NewTaskModal.svelte";
   import { api, errorMessage } from "../lib/api";
   import { navigate } from "../lib/router.svelte";
@@ -47,6 +48,7 @@
   let renamingId = $state<string | null>(null);
   let newTaskPipe = $state<SidebarPipe | null>(null);
   let editing = $state<SidebarPipe | null>(null);
+  let reporting = $state<SidebarPipe | null>(null);
 
   function openMenu(e: MouseEvent, pipe: SidebarPipe) {
     if (menu?.pipe.id === pipe.id) return (menu = null);
@@ -303,6 +305,7 @@
     {#if p.canManage}
       <button class="menu-item" role="menuitem" onclick={() => { menu = null; renamingId = p.id; }}><Icon name="edit" size={16} />{t("Rename")}</button>
       <button class="menu-item" role="menuitem" onclick={() => { menu = null; editing = p; }}><Icon name="settings" size={16} />{t("Icon, colour, type…")}</button>
+      <button class="menu-item" role="menuitem" onclick={() => { menu = null; reporting = p; }}><Icon name="chart" size={16} />{t("Reports")}</button>
     {/if}
     <button class="menu-item" role="menuitem" onclick={() => run(() => app.setPinned(p.id, !pinned), pinned ? t("Pipe unpinned") : t("Pipe pinned"))}>
       <Icon name="pin" size={16} />{pinned ? t("Unpin") : t("Pin")}
@@ -323,6 +326,7 @@
   <NewTaskModal pipe={{ id: newTaskPipe.id, name: newTaskPipe.name, spaceId: newTaskPipe.spaceId, kind: newTaskPipe.kind }} onclose={() => (newTaskPipe = null)} />
 {/if}
 {#if editing}<PipeModal spaceId={editing.spaceId} pipe={editing} onclose={() => (editing = null)} />{/if}
+{#if reporting}<ReportModal pipe={reporting} onclose={() => (reporting = null)} />{/if}
 
 {#if showInvite}<InviteModal onclose={() => (showInvite = false)} />{/if}
 

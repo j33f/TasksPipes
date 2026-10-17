@@ -17,6 +17,7 @@
   import AcceptDialog from "./AcceptDialog.svelte";
   import Checklist from "./Checklist.svelte";
   import DevLinks from "./DevLinks.svelte";
+  import TaskTiming from "./TaskTiming.svelte";
   import { t, tn } from "../lib/i18n.svelte";
 
   let { id, onclose }: { id: string; onclose: () => void } = $props();
@@ -380,6 +381,11 @@
           {:else}
             <div class="value muted">—</div>
           {/if}
+        </div>
+
+        <div class="prop">
+          <span class="label-text">{t("Time per step")}</span>
+          <TaskTiming timing={task.timing} />
         </div>
 
         <div class="prop">

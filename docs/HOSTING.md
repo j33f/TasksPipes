@@ -44,6 +44,8 @@ it by default.
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | E-mail for accounts without Outline and invitations, see below. |
 | `ALLOW_EMAIL_SIGNUP` | `true` (default) lets anyone create an account with an e-mail address and a name (needs SMTP). |
 | `ALLOW_EMAIL_INVITATIONS` | `true` (default) lets people invite others by e-mail and send requests to connect. |
+| `TIMEZONE` | Time zone of the reports (e.g. `Europe/Paris`); `UTC` by default. |
+| `REPORT_HOUR` | Hour (0–23) at which daily reports, and on Fridays weekly time reports, are due: 18 by default. |
 | `DEFAULT_LOCALE` | `en` (default) or `fr`: language used when neither the profile nor the browser gives one. |
 | `SESSION_DAYS` | Session length, 30 days by default. |
 | `LOG_LEVEL` | `info` by default. |
@@ -106,6 +108,13 @@ invitation shows the sign-in link for the inviter to pass on, and people cannot 
 
 The sign-up and invitation forms give the same answer whether or not an address already has an account, so they
 cannot be used to find out who uses TasksPipes.
+
+## Reports by e-mail
+
+Pipes can send their daily activity report every day at `REPORT_HOUR` (local to `TIMEZONE`), and development pipes
+their weekly time report on Fridays. The server checks every minute and records each sending in the database, so a
+report goes out once, even across restarts; if the server was down at the report hour, it sends on start-up the same
+day. Sending needs SMTP (see above).
 
 ## Calendar subscription
 

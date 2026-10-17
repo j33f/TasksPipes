@@ -91,6 +91,15 @@ export function formatDate(iso: string | null | undefined): string {
 
 export const formatDateTime = (iso: string) => fmt("time").format(new Date(iso));
 
+/** A length of time: "45 min", "5 h 20", "3 d 4 h". */
+export function formatDuration(ms: number): string {
+  const min = Math.round(ms / 60_000);
+  if (min < 60) return t("{n} min", { n: min });
+  const h = Math.floor(min / 60);
+  if (h < 24) return min % 60 ? t("{h} h {m}", { h, m: String(min % 60).padStart(2, "0") }) : t("{h} h", { h });
+  return h % 24 ? t("{d} d {h} h", { d: Math.floor(h / 24), h: h % 24 }) : t("{d} d", { d: Math.floor(h / 24) });
+}
+
 export function relativeTime(iso: string): string {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return t("just now");
