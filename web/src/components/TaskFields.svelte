@@ -198,7 +198,7 @@
         {:else if f.type === "checkbox"}
           <label class="check"><input type="checkbox" checked={v === true} onchange={(e) => onchange(f.id, e.currentTarget.checked || null)} />{t("Yes")}</label>
         {:else if f.type === "user"}
-          <UserSelect value={(v as string) ?? null} placeholder="—" onchange={(id) => onchange(f.id, id)} />
+          <UserSelect value={(v as string) ?? null} placeholder="—" anyone onchange={(id) => onchange(f.id, id)} />
         {:else if f.type === "rncp"}
           {@const r = (v as RncpValue | undefined) ?? { code: null, title: null }}
           <div class="rncp">

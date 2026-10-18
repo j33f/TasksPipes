@@ -160,6 +160,7 @@ of the app, they share it. If Redis cannot be reached, requests go through and a
 | Unsubscribe links | 20 per minute | address |
 | Two-factor settings (set up, turn on or off) | 10 per 15 minutes | person |
 | Invitations, new invitation links | 30 and 10 per hour | person |
+| Invitations of Outline colleagues | 20 per hour | person |
 | GitHub / GitLab webhooks | 600 per minute | pipe token |
 | Calendar feeds | 60 per minute | feed |
 | Search | 120 per minute | person |

@@ -17,7 +17,7 @@ import { LOCALES, localeOf, localize, localizePipeType, localizeTaskType, tr, ty
 import QRCode from "qrcode";
 import { INVITE_LINK_HOURS, createLoginLink, decrypt, encrypt, ensurePersonalSpace, reenableInvited } from "./auth.js";
 import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
-import { isEmail, sendLinkMail } from "./mail.js";
+import { isEmail, sendLinkMail, sendOutlineInvite } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
 import { calendarUrl } from "./calendar.js";
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
@@ -345,6 +345,7 @@ async function keptAssignee(spaceId: string, assigneeId: string | null, db?: Que
 /** Like keptAssignee, but rejects an assignee that was explicitly asked for and cannot be kept. */
 async function checkAssignee(spaceId: string, assigneeId: string | null, db?: Queryable): Promise<string | null> {
   const disabled = assigneeId && (await one(`SELECT 1 FROM users WHERE id = $1 AND disabled_at IS NOT NULL`, [assigneeId], db));
+  if (assigneeId) await assertSignedInOnce(assigneeId, db);
   if (!assigneeId || (!disabled && (await keptAssignee(spaceId, assigneeId, db)))) return assigneeId;
   const s = await one(`SELECT kind FROM spaces WHERE id = $1`, [spaceId], db);
   throw bad(
@@ -352,6 +353,21 @@ async function checkAssignee(spaceId: string, assigneeId: string | null, db?: Qu
       ? "The owner must be a member of the team"
       : "A task in a personal space belongs to its holder: send it to someone instead."
   );
+}
+
+/**
+ * Outline accounts imported from the workspace take part once they have signed in: until then they get no task and
+ * join no team, and are invited instead (POST /users/:id/invite).
+ */
+async function assertSignedInOnce(userId: string, db?: Queryable) {
+  const u = await one(`SELECT name FROM users WHERE id = $1 AND auth_kind = 'outline' AND last_login_at IS NULL`, [userId], db);
+  if (u) throw bad("{name} has not signed in to TasksPipes yet: invite them first.", { name: u.name });
+}
+
+/** The same for a recipient space: the person of a personal space must have signed in once. */
+async function assertReachable(spaceId: string) {
+  const s = await one(`SELECT user_id FROM spaces WHERE id = $1`, [spaceId]);
+  if (s?.user_id) await assertSignedInOnce(s.user_id);
 }
 
 async function assertKindAllowed(kind: string, spaceId: string) {
@@ -706,6 +722,20 @@ export async function apiRoutes(app: FastifyInstance) {
     }));
   });
 
+  // An Outline colleague who never signed in: an e-mail inviting them (or, without e-mail, the link to give them).
+  app.post("/users/:id/invite", rateLimited(LIMITS.outlineInvite), async (req: Req) => {
+    const id = uuid(req.params.id, "Person");
+    const u = await one(
+      `SELECT name, email, locale, outline_url, auth_kind, last_login_at FROM users WHERE id = $1 AND user_visible($2, id)`,
+      [id, me(req)]
+    );
+    if (!u) throw bad("Unknown user");
+    if (u.auth_kind !== "outline" || u.last_login_at) throw bad("{name} already uses TasksPipes.", { name: u.name });
+    const sent = Boolean(u.email) && (await sendOutlineInvite(u.locale ?? config.defaultLocale, u.email, req.user!.name, u.outline_url));
+    req.log.info({ userId: id, sent }, "Outline colleague invited");
+    return sent ? { sent: true } : { sent: false, link: config.appUrl };
+  });
+
   // ----- Home ---------------------------------------------------------------
 
   app.get("/home", async (req) => {
@@ -812,6 +842,7 @@ export async function apiRoutes(app: FastifyInstance) {
         await ensureUser(m.userId, client);
         // Only people one can see, as when adding a member to an existing team.
         if (!(await one(`SELECT user_visible($1, $2) AS ok`, [uid, m.userId], client))?.ok) throw bad("Unknown user");
+        await assertSignedInOnce(m.userId, client);
         await client.query(
           `INSERT INTO space_members (space_id, user_id, role, added_by) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
           [space!.id, m.userId, m.role === "admin" ? "admin" : "member", uid]
@@ -885,6 +916,7 @@ export async function apiRoutes(app: FastifyInstance) {
     if (!userId) throw bad("A user is required");
     // Only people one can see: someone invited by e-mail joins a team through whoever invited them.
     if (!(await one(`SELECT user_visible($1, $2) AS ok`, [me(req), userId]))?.ok) throw bad("Unknown user");
+    await assertSignedInOnce(userId);
     await query(
       `INSERT INTO space_members (space_id, user_id, role, added_by) VALUES ($1, $2, $3, $4)
        ON CONFLICT (space_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
@@ -1255,6 +1287,7 @@ export async function apiRoutes(app: FastifyInstance) {
       // Otherwise the task is sent to a space's incoming bucket.
       spaceId = uuid(b.spaceId, "Space");
       if (!(await spaceVisible(spaceId, uid))) throw notFound("Space not found");
+      await assertReachable(spaceId);
       senderId = uid;
     }
     const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Owner")));
@@ -1415,6 +1448,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const { t } = await loadTaskFor(req.params.id, uid, "manage");
     const spaceId = uuid(req.body?.spaceId, "Recipient");
     if (!(await spaceVisible(spaceId, uid))) throw notFound("Recipient not found");
+    await assertReachable(spaceId);
     if (spaceId === t.space_id && !t.pipe_id) throw bad("The task is already in this incoming");
     assertStaysInSpace(t, spaceId);
     const comment = text(req.body?.comment, "Comment") || null;

@@ -136,6 +136,11 @@ export const FR: Record<string, string> = {
   "Space not found": "Espace introuvable",
   "Recipient not found": "Destinataire introuvable",
   "Unknown user": "Utilisateur inconnu",
+  "{name} has not signed in to TasksPipes yet: invite them first.": "{name} ne s'est pas encore connecté·e à TasksPipes : invitez cette personne d'abord.",
+  "{name} already uses TasksPipes.": "{name} utilise déjà TasksPipes.",
+  "{name} would like to share tasks with you on TasksPipes, the task manager that works with your Outline workspace.":
+    "{name} aimerait partager des tâches avec vous sur TasksPipes, le gestionnaire de tâches qui fonctionne avec votre espace Outline.",
+  "Sign in with your Outline account, on the server {server}.": "Connectez-vous avec votre compte Outline, sur le serveur {server}.",
   "A user is required": "Utilisateur requis",
   "The owner must be a member of the team": "Le ou la propriétaire doit être membre de l'équipe",
   "A task in a personal space belongs to its holder: send it to someone instead.":

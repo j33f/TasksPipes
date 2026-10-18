@@ -349,7 +349,8 @@ type Send = (lang: Locale, to: string, subject: string, html: string) => Promise
 async function recipients(spaceId: string) {
   const { rows } = await query(
     `SELECT u.email, u.locale FROM space_members m JOIN users u ON u.id = m.user_id
-     WHERE m.space_id = $1 AND u.email IS NOT NULL AND u.auth_kind <> 'system' AND u.disabled_at IS NULL`,
+     WHERE m.space_id = $1 AND u.email IS NOT NULL AND u.auth_kind <> 'system' AND u.disabled_at IS NULL
+       AND u.last_login_at IS NOT NULL`,
     [spaceId]
   );
   return rows as { email: string; locale: Locale | null }[];

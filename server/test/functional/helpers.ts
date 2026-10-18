@@ -63,8 +63,8 @@ export function agent(cookie = "", lang: "en" | "fr" = "en"): Agent {
   return a;
 }
 
-/** Signs in with an API key of the fake Outline (alice-token, bob-token, carol-token). */
-export async function signIn(token: "alice-token" | "bob-token" | "carol-token", lang: "en" | "fr" = "en", outlineUrl?: string) {
+/** Signs in with an API key of the fake Outline (alice-token, bob-token, carol-token; dave-token, see mock-outline). */
+export async function signIn(token: "alice-token" | "bob-token" | "carol-token" | "dave-token", lang: "en" | "fr" = "en", outlineUrl?: string) {
   const a = agent("", lang);
   const res = await a.post("/api/auth/apikey", { token, ...(outlineUrl ? { outlineUrl } : {}) });
   if (res.status !== 200) throw new Error(`sign-in failed: ${JSON.stringify(res.body)}`);
