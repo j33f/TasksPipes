@@ -523,6 +523,9 @@ CREATE TABLE IF NOT EXISTS pipe_webhooks (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS pipe_webhooks_pipe_idx ON pipe_webhooks(pipe_id);
+-- Posting to a chat channel (chat.ts): how deliveries are written, and in which language.
+ALTER TABLE pipe_webhooks ADD COLUMN IF NOT EXISTS format text NOT NULL DEFAULT 'json' CHECK (format IN ('json', 'slack', 'mattermost', 'teams'));
+ALTER TABLE pipe_webhooks ADD COLUMN IF NOT EXISTS locale text;
 -- Deliveries, written with the history entry that causes them, then sent and retried with growing delays.
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
   id bigserial PRIMARY KEY,

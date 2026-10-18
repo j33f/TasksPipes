@@ -206,6 +206,11 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   deliveries show in the dialog, with their answer. A *Test* button sends a `ping`. Addresses on internal networks
   are refused (`WEBHOOK_ALLOW_PRIVATE` lifts it). **Confidential and team-only pipes have no webhooks**: their
   content stays in the app.
+- **Slack, Mattermost, Microsoft Teams** — a webhook can post to a chat channel instead: choose its format and paste
+  the channel's incoming webhook address (for Teams, a *Workflows* webhook). Each event becomes a short message with
+  a link to the task (*Alice moved TP-12 “Quote” to Done*), comments quoted up to 300 characters, in the language of
+  the webhook (its creator's by default, changeable). Same events, retries, delivery log and address checks as JSON
+  webhooks.
 
 ## Incoming buckets
 
