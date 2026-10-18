@@ -19,7 +19,7 @@ export interface Me {
     kind: "outline" | "email" | "oidc";
     totp: boolean;
     /** Chosen language and theme; null follows the browser / the system. */
-    locale: "en" | "fr" | null;
+    locale: string | null;
     theme: "light" | "dark" | null;
   };
   personalSpaceId: string;
@@ -490,7 +490,7 @@ export interface Webhook {
   active: boolean;
   /** Signed JSON, or a message for a chat channel. */
   format: "json" | "slack" | "mattermost" | "teams";
-  locale: "en" | "fr";
+  locale: string;
   secret: string;
   createdAt: string;
   deliveries: {

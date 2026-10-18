@@ -13,7 +13,7 @@ import { lastWeekday } from "./time.js";
 import { PROVIDERS, TASK_KEY_PREFIX, gitItems, verifyGithub, verifyGitlab, type GitItem, type Provider } from "./git.js";
 import crypto from "node:crypto";
 import { cleanFields } from "./fields.js";
-import { LOCALES, localeOf, localize, localizePipeType, localizeTaskType, tr, type Locale } from "./i18n.js";
+import { csvSeparator, isLocale, localeOf, localize, localizePipeType, localizeTaskType, tr, type Locale } from "./i18n.js";
 import QRCode from "qrcode";
 import { INVITE_LINK_HOURS, createLoginLink, decrypt, encrypt, ensurePersonalSpace, reenableInvited } from "./auth.js";
 import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
@@ -565,7 +565,7 @@ export async function apiRoutes(app: FastifyInstance) {
       if (u.kind === "outline") throw bad("The name of an Outline account is changed in Outline");
       name = text(b.name, "Name", { required: true, max: 120 });
     }
-    const locale = "locale" in b ? (b.locale === null ? null : LOCALES.includes(b.locale) ? b.locale : bad("Invalid language")) : u.locale;
+    const locale = "locale" in b ? (b.locale === null ? null : isLocale(b.locale) ? b.locale : bad("Invalid language")) : u.locale;
     const theme = "theme" in b ? (b.theme === null ? null : ["light", "dark"].includes(b.theme) ? b.theme : bad("Invalid theme")) : u.theme;
     if (locale instanceof HttpError) throw locale;
     if (theme instanceof HttpError) throw theme;
@@ -1323,7 +1323,7 @@ export async function apiRoutes(app: FastifyInstance) {
     reply.header("cache-control", "no-store");
     if (json) return reply.type("application/json; charset=utf-8").send(JSON.stringify(exportJson({ name: p.name, kind: p.kind }, rows as ExportedTask[], lang, names, key), null, 2));
     // Spreadsheets in French expect semicolons.
-    const sep = req.query.sep === ";" || (req.query.sep === undefined && lang === "fr") ? ";" : ",";
+    const sep = req.query.sep === ";" || (req.query.sep === undefined && csvSeparator(lang) === ";") ? ";" : ",";
     return reply.type("text/csv; charset=utf-8").send(exportCsv(p.kind, rows as ExportedTask[], lang, names, key, sep));
   });
 

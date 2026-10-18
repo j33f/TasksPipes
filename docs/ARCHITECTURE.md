@@ -51,7 +51,7 @@ Outline through its RPC-style API.
 | `realtime.ts` | WebSocket at `/api/events`, notifying people of tasks sent to them or refused. |
 | `calendar.ts` | iCalendar feed at `/cal/<token>.ics`. |
 | `mail.ts`, `totp.ts` | E-mail sending (nodemailer) and TOTP codes. |
-| `i18n.ts`, `catalog-en.ts` | Server-side translations (see [TRANSLATION.md](TRANSLATION.md)). |
+| `i18n.ts` | Server-side translations, read from the language files of `locales/` (see [TRANSLATION.md](TRANSLATION.md)). |
 
 ## Web app
 

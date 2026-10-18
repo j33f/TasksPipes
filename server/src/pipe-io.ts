@@ -5,7 +5,7 @@
  */
 import { HttpError } from "./errors.js";
 import { cleanFieldValue } from "./fields.js";
-import { localize, tr, type Locale } from "./i18n.js";
+import { LOCALES, localize, tr, type Locale } from "./i18n.js";
 import { parseCsv, toCsv, type Separator } from "./csv.js";
 import { pipeTypeById, resolveStage, taskTypeById, type Column, type Field, type Status, type TaskType } from "./pipeTypes.js";
 
@@ -223,7 +223,7 @@ export function suggestTarget(header: string, kind: string): Target {
   ];
   for (const [target, words] of synonyms) if (words.includes(h)) return target;
   for (const f of exportFields(kind)) {
-    if ([f.id, f.label, localize("en", f.label), localize("fr", f.label)].map(norm).includes(h)) return `field:${f.id}`;
+    if ([f.id, f.label, ...LOCALES.map((l) => localize(l, f.label))].map(norm).includes(h)) return `field:${f.id}`;
   }
   return "ignore";
 }
@@ -311,7 +311,7 @@ export function planImport(kind: string, lang: Locale, input: ImportInput, peopl
   const unknownColumns = new Map<string, string>();
   const findColumn = (v: string): Column | undefined => {
     const n = norm(v);
-    return columns.find((c) => [c.id, c.label, localize("en", c.label), localize("fr", c.label), c.status].map(norm).includes(n));
+    return columns.find((c) => [c.id, c.label, ...LOCALES.map((l) => localize(l, c.label)), c.status].map(norm).includes(n));
   };
   const defaultType = types.find((t) => t.id === input.taskType) ?? types[0];
   if (lines.length > MAX_IMPORT_ROWS) {
@@ -333,7 +333,7 @@ export function planImport(kind: string, lang: Locale, input: ImportInput, peopl
       if (title.length > 300) return fail("{label} is too long", { label: "Title" });
 
       const rawType = cell("taskType").trim();
-      const type = rawType ? types.find((t) => [t.id, t.label, localize("en", t.label), localize("fr", t.label)].map(norm).includes(norm(rawType))) : defaultType;
+      const type = rawType ? types.find((t) => [t.id, t.label, ...LOCALES.map((l) => localize(l, t.label))].map(norm).includes(norm(rawType))) : defaultType;
       if (!type) return fail("“{type}” is not a task type of this pipe", { type: rawType });
 
       const rawColumn = cell("column").trim();

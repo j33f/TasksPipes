@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { signIn, signInWithLink, startApp, stopApp, type Agent } from "./helpers.js";
+import { agent, signIn, signInWithLink, startApp, stopApp, type Agent } from "./helpers.js";
 import { pool } from "../../src/db.js";
 
 let alice: Agent, bob: Agent, carol: Agent, hidden: Agent;
@@ -55,6 +55,8 @@ describe("search", () => {
     const pipe = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Board" })).body.id;
     const fr = await create(alice, { title: "Les inscriptions ouvrent", pipeId: pipe });
     expect(await ids(bob, "inscription")).toContain(fr);
+    // A language without a configuration of its own searches with the English one.
+    expect(await ids(agent(alice.cookie, "es"), "eleves")).toContain(id);
   });
 
   it("follows edits: title, sub-tasks and comments", async () => {

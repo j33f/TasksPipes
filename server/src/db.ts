@@ -234,7 +234,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_outline_idx ON users(outline_url, outlin
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS outline_url text;
 
 -- Display preferences of the account (NULL: follow the browser / the system).
-ALTER TABLE users ADD COLUMN IF NOT EXISTS locale text CHECK (locale IN ('en', 'fr'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locale text;
+-- Languages are the files of locales/ (i18n.ts): checked by the app, no longer by a fixed list here.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_locale_check;
 -- Pipe types someone turned off (no longer offered to them; their task types follow when no other type offers them).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_pipe_types text[] NOT NULL DEFAULT '{}';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS theme text CHECK (theme IN ('light', 'dark'));

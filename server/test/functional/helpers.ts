@@ -24,7 +24,7 @@ export async function stopApp() {
 
 export interface Agent {
   cookie: string;
-  lang: "en" | "fr";
+  lang: string;
   get<T = any>(url: string): Promise<{ status: number; body: T }>;
   post<T = any>(url: string, body?: unknown): Promise<{ status: number; body: T }>;
   patch<T = any>(url: string, body?: unknown): Promise<{ status: number; body: T }>;
@@ -33,7 +33,7 @@ export interface Agent {
 }
 
 /** An agent sending requests with a session cookie (empty: signed out) in a language. */
-export function agent(cookie = "", lang: "en" | "fr" = "en"): Agent {
+export function agent(cookie = "", lang = "en"): Agent {
   const call = async (method: string, url: string, body?: unknown) => {
     const res = await app!.inject({
       method: method as "GET",

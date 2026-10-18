@@ -45,8 +45,8 @@ export const config = {
   /** Time zone of the reports, and the hour (0-23) at which daily and weekly reports are due. */
   timezone: process.env.TIMEZONE || "UTC",
   reportHour: Math.min(23, Math.max(0, Number(process.env.REPORT_HOUR ?? 18) || 0)),
-  /** Language when neither the page nor the browser gives one ("en" or "fr"). */
-  defaultLocale: (process.env.DEFAULT_LOCALE === "fr" ? "fr" : "en") as "en" | "fr",
+  /** Language when neither the page nor the browser gives one: a file of locales/ ("en", "fr"…; else "en"). */
+  defaultLocale: process.env.DEFAULT_LOCALE || "en",
   /** People can create an account with just their e-mail address and a name (needs SMTP). */
   allowEmailSignup: (process.env.ALLOW_EMAIL_SIGNUP ?? "true") !== "false",
   /** People can invite others by e-mail, or ask people already on the platform to connect. */
