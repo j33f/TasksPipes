@@ -165,6 +165,7 @@ of the app, they share it. If Redis cannot be reached, requests go through and a
 | GitHub / GitLab webhooks | 600 per minute | pipe token |
 | Calendar feeds | 60 per minute | feed |
 | Search | 120 per minute | person |
+| Pipe exports; import previews; imports | 60, 300 and 20 per hour | person |
 | Data export | 5 per hour | person |
 | Account deletion (asking, confirming by code) | 10 per 15 minutes | person |
 | Account deletion links | 20 per 15 minutes | address |

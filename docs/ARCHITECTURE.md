@@ -25,6 +25,7 @@ Outline through its RPC-style API.
 | `outline.ts` | Outline API client, validation of other Outline servers (https, no internal addresses). |
 | `routes.ts` | The JSON API under `/api`: spaces, pipes, tasks, sub-tasks, files, invitations, designer… |
 | `access.ts` | Who may see and do what on a task (`taskPermissions`), shared by the API and the notifications. |
+| `pipe-io.ts`, `csv.ts` | Export of a pipe's tasks (CSV, JSON) and their import (CSV with column mapping, Trello JSON), checked line by line; a CSV reader and writer without dependency. |
 | `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |
 | `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |
 | `admin.ts` | Administrators of the instance (`ADMIN_EMAILS`), the account list, disabling and enabling accounts. |

@@ -12,6 +12,7 @@
   import ReportModal from "../components/ReportModal.svelte";
   import IconPicker from "../components/IconPicker.svelte";
   import NewTaskModal from "../components/NewTaskModal.svelte";
+  import TransferModal from "../components/TransferModal.svelte";
 
   let { id }: { id: string } = $props();
 
@@ -19,6 +20,7 @@
   let error = $state("");
   let editing = $state(false);
   let reports = $state(false);
+  let transfer = $state(false);
   /** Column in which to create a task ("" = the first one). */
   let newTaskStage = $state<string | null>(null);
   let filter = $state("");
@@ -183,6 +185,7 @@
           <Icon name="pin" />
         </button>
         <button class="btn neutral icon" title={t("Reports")} onclick={() => (reports = true)}><Icon name="chart" /></button>
+        <button class="btn neutral icon" title={t("Export and import")} onclick={() => (transfer = true)}><Icon name="archive" /></button>
         {#if pipe.canManage}
           <button class="btn neutral icon" title={t("Edit the pipe")} onclick={() => (editing = true)}><Icon name="settings" /></button>
         {/if}
@@ -221,6 +224,7 @@
 
   {#if editing}<PipeModal spaceId={pipe.space.id} pipe={pipe} onclose={() => (editing = false)} />{/if}
   {#if reports}<ReportModal {pipe} onclose={() => (reports = false)} />{/if}
+  {#if transfer}<TransferModal {pipe} onclose={() => (transfer = false)} />{/if}
   {#if newTaskStage !== null}
     <NewTaskModal pipe={{ id: pipe.id, name: pipe.name, spaceId: pipe.space.id, kind: pipe.kind }} stage={newTaskStage || null}
       onclose={() => (newTaskStage = null)} />
