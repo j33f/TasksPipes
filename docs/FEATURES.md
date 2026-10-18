@@ -220,7 +220,8 @@ A search only finds what you could open in the app, checked in the database quer
 - **My tasks** lists everything assigned to you and still to do, across all pipes, grouped by state or by pipe.
 - **Next action** follows Getting Things Done: capture an idea into your Personal pipe, see the tasks in progress
   (check their next sub-task, finish them), and get a suggestion of the next task to start — late or due soon first,
-  then ready, already begun or waiting for long. Beyond three tasks in progress, it suggests finishing one first.
+  then ready, already begun or waiting for long; a task still waiting for other tasks is never suggested. Beyond
+  three tasks in progress, it suggests finishing one first.
 
 ## Live updates
 

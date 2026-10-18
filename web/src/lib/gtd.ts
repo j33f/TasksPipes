@@ -31,12 +31,13 @@ export interface Suggestion {
 
 /**
  * Ranks the tasks that could be started next (ready or backlog), GTD style:
- * what is late or due soon first, then what is ready, already begun, or waiting for long.
+ * what is late or due soon first, then what is ready, already begun, or waiting for long. A task still waiting for
+ * other tasks (dependencies) is never suggested.
  */
 export function suggestions(tasks: Task[]): Suggestion[] {
   const today = localDay();
   return tasks
-    .filter((t) => (t.status === "ready" || t.status === "backlog") && columnWith(t, "started", "ongoing"))
+    .filter((t) => (t.status === "ready" || t.status === "backlog") && !t.blockers && columnWith(t, "started", "ongoing"))
     .map((task) => {
       let score = 0;
       const reasons: string[] = [];
