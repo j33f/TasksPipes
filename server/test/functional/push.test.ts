@@ -9,9 +9,11 @@ let alice: Agent, bob: Agent, bobId: string, bobSpace: string;
 const sent: { endpoint: string; headers: Record<string, string>; body: Buffer }[] = [];
 let answer = 201;
 
-// The device keys of RFC 8291, appendix A: the test plays the browser.
-const uaPrivate = Buffer.from("q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94", "base64url");
-const keys = { p256dh: "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4", auth: "BTBZMqHH6r4Tts7J_aSIgg" };
+// The test plays the browser: a device key pair and secret of its own.
+const device = crypto.createECDH("prime256v1");
+device.generateKeys();
+const uaPrivate = device.getPrivateKey();
+const keys = { p256dh: device.getPublicKey().toString("base64url"), auth: crypto.randomBytes(16).toString("base64url") };
 const endpoint = "https://push.example.net/send/bob-device";
 
 /** What the device reads from a pushed body. */

@@ -25,17 +25,17 @@ function decryptPayload(body: Buffer, uaPrivate: Buffer, auth: Buffer): Buffer {
 }
 
 describe("web push messages", () => {
-  // RFC 8291, appendix A.
+  // RFC 8291, appendix A: published test values, not secrets.
   const plaintext = Buffer.from("When I grow up, I want to be a watermelon");
   const server = crypto.createECDH("prime256v1");
-  server.setPrivateKey(b("yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw"));
-  const device = { p256dh: b("BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4"), auth: b("BTBZMqHH6r4Tts7J_aSIgg") };
-  const uaPrivate = b("q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94");
+  server.setPrivateKey(b("yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw")); // ggignore: public test vector of RFC 8291, appendix A
+  const device = { p256dh: b("BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4"), auth: b("BTBZMqHH6r4Tts7J_aSIgg") }; // ggignore: public test vector of RFC 8291, appendix A
+  const uaPrivate = b("q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94"); // ggignore: public test vector of RFC 8291, appendix A
 
   it("are encrypted as RFC 8291 says", () => {
-    const body = encryptPayload(plaintext, device, { serverKey: server, salt: b("DGv6ra1nlYgDCS1FRnbzlw") });
+    const body = encryptPayload(plaintext, device, { serverKey: server, salt: b("DGv6ra1nlYgDCS1FRnbzlw") }); // ggignore: public test vector of RFC 8291, appendix A
     expect(body.toString("base64url")).toBe(
-      "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN"
+      "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN" // ggignore: public test vector of RFC 8291, appendix A
     );
   });
 
@@ -58,7 +58,9 @@ describe("web push messages", () => {
 });
 
 describe("push subscriptions", () => {
-  const keys = { p256dh: "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4", auth: "BTBZMqHH6r4Tts7J_aSIgg" };
+  const device = crypto.createECDH("prime256v1");
+  device.generateKeys();
+  const keys = { p256dh: device.getPublicKey().toString("base64url"), auth: crypto.randomBytes(16).toString("base64url") };
   it("need an https endpoint and the device's keys", () => {
     expect(cleanSubscription({ endpoint: "https://push.example.net/x", keys }).endpoint).toBe("https://push.example.net/x");
     for (const bad of [{ endpoint: "ftp://x", keys }, { endpoint: "https://x", keys: { ...keys, auth: "AA" } }, { endpoint: "https://x", keys: { ...keys, p256dh: "AAAA" } }, null]) {
