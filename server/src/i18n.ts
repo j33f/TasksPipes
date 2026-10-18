@@ -468,6 +468,11 @@ export const FR: Record<string, string> = {
   "Open the task": "Ouvrir la tâche",
   "Invalid format": "Format invalide",
 
+  // Company sign-in (OpenID Connect)
+  "You already have an account on TasksPipes: sign in with {provider}.": "Vous avez déjà un compte sur TasksPipes : connectez-vous avec {provider}.",
+  "This account may not sign in here.": "Ce compte ne peut pas se connecter ici.",
+  "Unnamed": "Sans nom",
+
   // Data created for the user
   Personal: "Perso",
   "TasksPipes task #{n}": "Tâche TasksPipes #{n}",

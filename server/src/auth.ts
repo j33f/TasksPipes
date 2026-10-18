@@ -65,7 +65,7 @@ export function decrypt(blob: string | null | undefined): string | null {
   return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]).toString("utf8");
 }
 
-const cookieOptions = (maxAgeSeconds: number): CookieSerializeOptions => ({
+export const cookieOptions = (maxAgeSeconds: number): CookieSerializeOptions => ({
   httpOnly: true,
   sameSite: "lax",
   secure: config.secureCookies,
@@ -172,6 +172,26 @@ async function syncWorkspaceUsers(token: string, instance: string) {
     });
     if (data.length < limit) break;
   }
+}
+
+/**
+ * Signs in an account proven otherwise (OpenID Connect): with a second factor, its step comes first (the TOTP
+ * cookie, then the code page); otherwise a session at once.
+ */
+export async function signInAccount(reply: FastifyReply, userId: string): Promise<"totp" | "session"> {
+  const user = await one(`SELECT totp_secret FROM users WHERE id = $1`, [userId]);
+  if (user?.totp_secret) {
+    const pending = crypto.randomBytes(32).toString("base64url");
+    await query(`INSERT INTO login_tokens (id, user_id, purpose, expires_at) VALUES ($1, $2, 'totp', now() + interval '10 minutes')`, [
+      hash(pending),
+      userId,
+    ]);
+    reply.setCookie(TOTP_COOKIE, pending, cookieOptions(600));
+    return "totp";
+  }
+  await query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [userId]);
+  await createSession(reply, userId, null);
+  return "session";
 }
 
 async function establishSession(
@@ -286,6 +306,8 @@ async function auth(app: FastifyInstance) {
     outlineUrl: config.oauthEnabled ? config.outlineUrl : null,
     mail: mailEnabled,
     signup: config.allowEmailSignup && mailEnabled,
+    // Company sign-in (OpenID Connect): the button's label.
+    oidc: config.oidc.enabled ? { name: config.oidc.name } : null,
   }));
 
   // ----- Sign-up with an e-mail address and a name -----------------------------
@@ -306,7 +328,13 @@ async function auth(app: FastifyInstance) {
     );
     const send = (l: Locale, subject: string, lines: string[], link: string, label: string) =>
       sendLinkMail(l, email, subject, lines, { label, url: link }).catch((err) => req.log.error({ err }, "Sign-up e-mail failed"));
-    if (existing?.auth_kind === "outline") {
+    if (existing?.auth_kind === "oidc") {
+      const l: Locale = existing.locale ?? lang;
+      await send(l, tr(l, "Welcome to TasksPipes"), [
+        tr(l, "Hello {name},", { name: existing.name }),
+        tr(l, "You already have an account on TasksPipes: sign in with {provider}.", { provider: config.oidc.name }),
+      ], `${config.appUrl}/login`, tr(l, "Sign in"));
+    } else if (existing?.auth_kind === "outline") {
       const l: Locale = existing.locale ?? lang;
       await send(l, tr(l, "Welcome to TasksPipes"), [
         tr(l, "Hello {name},", { name: existing.name }),

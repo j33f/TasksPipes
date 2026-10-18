@@ -48,7 +48,8 @@
   <p class="small">{t("Download what TasksPipes holds about you: your profile, the tasks you wrote, sent or own, your comments and the files of those tasks, in a zip archive.")}</p>
   <a class="btn neutral small" href="/api/me/export" download>{t("Download my data")}</a>
 
-  {#if app.isGuest}
+  <!-- Deleting is confirmed by a link sent to the address: e-mail accounts only. -->
+  {#if app.me?.user.kind === "email"}
     <div class="delete">
       {#if error}<p class="error-text" role="alert">{error}</p>{/if}
       {#if step === "idle"}
@@ -71,6 +72,8 @@
         <p class="small">{t("We sent you an e-mail: its link deletes your account. It is valid for 30 minutes.")}</p>
       {/if}
     </div>
+  {:else if app.me?.user.kind === "oidc"}
+    <p class="small muted">{t("Your account comes from your company's sign-in: ask an administrator to disable it.")}</p>
   {:else}
     <p class="small muted">{t("Your account comes from Outline: it cannot be deleted here.")}</p>
   {/if}

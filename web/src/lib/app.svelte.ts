@@ -15,7 +15,8 @@ class AppState {
   toastMessage = $state<{ message: string; type: "info" | "error"; id: number; action?: { label: string; run: () => void } } | null>(null);
 
   /** Account invited by e-mail: no Outline access, may enable TOTP. */
-  isGuest = $derived(this.me?.user.kind === "email");
+  /** An account without Outline (invited by e-mail, or signing in with the company's provider): no Outline features. */
+  isGuest = $derived(this.me?.user.kind === "email" || this.me?.user.kind === "oidc");
   /** Dialog opened from the user menu (or the dashboard, notifications…, the search with Ctrl/⌘ + K). */
   dialog = $state<"settings" | "calendar" | "about" | "invite" | "search" | null>(null);
   /** Tasks waiting in my incoming and in my teams' ones. */

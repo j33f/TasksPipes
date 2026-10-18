@@ -49,6 +49,11 @@ let only the proxy reach the port (firewall). A proxy in a container on the same
 | `OUTLINE_URL` | Optional Outline server known to the instance: needed for OAuth sign-in. It is never suggested on the sign-in page. |
 | `OUTLINE_API_URL` | Optional internal URL the server uses to reach Outline (e.g. `http://outline:3000`). |
 | `OUTLINE_OAUTH_CLIENT_ID`, `OUTLINE_OAUTH_CLIENT_SECRET` | OAuth sign-in, see below. |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Company sign-in with an OpenID Connect provider (its issuer URL, and the client registered there, confidential, with the redirect URI `APP_URL/auth/oidc/callback`). Off without them. |
+| `OIDC_NAME` | Label of the sign-in button (*Continue with …*). Default: `SSO`. |
+| `OIDC_SCOPES` | Scopes asked. Default: `openid email profile`. |
+| `OIDC_ALLOWED_DOMAINS` | Comma-separated e-mail domains allowed to sign in this way (all by default). |
+| `OIDC_ENABLED` | `false` turns company sign-in off while keeping its settings. |
 | `ALLOW_API_KEY_LOGIN` | `true` (default) lets people sign in with a personal Outline API key. |
 | `OUTLINE_TEAM_ID` | Optional: only accept accounts of one workspace of the server set in `OUTLINE_URL`. |
 | `OUTLINE_ALLOWED_HOSTS` | Outline servers people may type on the sign-in page (comma-separated, `*.example.com` allowed). Empty: any public https server. |
@@ -59,7 +64,7 @@ let only the proxy reach the port (firewall). A proxy in a container on the same
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | E-mail for accounts without Outline and invitations, see below. |
 | `ALLOW_EMAIL_SIGNUP` | `true` (default) lets anyone create an account with an e-mail address and a name (needs SMTP). |
 | `ALLOW_EMAIL_INVITATIONS` | `true` (default) lets people invite others by e-mail and send requests to connect. |
-| `ADMIN_EMAILS` | Administrators of the instance (comma-separated addresses): e-mail accounts, or Outline accounts of `OUTLINE_URL`, with these addresses. They can disable and enable accounts. |
+| `ADMIN_EMAILS` | Administrators of the instance (comma-separated addresses): e-mail accounts, Outline accounts of `OUTLINE_URL`, or company sign-in accounts whose address the provider vouches for (`email_verified`), with these addresses. They can disable and enable accounts. |
 | `REDIS_URL` | Redis holding the rate limit counters (the bundled one: `redis://redis:6379`). Without it, they are kept in memory, per process. |
 | `RATE_LIMIT_BACKOFF_FACTOR` | A client over a limit is blocked for a minute, then this many times longer at each new offence (2 by default; 1 keeps it the same). |
 | `TIMEZONE` | Time zone of the reports (e.g. `Europe/Paris`); `UTC` by default. |

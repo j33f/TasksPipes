@@ -521,7 +521,7 @@ export async function apiRoutes(app: FastifyInstance) {
   };
 
   app.post("/me/avatar", { bodyLimit: 2 * 1024 * 1024 }, async (req: Req) => {
-    if (req.user!.kind !== "email") throw bad("The picture of an Outline account is changed in Outline");
+    if (req.user!.kind === "outline") throw bad("The picture of an Outline account is changed in Outline");
     const content = req.body as unknown as Buffer;
     const mime = String(req.headers["x-file-type"] || "");
     // Checked against the file's first bytes, not only its declared type.
@@ -537,7 +537,7 @@ export async function apiRoutes(app: FastifyInstance) {
   });
 
   app.delete("/me/avatar", async (req: Req) => {
-    if (req.user!.kind !== "email") throw bad("The picture of an Outline account is changed in Outline");
+    if (req.user!.kind === "outline") throw bad("The picture of an Outline account is changed in Outline");
     await query(`DELETE FROM user_avatars WHERE user_id = $1`, [me(req)]);
     await query(`UPDATE users SET avatar_url = NULL, updated_at = now() WHERE id = $1`, [me(req)]);
     return { ok: true };
@@ -562,7 +562,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const u = req.user!;
     let name = u.name;
     if ("name" in b) {
-      if (u.kind !== "email") throw bad("The name of an Outline account is changed in Outline");
+      if (u.kind === "outline") throw bad("The name of an Outline account is changed in Outline");
       name = text(b.name, "Name", { required: true, max: 120 });
     }
     const locale = "locale" in b ? (b.locale === null ? null : LOCALES.includes(b.locale) ? b.locale : bad("Invalid language")) : u.locale;
@@ -574,7 +574,7 @@ export async function apiRoutes(app: FastifyInstance) {
   });
 
   const requireEmailAccount = (req: Req) => {
-    if (req.user!.kind !== "email") throw bad("Two-factor authentication is for accounts invited by e-mail; an Outline account sets it up in Outline.");
+    if (req.user!.kind === "outline") throw bad("Two-factor authentication is for accounts invited by e-mail; an Outline account sets it up in Outline.");
   };
 
   // Step 1: a new secret, kept aside until a first code confirms the app is set up.

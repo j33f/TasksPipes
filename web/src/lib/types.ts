@@ -16,7 +16,7 @@ export interface User extends UserRef {
 export interface Me {
   user: UserRef & {
     email: string | null;
-    kind: "outline" | "email";
+    kind: "outline" | "email" | "oidc";
     totp: boolean;
     /** Chosen language and theme; null follows the browser / the system. */
     locale: "en" | "fr" | null;
