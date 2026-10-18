@@ -68,7 +68,11 @@ async function assertPublicHost(instance: string) {
 
 const hostAllowed = (host: string) =>
   !config.outlineAllowedHosts.length ||
-  config.outlineAllowedHosts.some((h) => (h.startsWith("*.") ? host.endsWith(h.slice(1)) : host === h));
+  config.outlineAllowedHosts.some((h) => {
+    if (!h.startsWith("*.")) return host === h;
+    const suffix = h.slice(2);
+    return host.length > suffix.length && host.endsWith(`.${suffix}`);
+  });
 
 /** Validates a server address typed on the login page; returns its canonical URL (https, no trailing slash). */
 export async function normalizeOutlineUrl(input: unknown): Promise<string> {
