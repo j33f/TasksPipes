@@ -14,6 +14,8 @@
   import CalendarModal from "./components/CalendarModal.svelte";
   import AboutModal from "./components/AboutModal.svelte";
   import InviteModal from "./components/InviteModal.svelte";
+  import SearchModal from "./components/SearchModal.svelte";
+  import { isSearchShortcut } from "./lib/search";
   import Home from "./pages/Home.svelte";
   import SpacePage from "./pages/SpacePage.svelte";
   import PipePage from "./pages/PipePage.svelte";
@@ -97,9 +99,18 @@
     return { name: "notfound" } as const;
   });
   const taskId = $derived(router.params.get("task"));
+
+  // Ctrl/⌘ + K opens the search from anywhere once signed in.
+  function onkeydown(e: KeyboardEvent) {
+    if (app.me && isSearchShortcut(e)) {
+      e.preventDefault();
+      app.dialog = "search";
+    }
+  }
 </script>
 
 <svelte:document onclick={interceptLinks} />
+<svelte:window {onkeydown} />
 
 {#if router.path === "/login/magic"}
   {#if app.me !== undefined}<MagicLogin />{/if}
@@ -145,7 +156,8 @@
   {#if app.dialog === "settings"}<AccountModal onclose={() => (app.dialog = null)} />
   {:else if app.dialog === "calendar"}<CalendarModal onclose={() => (app.dialog = null)} />
   {:else if app.dialog === "about"}<AboutModal onclose={() => (app.dialog = null)} />
-  {:else if app.dialog === "invite"}<InviteModal onclose={() => (app.dialog = null)} />{/if}
+  {:else if app.dialog === "invite"}<InviteModal onclose={() => (app.dialog = null)} />
+  {:else if app.dialog === "search"}<SearchModal onclose={() => (app.dialog = null)} />{/if}
   {#if taskId}
     {#key taskId}<TaskModal id={taskId} onclose={() => app.openTask(null)} />{/key}
   {/if}

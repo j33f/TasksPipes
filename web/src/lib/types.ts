@@ -350,3 +350,22 @@ export interface WeeklyReport extends ReportPeriod {
   tasks: (ReportTask & { activeMs: number; blockedMs: number; done: boolean })[];
   totalActiveMs: number;
 }
+
+/** A task found by the global search (GET /api/search). */
+export interface SearchResult {
+  id: string;
+  number: number;
+  key: string;
+  title: string;
+  status: Status;
+  taskType: string;
+  space: { id: string; name: string; kind: "user" | "team" };
+  pipe: { id: string; name: string; archived: boolean } | null;
+  /** Board column; none in an incoming bucket. */
+  column: string | null;
+  owner: UserRef | null;
+  /** Its content stays on its page: no excerpt. */
+  confidential: boolean;
+  /** What matched besides the title, matched words between \u0002 and \u0003. */
+  snippet: string | null;
+}

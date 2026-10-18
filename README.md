@@ -48,6 +48,8 @@ follows Outline's look and feel.
   report per task type for development pipes, readable in the app and sent by e-mail at 18:00 if asked.
 - **Notifications by e-mail** — tasks sent to you, given to you or refused, comments and due dates, at once, in a
   daily digest or not at all, as each person chooses.
+- **Search** — every task you can see, by text, field values, comments or number (`TP-123`), from the sidebar
+  or with Ctrl/⌘ + K, filtered by status, owner and task type.
 - **Sub-tasks, history, live updates**, English and French, light and dark themes.
 
 TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:

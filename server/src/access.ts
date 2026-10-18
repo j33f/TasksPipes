@@ -3,7 +3,7 @@
  * (e-mail notifications…). Visibility of people and spaces is decided in SQL (user_visible, space_visible).
  */
 import { one, type Queryable, type Row } from "./db.js";
-import { pipeTypeById } from "./pipeTypes.js";
+import { allPipeTypes, pipeTypeById } from "./pipeTypes.js";
 
 export const SPACE_NAME = `COALESCE(su.name, s.name)`;
 
@@ -61,3 +61,22 @@ export async function taskPermissions(t: Row, userId: string): Promise<TaskPermi
 /** Whether someone may reach a space (see space_visible in the schema). */
 export const spaceVisible = async (spaceId: string, userId: string, db?: Queryable) =>
   Boolean((await one(`SELECT space_visible($2, $1) AS ok`, [spaceId, userId], db))?.ok);
+
+/** Tasks whose content stays in the app: in a confidential or team-only pipe, or of a type only such pipes offer. */
+export function isConfidential(t: Row): boolean {
+  const p = pipeTypeById(t.pipe_kind);
+  if (p) return Boolean(p.confidential || p.teamOnly);
+  return allPipeTypes().some((x) => (x.confidential || x.teamOnly) && x.taskTypes.includes(t.task_type));
+}
+
+/** Ids of the pipe types reserved to a team (see taskPermissions). */
+export const teamOnlyKinds = () => allPipeTypes().filter((p) => p.teamOnly).map((p) => p.id);
+
+/**
+ * The view rule of taskPermissions, in SQL, for a query over tasks `t` joined to their pipe `p` (LEFT JOIN):
+ * `user` is the placeholder of the person, `teamOnly` that of teamOnlyKinds(). Keep both in step.
+ */
+export const taskVisibleSql = (user: string, teamOnly: string) => `(
+  EXISTS (SELECT 1 FROM space_members vm WHERE vm.space_id = t.space_id AND vm.user_id = ${user})
+  OR (p.visibility = 'open' AND space_visible(${user}, t.space_id))
+  OR ((t.author_id = ${user} OR t.sender_id = ${user}) AND NOT COALESCE(p.kind = ANY(${teamOnly}::text[]), false)))`;

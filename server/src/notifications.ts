@@ -12,11 +12,11 @@ import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "./config.js";
 import { one, query, type Queryable, type Row } from "./db.js";
-import { getTaskRow, taskPermissions } from "./access.js";
+import { getTaskRow, isConfidential, taskPermissions } from "./access.js";
 import { bad } from "./errors.js";
 import { localeOf, localize, tr, type Locale } from "./i18n.js";
 import { mailEnabled, sendHtmlMail } from "./mail.js";
-import { allPipeTypes, pipeTypeById, stageLabel } from "./pipeTypes.js";
+import { stageLabel } from "./pipeTypes.js";
 import { TASK_KEY_PREFIX } from "./git.js";
 import { dailyPeriod, addDays, localDay, zonedInstant } from "./time.js";
 import { rateLimited, type Limit } from "./rate-limit.js";
@@ -130,13 +130,6 @@ export async function queueNotifications(db: Queryable, eventId: number) {
 // E-mails
 
 const escape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
-/** Tasks whose content stays in the app: in a confidential or team-only pipe, or of a type only such pipes offer. */
-export function isConfidential(t: Row): boolean {
-  const p = pipeTypeById(t.pipe_kind);
-  if (p) return Boolean(p.confidential || p.teamOnly);
-  return allPipeTypes().some((x) => (x.confidential || x.teamOnly) && x.taskTypes.includes(t.task_type));
-}
 
 export interface NotificationLine {
   kind: Exclude<RowKind, "overdue">;
