@@ -5,6 +5,7 @@ import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
 import { runScheduledReports } from "./reports.js";
 import { cleanupNotifications, runNotifications } from "./notifications.js";
+import { cleanupWebhookDeliveries, runWebhooks } from "./webhooks.js";
 
 const app = await buildApp();
 
@@ -19,11 +20,22 @@ setInterval(() => {
   cleanupSessions().catch((err) => app.log.warn({ err }, "Session cleanup failed"));
   disableUnused();
   cleanupNotifications().catch((err) => app.log.warn({ err }, "Notification cleanup failed"));
+  cleanupWebhookDeliveries().catch((err) => app.log.warn({ err }, "Webhook delivery cleanup failed"));
   // Outline accounts whose access was revoked or suspended in Outline lose their sessions.
   checkOutlineSessions()
     .then((n) => n && app.log.info({ closed: n }, "Sessions closed: Outline access ended"))
     .catch((err) => app.log.warn({ err }, "Checking Outline sessions failed"));
 }, 3_600_000).unref();
+
+// Outgoing webhooks: deliveries due, every 15 seconds.
+let sendingWebhooks = false;
+setInterval(() => {
+  if (sendingWebhooks) return;
+  sendingWebhooks = true;
+  runWebhooks()
+    .catch((err) => app.log.error({ err }, "Webhook sending failed"))
+    .finally(() => (sendingWebhooks = false));
+}, 15_000).unref();
 
 // Reports and notifications by e-mail: checked every minute, each one sent once.
 if (mailEnabled) {

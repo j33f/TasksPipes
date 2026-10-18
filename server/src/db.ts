@@ -493,6 +493,52 @@ DO $$ BEGIN
   END IF;
 END $$;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
+-- Personal access tokens of the public API (api.ts): only a hash is kept; the token is shown once, at creation.
+CREATE TABLE IF NOT EXISTS api_tokens (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  token_hash text NOT NULL UNIQUE,
+  -- The first characters of the token, to tell tokens apart in the list.
+  prefix text NOT NULL,
+  scope text NOT NULL CHECK (scope IN ('read', 'write')),
+  expires_at timestamptz NOT NULL,
+  last_used_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id);
+
+-- Outgoing webhooks of a pipe (webhooks.ts): the secret signing the deliveries is encrypted with APP_SECRET.
+CREATE TABLE IF NOT EXISTS pipe_webhooks (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  pipe_id uuid NOT NULL REFERENCES pipes(id) ON DELETE CASCADE,
+  url text NOT NULL,
+  secret text NOT NULL,
+  events text[] NOT NULL,
+  active boolean NOT NULL DEFAULT true,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS pipe_webhooks_pipe_idx ON pipe_webhooks(pipe_id);
+-- Deliveries, written with the history entry that causes them, then sent and retried with growing delays.
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id bigserial PRIMARY KEY,
+  webhook_id uuid NOT NULL REFERENCES pipe_webhooks(id) ON DELETE CASCADE,
+  event text NOT NULL,
+  payload jsonb NOT NULL,
+  attempts integer NOT NULL DEFAULT 0,
+  next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  delivered_at timestamptz,
+  failed_at timestamptz,
+  last_status integer,
+  last_error text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS webhook_deliveries_due_idx ON webhook_deliveries(next_attempt_at) WHERE delivered_at IS NULL AND failed_at IS NULL;
+CREATE INDEX IF NOT EXISTS webhook_deliveries_hook_idx ON webhook_deliveries(webhook_id, id DESC);
 `;
 
 /**

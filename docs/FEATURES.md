@@ -142,6 +142,26 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   wrong; then all lines are created at once, in one transaction (up to 2,000), recorded in their history, without
   e-mail notifications.
 
+## Public API and webhooks
+
+- **Access tokens** (*Settings › Access tokens*) — for scripts and other tools. A token is shown once, at creation,
+  and only its hash is kept; it has a name, an expiry (30 days, 90 days or a year) and a scope: **read only**, or
+  **read and write**. It acts with exactly your rights, through the same checks as the app, and can be revoked at
+  any time; a disabled account's tokens stop working.
+- **API `/api/v1`** — the documented, versioned part of the API: your account, people, spaces, pipes and their tasks,
+  your tasks, search, creating, changing, moving, sending and commenting tasks, and sub-tasks. Send the token as
+  `Authorization: Bearer tp_…`. Its OpenAPI description is at `/api/v1/openapi.json`, browsable at **`/api/v1/docs`**
+  (Swagger UI). Tokens are accepted on `/api/v1` only, and never manage tokens, account settings, data export,
+  deletion or administration: those need a signed-in session.
+- **Webhooks** (*a pipe's page › Webhooks*, members of its space) — task events of the pipe are POSTed as JSON to an
+  https address: task created, moved (column or pipe), given an owner, commented, done. Each delivery carries the
+  task (key, title, column, owner, due date, link), who acted and the change, and is signed:
+  `X-TasksPipes-Signature: sha256=<HMAC-SHA256 of "<X-TasksPipes-Timestamp>.<body>" with the webhook's secret>`.
+  A failed delivery is retried after 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours, then given up; the last
+  deliveries show in the dialog, with their answer. A *Test* button sends a `ping`. Addresses on internal networks
+  are refused (`WEBHOOK_ALLOW_PRIVATE` lifts it). **Confidential and team-only pipes have no webhooks**: their
+  content stays in the app.
+
 ## Incoming buckets
 
 Every person and team has an incoming bucket that receives tasks sent by others. A member **accepts** a task into a
@@ -295,6 +315,8 @@ of Outline accounts; links you click (Outline documents, France Compétences pag
 | Find a task with the search | whoever may see it |
 | Export a pipe's tasks | everyone who can see the pipe |
 | Import tasks into a pipe | members of the space holding the pipe |
+| Use the API with a token | the token's owner, with their own rights (read only for a read token) |
+| Manage a pipe's webhooks | members of its space (not on confidential pipes) |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
 | Edit title, description and fields | members, or the author of a task in an open pipe |
 | Refuse | members of the space whose incoming holds the task (unless they sent it themselves) |

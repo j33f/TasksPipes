@@ -402,3 +402,34 @@ export interface ImportPreview {
   errors: { line: number; message: string }[];
   errorCount: number;
 }
+
+/** A personal access token of the public API (its value is only shown at creation). */
+export interface AccessToken {
+  id: string;
+  name: string;
+  prefix: string;
+  scope: "read" | "write";
+  expiresAt: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+  expired: boolean;
+}
+
+/** An outgoing webhook of a pipe, with its latest deliveries. */
+export interface Webhook {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  secret: string;
+  createdAt: string;
+  deliveries: {
+    id: string;
+    event: string;
+    attempts: number;
+    createdAt: string;
+    state: "delivered" | "failed" | "pending";
+    status: number | null;
+    error: string | null;
+  }[];
+}

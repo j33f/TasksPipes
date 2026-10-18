@@ -9,6 +9,7 @@ import { config } from "./config.js";
 import { pool } from "./db.js";
 import { authPlugin } from "./auth.js";
 import { apiRoutes, gitWebhooks } from "./routes.js";
+import { publicApi } from "./api.js";
 import { realtime } from "./realtime.js";
 import { calendarRoutes } from "./calendar.js";
 import { deletionLinkRoutes } from "./account.js";
@@ -77,6 +78,8 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   await app.register(calendarRoutes);
   await app.register(notificationRoutes);
   await app.register(deletionLinkRoutes);
+  // The public API (/api/v1, documented, with access tokens) is made of the same routes as the app.
+  await publicApi(app, apiRoutes);
   await app.register(apiRoutes, { prefix: "/api" });
   await app.register(gitWebhooks);
 

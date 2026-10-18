@@ -26,6 +26,9 @@ Outline through its RPC-style API.
 | `routes.ts` | The JSON API under `/api`: spaces, pipes, tasks, sub-tasks, files, invitations, designer… |
 | `access.ts` | Who may see and do what on a task (`taskPermissions`), shared by the API and the notifications. |
 | `pipe-io.ts`, `csv.ts` | Export of a pipe's tasks (CSV, JSON) and their import (CSV with column mapping, Trello JSON), checked line by line; a CSV reader and writer without dependency. |
+| `api.ts` | Personal access tokens and `/api/v1`: the app's own routes, those documented answering (OpenAPI with [@fastify/swagger](https://github.com/fastify/fastify-swagger), Swagger UI). |
+| `webhooks.ts` | Outgoing webhooks of pipes: deliveries queued with the history, signed, sent and retried in the background. |
+| `net.ts` | Requests to servers people choose (Outline servers, webhooks): internal addresses refused when connecting. |
 | `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |
 | `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |
 | `admin.ts` | Administrators of the instance (`ADMIN_EMAILS`), the account list, disabling and enabling accounts. |
@@ -71,6 +74,8 @@ follow Outline's design tokens (`web/src/app.css`).
 | `custom_types` | Pipe and task types made with the designer. |
 | `report_runs` | Scheduled report and digest sendings already done (one per period). |
 | `task_search` | The search index: one `tsvector` per task, kept up to date by triggers on tasks, sub-tasks and history. |
+| `api_tokens` | Access tokens of the public API (hash, scope, expiry, revocation). |
+| `pipe_webhooks`, `webhook_deliveries` | Outgoing webhooks of pipes (encrypted secret) and their deliveries, with attempts and answers. |
 | `notifications` | E-mail notifications waiting, sent or dropped; people's choices are in `users.notification_prefs`. |
 | `pipe_integrations`, `task_links` | Repositories connected to pipes (webhook token, encrypted secret), and the pull/merge requests and commits linked to tasks. |
 | `sessions`, `login_tokens`, `invitations` | Sessions, e-mail sign-in links and TOTP steps, invitations and requests to connect (pending, accepted, refused). |

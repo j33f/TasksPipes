@@ -56,6 +56,8 @@ export const config = {
    * link) and Outline accounts of OUTLINE_URL count: another Outline server could claim any address.
    */
   adminEmails: (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+  /** Lets outgoing webhooks reach internal addresses and plain http (a receiver on the same network, tests). */
+  webhookAllowPrivate: process.env.WEBHOOK_ALLOW_PRIVATE === "true",
   /** Redis holding the rate limit counters (shared by every instance); without it, they are kept in memory. */
   redisUrl: process.env.REDIS_URL || "",
   /** Each new offence multiplies the time a client is blocked by this factor (1: always the same). */
