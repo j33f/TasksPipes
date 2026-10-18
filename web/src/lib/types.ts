@@ -33,7 +33,7 @@ export interface Me {
 }
 
 export type NotificationMode = "immediate" | "digest" | "off";
-export type NotificationKind = "received" | "assigned" | "refused" | "comment" | "due";
+export type NotificationKind = "received" | "assigned" | "refused" | "comment" | "mention" | "due";
 export type NotificationPrefs = Record<NotificationKind, NotificationMode> & { dueHour: number };
 
 export interface SpaceSummary {

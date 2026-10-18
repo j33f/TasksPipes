@@ -69,7 +69,7 @@ describe("Outline colleagues who never signed in", () => {
     const { rows } = await pool.query(`SELECT 1 FROM notifications WHERE user_id = $1`, [DAVE]);
     expect(rows).toEqual([]);
     const sent: string[] = [];
-    await runNotifications(new Date(Date.now() + 3_600_000), async (_lang, to) => void sent.push(to));
+    await runNotifications(new Date(Date.now() + 3_600_000), async (m) => void sent.push(m.to));
     expect(sent).not.toContain("dave@example.com");
     notificationState.enabled = false;
   });

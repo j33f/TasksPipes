@@ -24,6 +24,7 @@ import { adminRoutes, requestIsAdmin } from "./admin.js";
 import { accountRoutes } from "./account.js";
 import { tokenRoutes } from "./api.js";
 import { queueWebhooks, webhookRoutes } from "./webhooks.js";
+import { mentionRecipients, mentionable, mentionedIds, newMentions } from "./mentions.js";
 import { presentRecurrence, recurrenceRoutes, type RecordCreated } from "./recurrence.js";
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
@@ -265,7 +266,7 @@ async function recordEvent(
     ]
   );
   // E-mail notifications it causes, in the same transaction.
-  if (notify) await queueNotifications(db, Number(rows[0].id));
+  if (notify) await queueNotifications(db, Number(rows[0].id), await mentionRecipients(db, Number(rows[0].id)));
   // Outgoing webhooks of the pipes concerned (imports too: integrations want every task).
   await queueWebhooks(db, Number(rows[0].id));
 }
@@ -798,6 +799,12 @@ export async function apiRoutes(app: FastifyInstance) {
       [uid]
     );
     return rows.map(presentTask);
+  });
+
+  // People one may @mention on a task (who can open it, among those one sees).
+  app.get("/tasks/:id/mentionable", async (req: Req) => {
+    const { t } = await loadTaskFor(req.params.id, me(req));
+    return mentionable(t.id, me(req), String(req.query.q ?? ""));
   });
 
   // ----- Search -------------------------------------------------------------
@@ -1465,7 +1472,8 @@ export async function apiRoutes(app: FastifyInstance) {
           [row!.id, item.text, item.done, i + 1, uid]
         );
       }
-      await recordEvent(client, row!.id, uid, pipeId ? "created" : "sent", null, snapshot(row!), comment);
+      const mentioned = mentionedIds(description);
+      await recordEvent(client, row!.id, uid, pipeId ? "created" : "sent", null, snapshot(row!), comment, mentioned.length ? { mentioned } : null);
       return row!.id as string;
     });
     if (!pipeId) {
@@ -1552,7 +1560,10 @@ export async function apiRoutes(app: FastifyInstance) {
       ).then(() => getTaskRow(t.id, client));
       const before = snapshot(t);
       const after = snapshot(row!);
-      const d = Object.keys(details).length ? details : null;
+      // People newly mentioned in the description are told.
+      const mentioned = newMentions(t.description, description);
+      const all = { ...details, ...(mentioned.length ? { mentioned } : {}) };
+      const d = Object.keys(all).length ? all : null;
       if (JSON.stringify(before) !== JSON.stringify(after)) {
         await recordEvent(client, t.id, uid, before.stage !== after.stage ? "status" : "updated", before, after, comment, d);
       } else if (title !== t.title || description !== t.description) {

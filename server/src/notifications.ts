@@ -13,6 +13,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "./config.js";
 import { one, query, type Queryable, type Row } from "./db.js";
 import { getTaskRow, isConfidential, taskPermissions } from "./access.js";
+import { isOnline } from "./realtime.js";
 import { bad } from "./errors.js";
 import { localeOf, localize, tr, type Locale } from "./i18n.js";
 import { mailEnabled, sendHtmlMail } from "./mail.js";
@@ -21,7 +22,7 @@ import { TASK_KEY_PREFIX } from "./git.js";
 import { dailyPeriod, addDays, localDay, zonedInstant } from "./time.js";
 import { rateLimited, type Limit } from "./rate-limit.js";
 
-export const KINDS = ["received", "assigned", "refused", "comment", "due"] as const;
+export const KINDS = ["received", "assigned", "refused", "comment", "mention", "due"] as const;
 export type Kind = (typeof KINDS)[number];
 export type Mode = "immediate" | "digest" | "off";
 export type Prefs = Record<Kind, Mode> & { dueHour: number };
@@ -31,6 +32,8 @@ export const DEFAULT_PREFS: Prefs = {
   assigned: "immediate",
   refused: "immediate",
   comment: "digest",
+  // At once, unless the person is online in the app then (they had it live).
+  mention: "immediate",
   // Due dates have their own e-mail, in the morning: "immediate" means that reminder.
   due: "immediate",
   dueHour: 8,
@@ -86,14 +89,15 @@ export async function savePrefs(userId: string, change: Partial<Prefs>): Promise
  */
 const ELIGIBLE = `u.email IS NOT NULL AND u.auth_kind <> 'system' AND u.disabled_at IS NULL AND u.last_login_at IS NOT NULL`;
 
-type RowKind = "received" | "assigned" | "refused" | "comment" | "overdue";
+type RowKind = "received" | "assigned" | "refused" | "comment" | "mention" | "overdue";
 const prefKind = (k: RowKind): Kind => (k === "overdue" ? "due" : k);
 
 // ---------------------------------------------------------------------------
 // Queueing, with the history entry
 
 /** Writes the notifications caused by a history entry (call it in the transaction that wrote it). */
-export async function queueNotifications(db: Queryable, eventId: number) {
+/** `mentioned`: the people the entry mentions who can open the task (mentions.ts). */
+export async function queueNotifications(db: Queryable, eventId: number, mentioned: string[] = []) {
   if (!notificationState.enabled) return;
   const e = await one(
     `SELECT e.*, t.author_id, COALESCE(s.user_id, t.assignee_id) AS owner_id
@@ -110,6 +114,7 @@ export async function queueNotifications(db: Queryable, eventId: number) {
     for (const r of rows) add(r.user_id, e.type === "sent" ? "received" : "refused");
   }
   if (e.to_assignee_id && e.to_assignee_id !== e.from_assignee_id) add(e.to_assignee_id, "assigned");
+  for (const id of mentioned) add(id, "mention");
   // A comment, on its own or written with another change; a refusal's reason is in its own notification.
   if (e.comment && e.type !== "refused") {
     add(e.author_id, "comment");
@@ -155,6 +160,8 @@ export function describe(lang: Locale, l: NotificationLine, masked: boolean): st
       return quote(tr(lang, "{name} refused this task", { name }));
     case "comment":
       return quote(tr(lang, "{name} commented", { name }));
+    case "mention":
+      return quote(tr(lang, "{name} mentioned you", { name }));
   }
 }
 
@@ -193,6 +200,7 @@ const SUBJECTS: Record<NotificationLine["kind"], string> = {
   assigned: "You now own {task}",
   refused: "Task refused: {task}",
   comment: "New comment on {task}",
+  mention: "You were mentioned in {task}",
 };
 
 export function immediateEmail(lang: Locale, t: Row, lines: NotificationLine[], unsubscribe: string) {
@@ -257,6 +265,7 @@ const KIND_LABELS: Record<Kind, string> = {
   assigned: "Tasks you now own",
   refused: "Tasks refused",
   comment: "Comments",
+  mention: "Mentions",
   due: "Due date reminders",
 };
 
@@ -382,7 +391,10 @@ async function sendImmediate(now: Date, send: Send): Promise<number> {
   let sent = 0;
   for (const rows of groups.values()) {
     const u = users.get(rows[0].user_id)!;
-    const ready = rows.filter((r) => u.prefs[prefKind(r.kind)] === "immediate");
+    // A mention already seen live (the person is in the app) needs no e-mail.
+    const seen = isOnline(u.id) ? rows.filter((r) => r.kind === "mention" && u.prefs.mention === "immediate") : [];
+    if (seen.length) await settle(seen.map((r) => Number(r.id)), "online", true);
+    const ready = rows.filter((r) => u.prefs[prefKind(r.kind)] === "immediate" && !seen.includes(r));
     if (!ready.length || now.getTime() - new Date(ready[0].created_at).getTime() < GROUP_DELAY_MS) continue;
     const last = await one(
       `SELECT max(sent_at) AS at FROM notifications WHERE user_id = $1 AND task_id = $2 AND channel = 'immediate'`,
