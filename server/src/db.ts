@@ -539,6 +539,29 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 );
 CREATE INDEX IF NOT EXISTS webhook_deliveries_due_idx ON webhook_deliveries(next_attempt_at) WHERE delivered_at IS NULL AND failed_at IS NULL;
 CREATE INDEX IF NOT EXISTS webhook_deliveries_hook_idx ON webhook_deliveries(webhook_id, id DESC);
+
+-- Recurring tasks (recurrence.ts): a series makes a task on each date of its rule; each task knows its series and
+-- date, and a series has one task per date at most.
+CREATE TABLE IF NOT EXISTS task_recurrences (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  -- {"freq": "monthly", "interval": 1, "monthly": {"kind": "weekday", "nth": 1, "weekday": 1}}…
+  rule jsonb NOT NULL,
+  -- At fixed dates (made lead_days ahead), or once the previous task is done.
+  mode text NOT NULL CHECK (mode IN ('schedule', 'after_done')),
+  lead_days integer NOT NULL DEFAULT 0 CHECK (lead_days BETWEEN 0 AND 90),
+  starts_on date NOT NULL,
+  ends_on date,
+  -- The next date to make a task for (none once ended).
+  next_on date,
+  active boolean NOT NULL DEFAULT true,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS task_recurrences_due_idx ON task_recurrences(next_on) WHERE active;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_id uuid REFERENCES task_recurrences(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS occurrence_on date;
+CREATE UNIQUE INDEX IF NOT EXISTS tasks_occurrence_idx ON tasks(recurrence_id, occurrence_on) WHERE recurrence_id IS NOT NULL;
 `;
 
 /**

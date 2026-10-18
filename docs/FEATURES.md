@@ -104,6 +104,21 @@ those types keep working. This is a personal choice: others still see every type
   [the integration guide](GIT-INTEGRATION.md).
 - **Outline**: search documents or paste a URL, link and unlink, or create an Outline document from a task.
 - **Markdown** in descriptions, comments and refusal reasons, with a preview.
+- **Repeat** (a task in a pipe, for those who manage it): a new task is made on each date of a rule —
+  - every *n* days;
+  - every *n* weeks, on chosen days;
+  - every *n* months, on a day of the month (the 31st falls on the last day of shorter months), on the first,
+    second, third, fourth or last weekday (*the first Monday*, *the last Friday*), or on the last business day
+    (Monday to Friday; public holidays are not known);
+  - every *n* years, on the task's date (29 February on the 28th in other years);
+
+  until an optional end date. **At fixed dates**, each task is made on its date or a chosen number of days ahead
+  (up to 90), whatever happens to the previous one; dates missed while the instance was off are skipped but the
+  latest. **Once the previous one is done**, the next is made as soon as it is done (or dropped), for the first date
+  still to come. Each new task copies the latest one — title, description, type, fields, owner, linked document and
+  sub-tasks (unchecked) — in the first column, due on its date, and is recorded like any creation (notifications,
+  webhooks). The task shows the rule in words and the next dates; stopping the repetition keeps the tasks made. A
+  series stops by itself when its pipe is archived.
 
 ## Time and reports
 
