@@ -52,6 +52,8 @@ follows Outline's look and feel.
   or with Ctrl/⌘ + K, filtered by status, owner and task type.
 - **Import and export** — a pipe's tasks as CSV or JSON, fields included; import a CSV file (columns matched,
   previewed, checked line by line) or a Trello board.
+- **API and webhooks** — personal access tokens for a documented API (`/api/v1`, OpenAPI and Swagger UI), and
+  signed webhooks sending a pipe's task events to your tools.
 - **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
   keeps a “Deleted account”), and administrators of the instance can disable accounts.
 - **Sub-tasks, history, live updates**, English and French, light and dark themes.

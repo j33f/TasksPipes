@@ -13,6 +13,7 @@
   import IconPicker from "../components/IconPicker.svelte";
   import NewTaskModal from "../components/NewTaskModal.svelte";
   import TransferModal from "../components/TransferModal.svelte";
+  import WebhooksModal from "../components/WebhooksModal.svelte";
 
   let { id }: { id: string } = $props();
 
@@ -21,6 +22,7 @@
   let editing = $state(false);
   let reports = $state(false);
   let transfer = $state(false);
+  let webhooks = $state(false);
   /** Column in which to create a task ("" = the first one). */
   let newTaskStage = $state<string | null>(null);
   let filter = $state("");
@@ -186,6 +188,9 @@
         </button>
         <button class="btn neutral icon" title={t("Reports")} onclick={() => (reports = true)}><Icon name="chart" /></button>
         <button class="btn neutral icon" title={t("Export and import")} onclick={() => (transfer = true)}><Icon name="archive" /></button>
+        {#if pipe.canManage && !app.pipeType(pipe.kind)?.confidential && !app.pipeType(pipe.kind)?.teamOnly}
+          <button class="btn neutral icon" title={t("Webhooks")} onclick={() => (webhooks = true)}><Icon name="bolt" /></button>
+        {/if}
         {#if pipe.canManage}
           <button class="btn neutral icon" title={t("Edit the pipe")} onclick={() => (editing = true)}><Icon name="settings" /></button>
         {/if}
@@ -225,6 +230,7 @@
   {#if editing}<PipeModal spaceId={pipe.space.id} pipe={pipe} onclose={() => (editing = false)} />{/if}
   {#if reports}<ReportModal {pipe} onclose={() => (reports = false)} />{/if}
   {#if transfer}<TransferModal {pipe} onclose={() => (transfer = false)} />{/if}
+  {#if webhooks}<WebhooksModal pipeId={pipe.id} onclose={() => (webhooks = false)} />{/if}
   {#if newTaskStage !== null}
     <NewTaskModal pipe={{ id: pipe.id, name: pipe.name, spaceId: pipe.space.id, kind: pipe.kind }} stage={newTaskStage || null}
       onclose={() => (newTaskStage = null)} />

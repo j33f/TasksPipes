@@ -22,6 +22,8 @@ import { notifySpace, notifyUser } from "./realtime.js";
 import { calendarUrl } from "./calendar.js";
 import { adminRoutes, requestIsAdmin } from "./admin.js";
 import { accountRoutes } from "./account.js";
+import { tokenRoutes } from "./api.js";
+import { queueWebhooks, webhookRoutes } from "./webhooks.js";
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
@@ -257,6 +259,8 @@ async function recordEvent(
   );
   // E-mail notifications it causes, in the same transaction.
   if (notify) await queueNotifications(db, Number(rows[0].id));
+  // Outgoing webhooks of the pipes concerned (imports too: integrations want every task).
+  await queueWebhooks(db, Number(rows[0].id));
 }
 
 async function nextPosition(db: Queryable, spaceId: string, pipeId: string | null, stage: string | null): Promise<number> {
@@ -429,6 +433,8 @@ export async function apiRoutes(app: FastifyInstance) {
   });
   const me = (req: FastifyRequest) => req.user!.id;
   await app.register(adminRoutes);
+  await app.register(tokenRoutes);
+  await app.register(webhookRoutes);
   await app.register(accountRoutes, { present: presentTask, events: getEvents });
 
   app.get("/me", async (req) => ({

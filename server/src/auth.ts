@@ -8,6 +8,7 @@ import { absoluteOutlineUrl, normalizeOutlineUrl, outlineApi, outlineToken, Outl
 import { isEmail, mailEnabled, sendLinkMail } from "./mail.js";
 import { LIMITS, rateLimited } from "./rate-limit.js";
 import { closeUserConnections } from "./realtime.js";
+import { V1, tokenUser } from "./api.js";
 import { verifyTotp } from "./totp.js";
 import { localeOf, tr, type Locale } from "./i18n.js";
 
@@ -245,8 +246,22 @@ async function auth(app: FastifyInstance) {
     req.outlineUrl = config.outlineUrl;
   });
 
-  // Loads the session (if any) on every request.
+  // Loads the session (if any) on every request; on the public API, an access token instead.
+  app.decorateRequest("apiToken", null);
+  app.decorateRequest("apiTokenRefused", false);
   app.addHook("onRequest", async (req) => {
+    if (req.url.startsWith(`${V1}/`) && req.headers.authorization) {
+      const t = await tokenUser(req.headers.authorization);
+      if (t === null) req.apiTokenRefused = true;
+      if (t) {
+        req.user = {
+          id: t.user_id, name: t.name, email: t.email, avatarUrl: t.avatar_url,
+          kind: t.auth_kind, totp: t.totp, locale: t.locale, theme: t.theme,
+        };
+        req.apiToken = { id: t.id, scope: t.scope };
+      }
+      if (t !== undefined) return;
+    }
     const token = req.cookies[SESSION_COOKIE];
     if (!token) return;
     const session = await one(
