@@ -67,7 +67,9 @@ export function validatePipeType(input: unknown, userId: string, previous?: Pipe
     if (!STATUSES.includes(status)) throw bad("Column {n}: invalid state", { n: i + 1 });
     const color = str(o.color, "Colour") || "#66778F";
     if (!HEX.test(color)) throw bad("Column {n}: invalid colour", { n: i + 1 });
-    return { id: o.id, label: str(o.label, "Column name", { required: true, max: 40 }), status, color };
+    const wip = o.wipLimit === undefined || o.wipLimit === null || o.wipLimit === "" ? undefined : Number(o.wipLimit);
+    if (wip !== undefined && (!Number.isInteger(wip) || wip < 1 || wip > 999)) throw bad("Column {n}: the limit is a number from 1 to 999", { n: i + 1 });
+    return { id: o.id, label: str(o.label, "Column name", { required: true, max: 40 }), status, color, ...(wip ? { wipLimit: wip } : {}) };
   });
   if (rawColumns.length < 2) throw bad("At least two columns are needed");
   if (!rawColumns.some((c) => c.status === "done")) throw bad("At least one “done” column is needed");

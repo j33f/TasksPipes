@@ -28,6 +28,15 @@ describe("models", () => {
     expect((await bob.put(`/api/catalog/pipe-types/${pipeType}`, { label: "Hijack", columns })).status).toBe(403);
   });
 
+  it("keep a work in progress limit per column", async () => {
+    const limited = [{ label: "Doing", status: "ongoing", wipLimit: 3 }, { label: "Done", status: "done" }];
+    const id = (await alice.post("/api/catalog/pipe-types", { label: "Limited", columns: limited })).body.id;
+    const type = (await alice.get("/api/catalog")).body.pipeTypes.find((p: { id: string }) => p.id === id);
+    expect(type.columns.map((c: { wipLimit?: number }) => c.wipLimit)).toEqual([3, undefined]);
+    expect((await alice.put(`/api/catalog/pipe-types/${id}`, { label: "Limited", columns: [{ ...limited[0], wipLimit: 0 }, limited[1]] })).body.error)
+      .toBe("Column 1: the limit is a number from 1 to 999");
+  });
+
   it("move tasks to the nearest column when a column is removed", async () => {
     const space = (await alice.get("/api/me")).body.personalSpaceId;
     const pipe = (await alice.post(`/api/spaces/${space}/pipes`, { name: "Apprentices", kind: pipeType })).body.id;

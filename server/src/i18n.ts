@@ -442,6 +442,8 @@ export const FR: Record<string, string> = {
 
   "Invalid period": "Période invalide",
 
+  "Column {n}: the limit is a number from 1 to 999": "Colonne {n} : la limite est un nombre de 1 à 999",
+
   // Data created for the user
   Personal: "Perso",
   "TasksPipes task #{n}": "Tâche TasksPipes #{n}",

@@ -822,4 +822,14 @@ export const FR: Record<string, string> = {
   "Too many tasks in this period: only the first ones are shown. Narrow the filters.": "Trop de tâches sur cette période : seules les premières sont affichées. Resserrez les filtres.",
   "+{n} more": "+{n} autres",
   "Due date moved": "Échéance déplacée",
+  // WIP limits and swimlanes
+  "No limit": "Sans limite",
+  "Work in progress limit: the board warns when the column holds more tasks": "Limite de travail en cours : le tableau prévient quand la colonne contient plus de tâches",
+  "Limit of “{name}”": "Limite de « {name} »",
+  "Work in progress limit: {n}": "Limite de travail en cours : {n}",
+  "Over its limit": "Au-delà de sa limite",
+  "Swimlanes": "Couloirs",
+  "No swimlanes": "Sans couloirs",
+  "Swimlanes by owner": "Couloirs par propriétaire",
+  "Swimlanes by task type": "Couloirs par type de tâche",
 };
