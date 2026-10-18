@@ -164,6 +164,12 @@ export const FR: Record<string, string> = {
   "Key": "Clé",
   "Due date": "Échéance",
   "Sub-tasks": "Sous-tâches",
+  "Priority": "Priorité",
+  "Labels": "Étiquettes",
+  "Urgent": "Urgente",
+  "High": "Haute",
+  "Medium": "Moyenne",
+  "Low": "Basse",
   "Author": "Auteur·rice",
   "Created": "Créée le",
   "Updated": "Modifiée le",
@@ -425,6 +431,14 @@ export const FR: Record<string, string> = {
   "A task waits for {n} tasks at most": "Une tâche attend {n} tâches au plus",
   "Blocking task": "Tâche bloquante",
   "This task type fits none of the recipient's pipes": "Ce type de tâche ne correspond à aucun pipe du destinataire",
+
+  // Labels and priority
+  "Invalid priority": "Priorité invalide",
+  "Invalid label": "Étiquette invalide",
+  "Invalid color": "Couleur invalide",
+  "Label not found": "Étiquette introuvable",
+  "A label with this name already exists": "Une étiquette porte déjà ce nom",
+  "A space has {n} labels at most": "Un espace a {n} étiquettes au plus",
 
   // Data created for the user
   Personal: "Perso",

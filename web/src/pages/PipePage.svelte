@@ -15,6 +15,7 @@
   import TransferModal from "../components/TransferModal.svelte";
   import WebhooksModal from "../components/WebhooksModal.svelte";
   import { confirmWhileBlocked } from "../lib/dependencies";
+  import { PRIORITIES, distinctLabels, matches, type TaskFilters } from "../lib/labels";
 
   let { id }: { id: string } = $props();
 
@@ -28,6 +29,22 @@
   let newTaskStage = $state<string | null>(null);
   let filter = $state("");
   let mineOnly = $state(false);
+  // Filters by label, priority, owner and type, chosen among what the pipe's tasks have.
+  let labelFilter = $state("");
+  let priorityFilter = $state("");
+  let ownerFilter = $state("");
+  let typeFilter = $state("");
+  const filters = $derived<TaskFilters>({
+    labels: labelFilter ? [labelFilter] : [],
+    priority: priorityFilter === "" ? undefined : (Number(priorityFilter) as TaskFilters["priority"]),
+    owner: ownerFilter || undefined,
+    type: typeFilter || undefined,
+  });
+  const labelChoices = $derived(distinctLabels((pipe?.tasks ?? []).flatMap((x) => x.labels)));
+  const ownerChoices = $derived(
+    [...new Map((pipe?.tasks ?? []).filter((x) => x.assignee).map((x) => [x.assignee!.id, x.assignee!])).values()].sort((a, b) => a.name.localeCompare(b.name))
+  );
+  const typeChoices = $derived(app.taskTypesFor(pipe?.kind).filter((tt) => (pipe?.tasks ?? []).some((x) => x.taskType === tt.id)));
 
   // Drag & drop state
   let draggedId = $state<string | null>(null);
@@ -42,7 +59,8 @@
     (pipe?.tasks ?? []).filter(
       (x) =>
         (!filter.trim() || x.title.toLowerCase().includes(filter.trim().toLowerCase())) &&
-        (!mineOnly || x.assignee?.id === app.me?.user.id)
+        (!mineOnly || x.assignee?.id === app.me?.user.id) &&
+        matches(x, filters)
     )
   );
   const boardColumns = $derived(app.columnsFor(pipe?.kind));
@@ -178,6 +196,30 @@
       </div>
       <div class="row wrap">
         <input class="input filter" placeholder={t("Filter…")} bind:value={filter} />
+        {#if labelChoices.length}
+          <select class="input filter-select" bind:value={labelFilter} aria-label={t("Label")}>
+            <option value="">{t("Any label")}</option>
+            {#each labelChoices as l (l.name)}<option value={l.name}>{l.name}</option>{/each}
+          </select>
+        {/if}
+        <select class="input filter-select" bind:value={priorityFilter} aria-label={t("Priority")}>
+          <option value="">{t("Any priority")}</option>
+          {#each PRIORITIES as p (p.value)}<option value={String(p.value)}>{t(p.label)}</option>{/each}
+          <option value="0">{t("No priority")}</option>
+        </select>
+        {#if pipe.space.kind === "team" && ownerChoices.length}
+          <select class="input filter-select" bind:value={ownerFilter} aria-label={t("Owner")}>
+            <option value="">{t("Any owner")}</option>
+            {#each ownerChoices as u (u.id)}<option value={u.id}>{u.name}</option>{/each}
+            <option value="none">{t("Unassigned")}</option>
+          </select>
+        {/if}
+        {#if typeChoices.length > 1}
+          <select class="input filter-select" bind:value={typeFilter} aria-label={t("Task type")}>
+            <option value="">{t("Any task type")}</option>
+            {#each typeChoices as tt (tt.id)}<option value={tt.id}>{tt.label}</option>{/each}
+          </select>
+        {/if}
         {#if pipe.space.kind === "team"}
           <button class="btn neutral" class:active-toggle={mineOnly} onclick={() => (mineOnly = !mineOnly)}>
             <Icon name="user" size={16} />{t("Mine")}
@@ -252,6 +294,7 @@
   .title-input:focus { background: none; box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
   .description { margin-top: 6px; color: var(--text-secondary); max-width: 760px; }
   .filter { width: 180px; min-height: 32px; height: 32px; font-size: 14px; }
+  .filter-select { width: auto; min-height: 32px; height: 32px; padding: 2px 8px; font-size: 14px; }
   .active-toggle { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
   .board { display: flex; gap: 12px; overflow-x: auto; flex: 1; min-height: 0; padding-bottom: 8px; align-items: stretch; }
   .column { width: 272px; flex-shrink: 0; background: var(--background-secondary); border-radius: 10px; display: flex; flex-direction: column; max-height: 100%; }

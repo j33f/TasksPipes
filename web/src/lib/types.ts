@@ -116,8 +116,21 @@ export interface Task {
   checklist: { total: number; done: number; next: { id: string; text: string } | null };
   /** Tasks it waits for, still to finish. */
   blockers: number;
+  /** 1 urgent, 2 high, 3 medium, 4 low; null for none. */
+  priority: Priority | null;
+  /** Labels of its space. */
+  labels: Label[];
   createdAt: string;
   updatedAt: string;
+}
+
+export type Priority = 1 | 2 | 3 | 4;
+
+export interface Label {
+  id: string;
+  name: string;
+  color: string;
+  position?: number;
 }
 
 export interface ChecklistItem {
@@ -163,6 +176,8 @@ export interface TaskEvent {
     dependency?: "added" | "removed";
     /** Moved forward while it still waited for other tasks. */
     whileBlocked?: boolean;
+    priority?: { from: Priority | null; to: Priority | null };
+    labels?: { added: string[]; removed: string[] };
   } | null;
   createdAt: string;
   actor: UserRef;
@@ -394,6 +409,8 @@ export interface SearchResult {
   /** Board column; none in an incoming bucket. */
   column: string | null;
   owner: UserRef | null;
+  priority: Priority | null;
+  labels: Label[];
   /** Its content stays on its page: no excerpt. */
   confidential: boolean;
   /** What matched besides the title, matched words between \u0002 and \u0003. */

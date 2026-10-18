@@ -29,6 +29,7 @@ import { presentRecurrence, recurrenceRoutes, type RecordCreated } from "./recur
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
+import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
 import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
 import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
 import { SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, type TaskPermissions } from "./access.js";
@@ -124,6 +125,13 @@ async function incomingTaskTypes(spaceId: string, userId: string): Promise<Set<s
   return new Set(["task", ...rows.flatMap((r) => pipeTypeById(r.kind)?.taskTypes ?? [])]);
 }
 
+/** A priority filter: 1 to 4, or 0 for tasks without one. */
+function searchPriority(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 4) throw bad("Invalid priority");
+  return n;
+}
+
 // ---------------------------------------------------------------------------
 // Data access helpers
 
@@ -172,6 +180,8 @@ export function presentTask(t: Row) {
     checklist: t.checklist ?? { total: 0, done: 0, next: null },
     // Tasks it waits for, still to finish.
     blockers: Number(t.open_blockers ?? 0),
+    priority: t.priority ?? null,
+    labels: t.labels ?? [],
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   };
@@ -467,6 +477,7 @@ export async function apiRoutes(app: FastifyInstance) {
   await app.register(tokenRoutes);
   await app.register(webhookRoutes);
   await app.register(recurrenceRoutes);
+  await app.register(labelRoutes);
   await app.register(accountRoutes, { present: presentTask, events: getEvents });
 
   app.get("/me", async (req) => ({
@@ -832,13 +843,15 @@ export async function apiRoutes(app: FastifyInstance) {
 
   // ----- Search -------------------------------------------------------------
 
-  // Tasks one can see anywhere, by text or number; filters by status ("open" too), owner and task type.
+  // Tasks one can see anywhere, by text or number; filters by status ("open" too), owner, task type, label and priority.
   app.get("/search", rateLimited(LIMITS.search), async (req: Req) => {
     const q = req.query;
     return searchTasks(me(req), localeOf(req), String(q.q ?? "").slice(0, 200), {
       status: q.status === "open" ? "open" : q.status ? status(q.status) : null,
       owner: optUuid(q.owner, "Owner"),
       type: q.type ? String(q.type).slice(0, 100) : null,
+      label: q.label ? String(q.label).slice(0, 40) : null,
+      priority: q.priority === undefined || q.priority === "" ? null : searchPriority(q.priority),
     });
   });
 
@@ -1254,7 +1267,9 @@ export async function apiRoutes(app: FastifyInstance) {
     const { p } = await loadPipeFor(req.params.id, uid);
     const { rows } = await query(
       `SELECT t.number, t.title, t.description, t.status, t.stage, t.task_type, t.fields, t.due_date, t.created_at, t.updated_at,
-              au.name AS author_name, ow.name AS owner_name,
+              au.name AS author_name, ow.name AS owner_name, t.priority,
+              COALESCE((SELECT json_agg(l.name ORDER BY l.position, lower(l.name)) FROM task_labels tl
+                        JOIN space_labels l ON l.id = tl.label_id WHERE tl.task_id = t.id), '[]') AS labels,
               COALESCE((SELECT json_agg(json_build_object('text', i.text, 'done', i.done) ORDER BY i.position, i.created_at)
                         FROM task_items i WHERE i.task_id = t.id), '[]') AS items
        FROM tasks t JOIN spaces s ON s.id = t.space_id JOIN users au ON au.id = t.author_id
@@ -1446,6 +1461,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const comment = text(b.comment, "Comment") || null;
     const type = taskType(b.taskType);
     const { values } = cleanFields(type, b.fields ?? {});
+    const priority = cleanPriority(b.priority);
     if (b.items !== undefined && !Array.isArray(b.items)) throw bad("Invalid sub-tasks");
     const items = ((b.items ?? []) as unknown[])
       .map((x) => (typeof x === "object" && x ? x : { text: x }) as { text?: unknown; done?: unknown })
@@ -1478,17 +1494,21 @@ export async function apiRoutes(app: FastifyInstance) {
       senderId = uid;
     }
     const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Owner")));
+    // Labels of the space, put by those who edit its tasks: in a pipe one adds to, or in an incoming of one's own.
+    const labelIds = b.labelIds === undefined ? [] : await cleanLabelIds(b.labelIds, spaceId);
+    if (labelIds.length && !pipeId && !(await memberRole(spaceId, uid))) throw forbidden();
 
     const id = await tx(async (client) => {
       const position = await nextPosition(client, spaceId, pipeId, stage);
       const row = await one(
         `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date,
-                            outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb)) RETURNING id`,
+                            outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields, priority)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17) RETURNING id`,
         [title, description, spaceId, pipeId, st, stage, position, assigneeId, dueDate,
-         doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values)],
+         doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority],
         client
       ).then((r) => getTaskRow(r!.id, client));
+      if (labelIds.length) await setTaskLabels(client, row!.id, labelIds);
       for (const [i, item] of items.entries()) {
         await client.query(
           `INSERT INTO task_items (task_id, text, done, position, done_by, done_at)
@@ -1569,21 +1589,28 @@ export async function apiRoutes(app: FastifyInstance) {
     const type = "taskType" in b ? taskType(b.taskType) : taskType(t.task_type);
     assertTaskTypeUsable(type, uid, t.pipe_kind, t.task_type);
     const { values, labels } = "fields" in b ? cleanFields(type, b.fields) : { values: {}, labels: [] };
-    const details = {
+    const priority = "priority" in b ? cleanPriority(b.priority) : t.priority;
+    const labelIds = "labelIds" in b ? await cleanLabelIds(b.labelIds, t.space_id) : null;
+    const details: Record<string, unknown> = {
       ...(type.id !== t.task_type ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: type.label } } : {}),
       ...(labels.length ? { fields: labels } : {}),
+      ...(priority !== (t.priority ?? null) ? { priority: { from: t.priority ?? null, to: priority } } : {}),
     };
 
     await tx(async (client) => {
       const row = await one(
         `UPDATE tasks SET title = $2, description = $3, assignee_id = $4, due_date = $5, status = $6, stage = $10,
            outline_doc_id = $7, outline_doc_title = $8, outline_doc_url = $9,
-           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), updated_at = now()
+           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, updated_at = now()
          WHERE id = $1 RETURNING id`,
         [t.id, title, description, assigneeId, dueDate, st, doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, stage,
-         type.id, JSON.stringify(values)],
+         type.id, JSON.stringify(values), priority],
         client
       ).then(() => getTaskRow(t.id, client));
+      if (labelIds) {
+        const changed = await setTaskLabels(client, t.id, labelIds);
+        if (changed.added.length || changed.removed.length) details.labels = changed;
+      }
       const before = snapshot(t);
       const after = snapshot(row!);
       // People newly mentioned in the description are told.
@@ -1671,8 +1698,10 @@ export async function apiRoutes(app: FastifyInstance) {
          WHERE id = $1`,
         [t.id, spaceId, uid, position, assigneeId]
       );
+      // Labels belong to the space it left.
+      const lost = await keepSpaceLabels(client, t.id, spaceId);
       const row = await getTaskRow(t.id, client);
-      await recordEvent(client, t.id, uid, "sent", snapshot(t), snapshot(row!), comment);
+      await recordEvent(client, t.id, uid, "sent", snapshot(t), snapshot(row!), comment, lost.length ? { labels: { added: [], removed: lost } } : null);
     });
     notifySpace(spaceId, { type: "task.sent", task: { id: t.id, number: t.number, title: t.title }, by: req.user!.name }, uid);
     // The incoming it left (if any) has one task less.
@@ -1694,8 +1723,9 @@ export async function apiRoutes(app: FastifyInstance) {
          WHERE id = $1`,
         [t.id, target, uid, position]
       );
+      const lost = await keepSpaceLabels(client, t.id, target);
       const row = await getTaskRow(t.id, client);
-      await recordEvent(client, t.id, uid, "refused", snapshot(t), snapshot(row!), reason);
+      await recordEvent(client, t.id, uid, "refused", snapshot(t), snapshot(row!), reason, lost.length ? { labels: { added: [], removed: lost } } : null);
     });
     notifySpace(target, { type: "task.refused", task: { id: t.id, number: t.number, title: t.title }, by: req.user!.name, reason }, uid);
     notifySpace(t.space_id, { type: "incoming.changed" }, uid);

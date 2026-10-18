@@ -12,6 +12,7 @@
   import PipeModal from "../components/PipeModal.svelte";
   import PipeIcon from "../components/PipeIcon.svelte";
   import TeamModal from "../components/TeamModal.svelte";
+  import LabelsModal from "../components/LabelsModal.svelte";
   import NewTaskModal from "../components/NewTaskModal.svelte";
   import AcceptDialog from "../components/AcceptDialog.svelte";
   import RefuseDialog from "../components/RefuseDialog.svelte";
@@ -22,6 +23,7 @@
   let space = $state<SpaceDetail | null>(null);
   let error = $state("");
   let showSettings = $state(false);
+  let showLabels = $state(false);
   let showNewTask = $state(false);
   let accepting = $state<Task | null>(null);
   let refusing = $state<Task | null>(null);
@@ -87,6 +89,7 @@
           <button class="btn neutral" onclick={() => (showNewTask = true)}><Icon name="send" size={18} />{t("Send a task")}</button>
         {/if}
         {#if isMember}
+          <button class="btn neutral" onclick={() => (showLabels = true)}><Icon name="flag" size={18} />{t("Labels")}</button>
           <button class="btn" onclick={() => setParams({ newPipe: "1" })}><Icon name="plus" size={18} />{t("New pipe")}</button>
         {/if}
         {#if isAdminOfTeam}
@@ -183,6 +186,7 @@
   </div>
 
   {#if showNewPipe && isMember}<PipeModal spaceId={space.id} onclose={() => setParams({ newPipe: null }, { replace: true })} />{/if}
+  {#if showLabels}<LabelsModal spaceId={space.id} onclose={() => (showLabels = false)} />{/if}
   {#if showSettings}<TeamModal team={space} onclose={() => (showSettings = false)} />{/if}
   {#if showNewTask}<NewTaskModal spaceId={space.id} onclose={() => (showNewTask = false)} />{/if}
   {#if accepting}<AcceptDialog task={accepting} pipes={activePipes} onclose={() => (accepting = null)} />{/if}

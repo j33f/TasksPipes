@@ -593,6 +593,38 @@ DO $$ BEGIN
       CHECK (kind IN ('received', 'assigned', 'refused', 'comment', 'mention', 'unblocked', 'overdue'));
   END IF;
 END $$;
+
+-- Labels of a space (labels.ts), put on its tasks.
+CREATE TABLE IF NOT EXISTS space_labels (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  space_id uuid NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  color text NOT NULL,
+  position double precision NOT NULL DEFAULT 0,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS space_labels_name_idx ON space_labels(space_id, lower(name));
+CREATE TABLE IF NOT EXISTS task_labels (
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  label_id uuid NOT NULL REFERENCES space_labels(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, label_id)
+);
+CREATE INDEX IF NOT EXISTS task_labels_label_idx ON task_labels(label_id);
+-- Priority of any task: 1 urgent, 2 high, 3 medium, 4 low; none when null.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority smallint CHECK (priority BETWEEN 1 AND 4);
+
+-- Changes of data made once (their name is kept when done).
+CREATE TABLE IF NOT EXISTS schema_steps (name text PRIMARY KEY, done_at timestamptz NOT NULL DEFAULT now());
+-- The "Priorité" field of user stories became the priority of every task: its values are copied once (they stay
+-- in the fields, no longer shown).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_steps WHERE name = 'user-story-priority') THEN
+    UPDATE tasks SET priority = CASE fields->>'priorite' WHEN 'Critique' THEN 1 WHEN 'Haute' THEN 2 WHEN 'Moyenne' THEN 3 WHEN 'Basse' THEN 4 END
+    WHERE task_type = 'user_story' AND priority IS NULL AND fields->>'priorite' IN ('Critique', 'Haute', 'Moyenne', 'Basse');
+    INSERT INTO schema_steps (name) VALUES ('user-story-priority') ON CONFLICT DO NOTHING;
+  END IF;
+END $$;
 `;
 
 /**

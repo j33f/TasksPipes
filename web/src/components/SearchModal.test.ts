@@ -15,7 +15,7 @@ const me: Me = {
 const hit = (over: Partial<SearchResult> = {}): SearchResult => ({
   id: "t1", number: 12, key: "TP-12", title: "Order the kumquats", status: "ongoing", taskType: "task",
   space: { id: "sp", name: "Trainers", kind: "team" }, pipe: { id: "p", name: "Board", archived: false }, column: "In progress",
-  owner: { id: "u-me", name: "Alice", avatarUrl: null }, confidential: false, snippet: "call the \u0002kumquat\u0003 farm", ...over,
+  owner: { id: "u-me", name: "Alice", avatarUrl: null }, priority: null, labels: [], confidential: false, snippet: "call the \u0002kumquat\u0003 farm", ...over,
 });
 
 let urls: string[];
@@ -27,7 +27,9 @@ beforeEach(() => {
   app.users = [{ id: "u-bob", name: "Bob", avatarUrl: null, spaceId: "sb", active: true, guest: false }];
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     urls.push(url);
-    return new Response(JSON.stringify(answer), { status: 200, headers: { "content-type": "application/json" } });
+    // The labels offered as a filter: none here.
+    const body = url.startsWith("/api/me/labels") ? [] : answer;
+    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
   }));
 });
 afterEach(() => {
@@ -75,6 +77,6 @@ describe("search dialog", () => {
     render(SearchModal, { onclose: () => {} });
     await userEvent.type(screen.getByRole("searchbox"), "   ");
     await new Promise((r) => setTimeout(r, 300));
-    expect(urls).toEqual([]);
+    expect(urls.filter((u) => u.startsWith("/api/search"))).toEqual([]);
   });
 });

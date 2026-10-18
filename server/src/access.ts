@@ -16,6 +16,10 @@ export async function memberRole(spaceId: string, userId: string, db?: Queryable
 export const OPEN_BLOCKERS = `(SELECT count(*) FROM task_dependencies od JOIN tasks ob ON ob.id = od.blocker_id
   WHERE od.task_id = t.id AND ob.status NOT IN ('done', 'abandoned'))`;
 
+/** The labels of the task `t`, as JSON (labels.ts). */
+export const TASK_LABELS = `(SELECT json_agg(json_build_object('id', l.id, 'name', l.name, 'color', l.color) ORDER BY l.position, lower(l.name))
+  FROM task_labels tl JOIN space_labels l ON l.id = tl.label_id WHERE tl.task_id = t.id) AS labels`;
+
 export const TASK_SELECT = `
   SELECT t.*, p.name AS pipe_name, p.visibility AS pipe_visibility, p.kind AS pipe_kind,
          ${SPACE_NAME} AS space_name, s.kind AS space_kind, s.user_id AS space_user_id, su.avatar_url AS space_user_avatar,
@@ -28,7 +32,8 @@ export const TASK_SELECT = `
                    'next', (array_agg(json_build_object('id', i.id, 'text', i.text) ORDER BY i.position, i.created_at)
                             FILTER (WHERE NOT i.done))[1])
           FROM task_items i WHERE i.task_id = t.id) AS checklist,
-         ${OPEN_BLOCKERS} AS open_blockers
+         ${OPEN_BLOCKERS} AS open_blockers,
+         ${TASK_LABELS}
   FROM tasks t
   JOIN spaces s ON s.id = t.space_id
   LEFT JOIN users su ON su.id = s.user_id

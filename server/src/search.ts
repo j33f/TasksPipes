@@ -4,7 +4,7 @@
  * access is checked in the query itself, with the rule of taskPermissions.
  */
 import { query } from "./db.js";
-import { SPACE_NAME, isConfidential, taskVisibleSql, teamOnlyKinds } from "./access.js";
+import { SPACE_NAME, TASK_LABELS, isConfidential, taskVisibleSql, teamOnlyKinds } from "./access.js";
 import { TASK_KEY_PREFIX } from "./git.js";
 import { localize, type Locale } from "./i18n.js";
 import { resolveStage } from "./pipeTypes.js";
@@ -22,6 +22,10 @@ export interface SearchFilters {
   /** Owner: the person of a personal space, or the assignee elsewhere. */
   owner?: string | null;
   type?: string | null;
+  /** A label, by name (labels of different spaces can share it). */
+  label?: string | null;
+  /** 1 to 4, or 0 for none. */
+  priority?: number | null;
 }
 
 /**
@@ -55,7 +59,7 @@ export async function searchTasks(userId: string, lang: Locale, q: string, filte
      SELECT t.id, t.number, t.title, t.status, t.stage, t.task_type, t.space_id, t.pipe_id,
             p.name AS pipe_name, p.kind AS pipe_kind, p.archived_at IS NOT NULL AS pipe_archived,
             ${SPACE_NAME} AS space_name, s.kind AS space_kind,
-            ow.id AS owner_id, ow.name AS owner_name, ow.avatar_url AS owner_avatar
+            ow.id AS owner_id, ow.name AS owner_name, ow.avatar_url AS owner_avatar, t.priority, ${TASK_LABELS}
      FROM hits h
      JOIN tasks t ON t.id = h.task_id
      JOIN spaces s ON s.id = t.space_id
@@ -66,9 +70,13 @@ export async function searchTasks(userId: string, lang: Locale, q: string, filte
        AND ($6::text IS NULL OR t.status = $6 OR ($6 = 'open' AND t.status NOT IN ('done', 'abandoned')))
        AND ($7::uuid IS NULL OR COALESCE(s.user_id, t.assignee_id) = $7)
        AND ($8::text IS NULL OR t.task_type = $8)
+       AND ($9::text IS NULL OR EXISTS (SELECT 1 FROM task_labels fl JOIN space_labels fs ON fs.id = fl.label_id
+                                        WHERE fl.task_id = t.id AND lower(fs.name) = lower($9)))
+       AND ($10::int IS NULL OR COALESCE(t.priority, 0) = $10)
      ORDER BY h.rank DESC, t.updated_at DESC
      LIMIT ${SEARCH_LIMIT}`,
-    [userId, cfg, tsq, taskNumber(q), teamOnlyKinds(), filters.status ?? null, filters.owner ?? null, filters.type ?? null]
+    [userId, cfg, tsq, taskNumber(q), teamOnlyKinds(), filters.status ?? null, filters.owner ?? null, filters.type ?? null,
+     filters.label ?? null, filters.priority ?? null]
   );
 
   // Excerpts of what matched besides the title; none for confidential tasks, whose content stays on their page.
@@ -97,6 +105,8 @@ export async function searchTasks(userId: string, lang: Locale, q: string, filte
     // Board column; none in an incoming bucket.
     column: t.pipe_id ? localize(lang, resolveStage(t.pipe_kind, t.stage, t.status).label) : null,
     owner: t.owner_id ? { id: t.owner_id, name: t.owner_name, avatarUrl: t.owner_avatar } : null,
+    priority: t.priority ?? null,
+    labels: t.labels ?? [],
     confidential: isConfidential(t),
     snippet: snippets.get(t.id) ?? null,
   }));

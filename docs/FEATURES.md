@@ -108,6 +108,14 @@ those types keep working. This is a personal choice: others still see every type
   (among those you see), and the mention shows as a link to their space. The person mentioned is told at once in
   the app, and by e-mail if they are not in the app then; in a description, only people newly mentioned are told.
   Mentioning someone who cannot open the task tells them nothing.
+- **Priority** of any task: *urgent*, *high*, *medium*, *low* or none, shown as a colored flag on cards and lists.
+  (The *Priority* field of user stories became this priority: its values were copied once.)
+- **Labels** of a space (*a space's page › Labels*): a name, unique in the space, and a color. Members of the space
+  create, rename, recolor and delete them; a task gets labels of its space only, and loses them when it is sent to
+  another space (noted in its history). Priority and labels are set by those who edit the task's fields, recorded in
+  its history, copied to the next task of a series, exported with the pipe and sent with webhooks.
+- **Filters**: a pipe filters its tasks by text, label, priority, owner and task type; *My tasks* by label and
+  priority, and groups them by priority too; the search filters by label (by name, across spaces) and priority.
 - **Dependencies**: a task can wait for other tasks (*Dependencies › Add a task it waits for*), from any space or
   pipe, among the tasks you can open; loops are refused. While one of them is not done (or dropped), the task shows
   *Blocked* on its card and in its page, which also lists the tasks it blocks. Moving a blocked task on (started,
@@ -152,7 +160,7 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
 **Export and import** on a pipe's page:
 
 - **Export** — every task of the pipe as **CSV** (key, title, description, column, owner, due date, task type,
-  sub-tasks, one column per field of its task types, author, dates; semicolons in French for spreadsheets) or as
+  sub-tasks, one column per field of its task types, priority, labels, author, dates; semicolons in French for spreadsheets) or as
   **JSON** (the fields' values as stored, with their labels). Anyone who sees the pipe can export it. A cell that a
   spreadsheet would run as a formula (`=`, `+`, `-`, `@`) is written as text.
 - **Import** (members of the space, pipes not archived) — a **CSV** file, its separator guessed (comma, semicolon or
@@ -175,7 +183,7 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   **read and write**. It acts with exactly your rights, through the same checks as the app, and can be revoked at
   any time; a disabled account's tokens stop working.
 - **API `/api/v1`** — the documented, versioned part of the API: your account, people, spaces, pipes and their tasks,
-  your tasks, search, creating, changing, moving, sending and commenting tasks, dependencies, and sub-tasks. Send the token as
+  your tasks, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, and sub-tasks. Send the token as
   `Authorization: Bearer tp_…`. Its OpenAPI description is at `/api/v1/openapi.json`, browsable at **`/api/v1/docs`**
   (Swagger UI). Tokens are accepted on `/api/v1` only, and never manage tokens, account settings, data export,
   deletion or administration: those need a signed-in session.
@@ -210,14 +218,14 @@ incoming bucket you can see:
   matter, and words are matched in your language (*inscription* also finds *inscriptions*);
 - each result shows its key, title, owner and path (space › pipe › column, or the incoming bucket), and an excerpt
   of what matched, the words found highlighted; tasks of archived pipes are marked as such;
-- filters: status (or *not finished*), owner and task type; ↑ ↓ and Enter open a task from the keyboard.
+- filters: status (or *not finished*), owner, task type, label and priority; ↑ ↓ and Enter open a task from the keyboard.
 
 A search only finds what you could open in the app, checked in the database query itself. **Confidential** and
 **team-only** tasks are found only by those who see them, and show no excerpt: their content stays on their page.
 
 ## My tasks and Next action
 
-- **My tasks** lists everything assigned to you and still to do, across all pipes, grouped by state or by pipe.
+- **My tasks** lists everything assigned to you and still to do, across all pipes, grouped by state, by pipe or by priority, and filtered by label and priority.
 - **Next action** follows Getting Things Done: capture an idea into your Personal pipe, see the tasks in progress
   (check their next sub-task, finish them), and get a suggestion of the next task to start — late or due soon first,
   then ready, already begun or waiting for long. Beyond three tasks in progress, it suggests finishing one first.
@@ -355,7 +363,8 @@ of Outline accounts; links you click (Outline documents, France Compétences pag
 | Use the API with a token | the token's owner, with their own rights (read only for a read token) |
 | Manage a pipe's webhooks | members of its space (not on confidential pipes) |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
-| Edit title, description and fields | members, or the author of a task in an open pipe |
+| Edit title, description and fields, priority and labels | members, or the author of a task in an open pipe |
+| Manage a space's labels | members of the space (whoever sees the space sees them) |
 | Refuse | members of the space whose incoming holds the task (unless they sent it themselves) |
 | Manage a team (name, members, roles, deletion) | the team's admins |
 | Add someone to a team, send them a task | team admins / members, among the people they can see who have signed in once |

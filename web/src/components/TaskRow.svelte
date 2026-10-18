@@ -3,6 +3,7 @@
   import { dueState, formatDate } from "../lib/constants";
   import type { Task } from "../lib/types";
   import Avatar from "./Avatar.svelte";
+  import TaskBadges from "./TaskBadges.svelte";
   import StatusBadge from "./StatusBadge.svelte";
   import Icon from "./Icon.svelte";
   import { t } from "../lib/i18n.svelte";
@@ -14,6 +15,7 @@
 <button class="list-item" onclick={() => app.openTask(task.id)}>
   {#if task.inIncoming}<span class="badge">Incoming</span>{:else}<StatusBadge {task} />{/if}
   <span class="title">{task.title}</span>
+  <TaskBadges priority={task.priority} labels={task.labels} />
   {#if showLocation}
     <span class="muted small loc">{task.space.name}{task.pipe ? ` › ${task.pipe.name}` : ""}</span>
   {/if}

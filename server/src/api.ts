@@ -67,6 +67,8 @@ const taskBody = {
   assigneeId: { ...uuid, nullable: true, description: "Owner, a member of a team space" },
   taskType: { type: "string" },
   fields: { type: "object", additionalProperties: true, description: "Values by field id of the task type" },
+  priority: { type: "integer", minimum: 1, maximum: 4, nullable: true, description: "1 urgent, 2 high, 3 medium, 4 low; null for none" },
+  labelIds: { type: "array", items: uuid, description: "Labels of the task's space (all of them: the others are taken off)" },
 } as const;
 
 interface Doc {
@@ -84,11 +86,24 @@ export const V1_ROUTES: Record<string, Doc> = {
   "GET /spaces": { tag: "Spaces", summary: "Spaces one can reach: personal spaces and teams", response: list("Spaces") },
   "GET /spaces/:id": { tag: "Spaces", summary: "A space, its members, pipes and incoming", params: idParams, response: object("Space") },
   "GET /pipes/:id": { tag: "Pipes", summary: "A pipe and its tasks", params: idParams, response: object("Pipe with its tasks") },
+  "GET /spaces/:id/labels": { tag: "Labels", summary: "The labels of a space", params: idParams, response: list("Labels") },
+  "POST /spaces/:id/labels": {
+    tag: "Labels", summary: "Create a label in a space one is a member of", params: idParams,
+    body: { type: "object", required: ["name", "color"], properties: { name: { type: "string", maxLength: 40 }, color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" } } },
+    response: object("The label", { id: uuid }),
+  },
+  "PATCH /labels/:id": {
+    tag: "Labels", summary: "Rename, recolor or move a label", params: idParams,
+    body: { type: "object", properties: { name: { type: "string", maxLength: 40 }, color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" }, position: { type: "number" } } },
+    response: object("The label"),
+  },
+  "DELETE /labels/:id": { tag: "Labels", summary: "Delete a label (it is taken off its tasks)", params: idParams, response: ok },
   "GET /me/tasks": { tag: "Tasks", summary: "Tasks one owns, still to do", response: list("Tasks") },
   "GET /search": {
     tag: "Tasks", summary: "Search the tasks one can see",
     querystring: { type: "object", required: ["q"], properties: {
       q: { type: "string" }, status: { type: "string", description: "A status, or \"open\"" }, owner: uuid, type: { type: "string" },
+      label: { type: "string", description: "A label name" }, priority: { type: "integer", minimum: 0, maximum: 4, description: "0 for none" },
     } },
     response: list("Found tasks, best first"),
   },

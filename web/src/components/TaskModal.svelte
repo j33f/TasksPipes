@@ -4,7 +4,7 @@
   import { STATUSES, dueState, formatDate, formatDateTime, relativeTime } from "../lib/constants";
   import TaskFields, { type FieldFile } from "./TaskFields.svelte";
   import { eventChanges, eventIcon, eventSummary } from "../lib/events";
-  import type { ChecklistItem, DocRef, Pipe, TaskDetail, UserRef } from "../lib/types";
+  import type { ChecklistItem, DocRef, Label, Pipe, TaskDetail, UserRef } from "../lib/types";
   import Modal from "./Modal.svelte";
   import Markdown from "./Markdown.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
@@ -19,6 +19,9 @@
   import DevLinks from "./DevLinks.svelte";
   import TaskTiming from "./TaskTiming.svelte";
   import RepeatSection from "./RepeatSection.svelte";
+  import TaskBadges from "./TaskBadges.svelte";
+  import LabelsModal from "./LabelsModal.svelte";
+  import { PRIORITIES } from "../lib/labels";
   import DependenciesSection from "./DependenciesSection.svelte";
   import { confirmWhileBlocked } from "../lib/dependencies";
   import { mentionableOn } from "../lib/mentions";
@@ -42,7 +45,15 @@
   let collectionId = $state<string | null>(null);
   let comment = $state("");
   let commentKey = $state(0);
-  let dialog = $state<"send" | "refuse" | "accept" | null>(null);
+  let dialog = $state<"send" | "refuse" | "accept" | "labels" | null>(null);
+  // Labels of the task's space, loaded when choosing them.
+  let spaceLabels = $state<Label[] | null>(null);
+  const loadLabels = () =>
+    api.get<Label[]>(`/spaces/${task!.space.id}/labels`).then((l) => (spaceLabels = l)).catch((err) => (error = errorMessage(err)));
+  function toggleLabel(l: Label) {
+    const ids = task!.labels.some((x) => x.id === l.id) ? task!.labels.filter((x) => x.id !== l.id).map((x) => x.id) : [...task!.labels.map((x) => x.id), l.id];
+    patch({ labelIds: ids });
+  }
 
   async function load() {
     try {
@@ -339,6 +350,38 @@
         </div>
 
         <div class="prop">
+          <span class="label-text">{t("Priority")}</span>
+          {#if perms?.editContent}
+            <select class="input" value={task.priority ?? ""} disabled={busy} aria-label={t("Priority")}
+              onchange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; patch({ priority: v ? Number(v) : null }); }}>
+              <option value="">{t("No priority")}</option>
+              {#each PRIORITIES as p (p.value)}<option value={p.value}>{t(p.label)}</option>{/each}
+            </select>
+          {:else}
+            <div class="value">{#if task.priority}<TaskBadges priority={task.priority} />{t(PRIORITIES[task.priority - 1].label)}{:else}<span class="muted">{t("No priority")}</span>{/if}</div>
+          {/if}
+        </div>
+
+        <div class="prop">
+          <span class="label-text">{t("Labels")}</span>
+          <div class="value wrap"><TaskBadges labels={task.labels} />{#if !task.labels.length}<span class="muted">—</span>{/if}</div>
+          {#if perms?.editContent}
+            <details class="label-pick" ontoggle={(e) => (e.currentTarget as HTMLDetailsElement).open && loadLabels()}>
+              <summary class="btn ghost small">{t("Choose labels")}</summary>
+              {#if spaceLabels}
+                {#each spaceLabels as l (l.id)}
+                  <label class="check"><input type="checkbox" checked={task.labels.some((x) => x.id === l.id)} disabled={busy} onchange={() => toggleLabel(l)} />
+                    <TaskBadges labels={[l]} /></label>
+                {:else}
+                  <p class="muted small">{t("This space has no label yet.")}</p>
+                {/each}
+                {#if perms.manage}<button class="btn ghost small" onclick={() => (dialog = "labels")}>{t("Manage labels")}</button>{/if}
+              {/if}
+            </details>
+          {/if}
+        </div>
+
+        <div class="prop">
           <span class="label-text">{t("Owner")}</span>
           {#if perms?.manage && task.space.kind === "team"}
             <UserSelect value={task.assignee?.id ?? null} users={members} placeholder={t("Unassigned")}
@@ -417,6 +460,7 @@
 
 {#if task && dialog === "send"}<SendDialog {task} onclose={() => (dialog = null)} />{/if}
 {#if task && dialog === "refuse"}<RefuseDialog {task} onclose={() => (dialog = null)} ondone={onclose} />{/if}
+{#if task && dialog === "labels"}<LabelsModal spaceId={task.space.id} onclose={() => { dialog = null; loadLabels(); }} />{/if}
 {#if task && dialog === "accept"}<AcceptDialog {task} pipes={pipes.filter((p) => !p.archived)} onclose={() => (dialog = null)} />{/if}
 
 <style>
@@ -431,6 +475,9 @@
   .prop .label-text { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-tertiary); }
   .prop .value { font-size: 14px; display: flex; align-items: center; gap: 6px; min-height: 28px; }
   .prop .input { min-height: 32px; padding: 4px 8px; font-size: 14px; }
+  .prop .value.wrap { flex-wrap: wrap; }
+  .label-pick summary { list-style: none; display: inline-flex; }
+  .label-pick .check { display: flex; align-items: center; gap: 6px; font-size: 14px; padding: 2px 0; }
   .timeline { margin-top: 32px; }
   .infos { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--divider); }
   .event { display: flex; gap: 10px; padding: 8px 0; font-size: 14px; }

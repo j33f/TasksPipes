@@ -2,11 +2,13 @@
   import { onMount } from "svelte";
   import Modal from "./Modal.svelte";
   import Avatar from "./Avatar.svelte";
+  import TaskBadges from "./TaskBadges.svelte";
+  import { PRIORITIES } from "../lib/labels";
   import { app } from "../lib/app.svelte";
   import { api, errorMessage } from "../lib/api";
   import { STATUSES } from "../lib/constants";
   import { highlight } from "../lib/search";
-  import type { SearchResult } from "../lib/types";
+  import type { Label, SearchResult } from "../lib/types";
   import { t } from "../lib/i18n.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
@@ -15,6 +17,10 @@
   let status = $state("");
   let owner = $state("");
   let type = $state("");
+  let label = $state("");
+  let priority = $state("");
+  // Labels of one's spaces, by name.
+  let labels = $state<Omit<Label, "id">[]>([]);
   let results = $state<SearchResult[]>([]);
   let searched = $state(false);
   let error = $state("");
@@ -26,7 +32,10 @@
   const others = $derived(app.users.filter((u) => u.id !== myId).sort((a, b) => a.name.localeCompare(b.name)));
   const taskTypes = $derived([...app.taskTypes].sort((a, b) => a.label.localeCompare(b.label)));
 
-  onMount(() => input?.focus());
+  onMount(() => {
+    input?.focus();
+    api.get<Omit<Label, "id">[]>("/me/labels").then((l) => (labels = l)).catch(() => {});
+  });
 
   // Searches as one types, a moment after the last key; an older answer arriving late is ignored.
   let seq = 0;
@@ -36,6 +45,8 @@
     if (status) params.set("status", status);
     if (owner) params.set("owner", owner);
     if (type) params.set("type", type);
+    if (label) params.set("label", label);
+    if (priority) params.set("priority", priority);
     const n = ++seq;
     if (!text) {
       results = [];
@@ -100,6 +111,17 @@
         <option value="">{t("Any task type")}</option>
         {#each taskTypes as tt (tt.id)}<option value={tt.id}>{tt.label}</option>{/each}
       </select>
+      {#if labels.length}
+        <select class="input" bind:value={label} aria-label={t("Label")}>
+          <option value="">{t("Any label")}</option>
+          {#each labels as l (l.name)}<option value={l.name}>{l.name}</option>{/each}
+        </select>
+      {/if}
+      <select class="input" bind:value={priority} aria-label={t("Priority")}>
+        <option value="">{t("Any priority")}</option>
+        {#each PRIORITIES as p (p.value)}<option value={String(p.value)}>{t(p.label)}</option>{/each}
+        <option value="0">{t("No priority")}</option>
+      </select>
     </div>
 
     {#if error}
@@ -117,6 +139,7 @@
                 <span class="title">{r.title}</span>
                 {#if r.pipe?.archived}<span class="badge">{t("Archived")}</span>{/if}
                 {#if r.confidential}<span class="badge">{t("Confidential")}</span>{/if}
+                <TaskBadges priority={r.priority} labels={r.labels} />
                 {#if r.owner}<Avatar user={r.owner} size={20} />{/if}
               </span>
               <span class="path">{path(r)}</span>
