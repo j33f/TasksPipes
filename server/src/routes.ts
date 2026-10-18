@@ -425,20 +425,23 @@ export async function apiRoutes(app: FastifyInstance) {
 
   // ----- Avatar of e-mail accounts (Outline accounts use their Outline picture) ----
 
-  // A Map, so that a declared type such as "constructor" finds nothing.
-  const AVATAR_TYPES = new Map<string, (b: Buffer) => boolean>([
-    ["image/png", (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))],
-    ["image/jpeg", (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff],
-    ["image/webp", (b) => b.subarray(0, 4).toString() === "RIFF" && b.subarray(8, 12).toString() === "WEBP"],
-    ["image/gif", (b) => b.subarray(0, 4).toString() === "GIF8"],
-  ]);
+  // A fixed list of checks, not a lookup: a declared type such as "constructor" matches nothing.
+  const isAvatarImage = (mime: string, b: Buffer) => {
+    switch (mime) {
+      case "image/png": return b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      case "image/jpeg": return b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+      case "image/webp": return b.subarray(0, 4).toString() === "RIFF" && b.subarray(8, 12).toString() === "WEBP";
+      case "image/gif": return b.subarray(0, 4).toString() === "GIF8";
+      default: return false;
+    }
+  };
 
   app.post("/me/avatar", { bodyLimit: 2 * 1024 * 1024 }, async (req: Req) => {
     if (req.user!.kind !== "email") throw bad("The picture of an Outline account is changed in Outline");
     const content = req.body as unknown as Buffer;
     const mime = String(req.headers["x-file-type"] || "");
     // Checked against the file's first bytes, not only its declared type.
-    if (!Buffer.isBuffer(content) || !AVATAR_TYPES.get(mime)?.(content)) throw bad("The picture must be a PNG, JPEG, WebP or GIF image");
+    if (!Buffer.isBuffer(content) || !isAvatarImage(mime, content)) throw bad("The picture must be a PNG, JPEG, WebP or GIF image");
     await query(
       `INSERT INTO user_avatars (user_id, mime, content) VALUES ($1, $2, $3)
        ON CONFLICT (user_id) DO UPDATE SET mime = EXCLUDED.mime, content = EXCLUDED.content, updated_at = now()`,
