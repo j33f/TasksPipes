@@ -18,6 +18,8 @@ import { TASK_KEY_PREFIX } from "./git.js";
 import { guardedLookup, isPrivateIp, postJson } from "./net.js";
 import { pipeTypeById, stageLabel } from "./pipeTypes.js";
 import { LIMITS, rateLimited } from "./rate-limit.js";
+import { FORMATS, chatBody, type Delivery, type Format } from "./chat.js";
+import { LOCALES, type Locale } from "./i18n.js";
 
 export const EVENTS = ["task.created", "task.moved", "task.assigned", "task.commented", "task.done"] as const;
 export type WebhookEvent = (typeof EVENTS)[number];
@@ -109,13 +111,16 @@ export async function runWebhooks(now = new Date()): Promise<number> {
                       AND x.next_attempt_at <= GREATEST($1::timestamptz, now())
                     ORDER BY x.id LIMIT 50 FOR UPDATE OF x SKIP LOCKED)
        AND h.id = d.webhook_id
-     RETURNING d.id, d.event, d.payload, d.attempts, h.url, h.secret`,
+     RETURNING d.id, d.event, d.payload, d.attempts, h.url, h.secret, h.format, h.locale`,
     [now]
   );
   let delivered = 0;
   // In the order they were written (RETURNING keeps none).
   for (const d of rows.sort((a, b) => Number(a.id) - Number(b.id))) {
-    const body = JSON.stringify({ id: String(d.id), ...d.payload });
+    // Signed JSON, or a message for a chat channel.
+    const body = d.format === "json" || !FORMATS.includes(d.format)
+      ? JSON.stringify({ id: String(d.id), ...d.payload })
+      : JSON.stringify(chatBody(d.format, (d.locale as Locale) ?? config.defaultLocale, d.payload as Delivery));
     const ts = Math.floor(now.getTime() / 1000);
     let status: number | null = null;
     let error: string | null = null;
@@ -185,6 +190,16 @@ export async function cleanUrl(input: unknown): Promise<string> {
   return u.href;
 }
 
+const cleanFormat = (v: unknown): Format => {
+  if (v === undefined || v === null || v === "") return "json";
+  if (!FORMATS.includes(v as Format)) throw bad("Invalid format");
+  return v as Format;
+};
+const cleanLocale = (v: unknown): Locale => {
+  if (!LOCALES.includes(v as Locale)) throw bad("Invalid language");
+  return v as Locale;
+};
+
 function cleanEvents(input: unknown): WebhookEvent[] {
   const events = Array.isArray(input) ? EVENTS.filter((e) => input.includes(e)) : [];
   if (!events.length) throw bad("Choose at least one event");
@@ -213,6 +228,8 @@ const present = (h: Row, deliveries: Row[]) => ({
   url: h.url,
   events: h.events,
   active: h.active,
+  format: h.format,
+  locale: h.locale ?? config.defaultLocale,
   // Encrypted at rest; members see it, to check signatures.
   secret: decrypt(h.secret),
   createdAt: h.created_at,
@@ -235,30 +252,37 @@ export async function webhookRoutes(app: FastifyInstance) {
     }));
   });
 
-  app.post<{ Params: { id: string }; Body: { url?: string; events?: string[] } }>("/pipes/:id/webhooks", rateLimited(LIMITS.webhooks), async (req) => {
+  type Body = { url?: string; events?: string[]; format?: string; locale?: string; active?: boolean; newSecret?: boolean };
+  app.post<{ Params: { id: string }; Body: Body }>("/pipes/:id/webhooks", rateLimited(LIMITS.webhooks), async (req) => {
     const p = await pipeForMember(req.params.id, me(req));
     const url = await cleanUrl(req.body?.url);
     const events = cleanEvents(req.body?.events);
+    const format = cleanFormat(req.body?.format);
+    // Messages to a channel are written in their creator's language unless another is chosen.
+    const locale = req.body?.locale !== undefined ? cleanLocale(req.body.locale) : ((req.user!.locale as Locale) ?? config.defaultLocale);
     const secret = crypto.randomBytes(32).toString("hex");
     const h = await one(
-      `INSERT INTO pipe_webhooks (pipe_id, url, secret, events, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [p.id, url, encrypt(secret), events, me(req)]
+      `INSERT INTO pipe_webhooks (pipe_id, url, secret, events, created_by, format, locale) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [p.id, url, encrypt(secret), events, me(req), format, locale]
     );
     req.log.info({ webhookId: h!.id, pipeId: p.id }, "Webhook created");
     return present(h!, []);
   });
 
-  app.patch<{ Params: { id: string }; Body: { url?: string; events?: string[]; active?: boolean; newSecret?: boolean } }>(
+  app.patch<{ Params: { id: string }; Body: Body }>(
     "/webhooks/:id", rateLimited(LIMITS.webhooks), async (req) => {
       const h = await webhookForMember(req.params.id, me(req));
       const b = req.body ?? {};
       const url = b.url !== undefined ? await cleanUrl(b.url) : null;
       const events = b.events !== undefined ? cleanEvents(b.events) : null;
       const secret = b.newSecret ? encrypt(crypto.randomBytes(32).toString("hex")) : null;
+      const format = b.format !== undefined ? cleanFormat(b.format) : null;
+      const locale = b.locale !== undefined ? cleanLocale(b.locale) : null;
       const row = await one(
         `UPDATE pipe_webhooks SET url = COALESCE($2, url), events = COALESCE($3, events), active = COALESCE($4, active),
-           secret = COALESCE($5, secret), updated_at = now() WHERE id = $1 RETURNING *`,
-        [h.id, url, events, typeof b.active === "boolean" ? b.active : null, secret]
+           secret = COALESCE($5, secret), format = COALESCE($6, format), locale = COALESCE($7, locale), updated_at = now()
+         WHERE id = $1 RETURNING *`,
+        [h.id, url, events, typeof b.active === "boolean" ? b.active : null, secret, format, locale]
       );
       return present(row!, []);
     }

@@ -16,8 +16,19 @@
     { id: "task.done", label: () => t("A task is done") },
   ];
 
+  const FORMATS: { id: Webhook["format"]; label: () => string; placeholder: string }[] = [
+    { id: "json", label: () => t("Signed JSON"), placeholder: "https://example.com/hooks/taskspipes" },
+    { id: "slack", label: () => "Slack", placeholder: "https://hooks.slack.com/services/…" },
+    { id: "mattermost", label: () => "Mattermost", placeholder: "https://mattermost.example.com/hooks/…" },
+    { id: "teams", label: () => "Microsoft Teams", placeholder: "https://….logic.azure.com/workflows/…" },
+  ];
+  const LANGUAGES = [{ id: "en", label: "English" }, { id: "fr", label: "Français" }] as const;
+  const formatLabel = (f: Webhook["format"]) => FORMATS.find((x) => x.id === f)!.label();
+
   let hooks = $state<Webhook[]>([]);
   let url = $state("");
+  let format = $state<Webhook["format"]>("json");
+  let locale = $state<"en" | "fr">(app.me?.user.locale ?? (document.documentElement.lang === "fr" ? "fr" : "en"));
   let events = $state<string[]>(["task.created", "task.done"]);
   let shown = $state<string | null>(null);
   let error = $state("");
@@ -38,7 +49,7 @@
   const add = (e: SubmitEvent) => {
     e.preventDefault();
     return run(async () => {
-      const h = await api.post<Webhook>(`/pipes/${pipeId}/webhooks`, { url, events });
+      const h = await api.post<Webhook>(`/pipes/${pipeId}/webhooks`, { url, events, format, ...(format === "json" ? {} : { locale }) });
       url = "";
       shown = h.id;
     });
@@ -50,10 +61,18 @@
 
 <Modal title={t("Webhooks")} {onclose} large>
   <p class="small">{t("Task events of this pipe are sent as JSON to an https address, signed with the webhook's secret (HMAC-SHA256 of “timestamp.body”, header X-TasksPipes-Signature), and retried for about 15 hours.")}</p>
+  <p class="small">{t("They can also be posted to a Slack, Mattermost or Microsoft Teams channel: paste the channel's incoming webhook address and choose its format.")}</p>
   {#each hooks as h (h.id)}
     <div class="hook">
       <div class="row">
+        <span class="badge">{formatLabel(h.format)}</span>
         <code class="grow url">{h.url}</code>
+        {#if h.format !== "json"}
+          <select class="input small-select" value={h.locale} aria-label={t("Language of the messages")}
+            onchange={(e) => run(() => api.patch(`/webhooks/${h.id}`, { locale: (e.currentTarget as HTMLSelectElement).value }))}>
+            {#each LANGUAGES as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+          </select>
+        {/if}
         <label class="row small"><input type="checkbox" checked={h.active} onchange={() => run(() => api.patch(`/webhooks/${h.id}`, { active: !h.active }))} />{t("On")}</label>
         <button class="btn ghost small" onclick={() => ping(h)}>{t("Test")}</button>
         <button class="btn ghost small" onclick={() => remove(h)}>{t("Delete")}</button>
@@ -64,7 +83,7 @@
             onchange={() => run(() => api.patch(`/webhooks/${h.id}`, { events: toggleEvent(h.events, ev.id) }))} /> {ev.label()}</label>
         {/each}
       </div>
-      <div class="small">
+      <div class="small" class:muted={h.format !== "json"}>
         {t("Secret")}:
         {#if shown === h.id}<code>{h.secret}</code>{:else}<button class="btn ghost small" onclick={() => (shown = h.id)}>{t("Show")}</button>{/if}
         <button class="btn ghost small" onclick={() => run(() => api.patch(`/webhooks/${h.id}`, { newSecret: true }))}>{t("New secret")}</button>
@@ -87,7 +106,17 @@
     </div>
   {/each}
   <form class="add" onsubmit={add}>
-    <input class="input" type="url" placeholder="https://example.com/hooks/taskspipes" aria-label={t("Address")} bind:value={url} />
+    <div class="row">
+      <select class="input small-select" bind:value={format} aria-label={t("Format")}>
+        {#each FORMATS as f (f.id)}<option value={f.id}>{f.label()}</option>{/each}
+      </select>
+      {#if format !== "json"}
+        <select class="input small-select" bind:value={locale} aria-label={t("Language of the messages")}>
+          {#each LANGUAGES as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+        </select>
+      {/if}
+    </div>
+    <input class="input" type="url" placeholder={FORMATS.find((f) => f.id === format)!.placeholder} aria-label={t("Address")} bind:value={url} />
     <div class="row events">
       {#each EVENTS as ev (ev.id)}
         <label class="small"><input type="checkbox" checked={events.includes(ev.id)} onchange={() => (events = toggleEvent(events, ev.id))} /> {ev.label()}</label>
@@ -101,6 +130,7 @@
 <style>
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .grow { flex: 1; min-width: 0; }
+  .small-select { width: auto; min-height: 30px; padding: 2px 8px; font-size: 13px; }
   .url { word-break: break-all; }
   .hook { border-top: 1px solid var(--divider); padding: 12px 0; }
   .events { gap: 12px; margin: 6px 0; }
