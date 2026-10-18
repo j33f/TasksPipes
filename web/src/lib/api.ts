@@ -52,7 +52,7 @@ export const api = {
   post: <T = unknown>(p: string, b: unknown = {}) => request<T>("POST", `/api${p}`, b),
   patch: <T = unknown>(p: string, b: unknown = {}) => request<T>("PATCH", `/api${p}`, b),
   put: <T = unknown>(p: string, b: unknown = {}) => request<T>("PUT", `/api${p}`, b),
-  del: <T = unknown>(p: string) => request<T>("DELETE", `/api${p}`),
+  del: <T = unknown>(p: string, b?: unknown) => request<T>("DELETE", `/api${p}`, b),
 };
 
 export const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));

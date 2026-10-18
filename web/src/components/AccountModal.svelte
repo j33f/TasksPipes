@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { currentSubscription, disablePush, enablePush, pushSupported } from "../lib/push";
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
   import { formatDate } from "../lib/constants";
@@ -67,6 +68,30 @@
   function setPref(next: { locale?: Locale | null; theme?: Theme | null }) {
     prefs.set(next);
     api.patch("/me", next).then(() => app.init()).catch((err) => (error = errorMessage(err)));
+  }
+
+  // Push notifications on this device (the browser keeps the subscription).
+  let pushOn = $state(false);
+  let pushBusy = $state(false);
+  let pushError = $state("");
+  currentSubscription().then((s) => (pushOn = Boolean(s))).catch(() => {});
+  async function togglePush(on: boolean) {
+    pushBusy = true;
+    pushError = "";
+    try {
+      if (on) {
+        pushOn = await enablePush();
+        if (!pushOn) pushError = t("Notifications are blocked for this site in the browser.");
+      } else {
+        await disablePush();
+        pushOn = false;
+      }
+    } catch (err) {
+      pushError = errorMessage(err);
+      pushOn = Boolean(await currentSubscription().catch(() => null));
+    } finally {
+      pushBusy = false;
+    }
   }
 
   // E-mail notifications: one choice per kind, saved at once.
@@ -189,10 +214,15 @@
     </div>
   </div>
 
-  {#if app.me?.features.notifications && notif}
+  {#if (app.me?.features.notifications || pushOn) && notif}
     <div class="section">
-      <div class="section-title"><Icon name="mail" />{t("E-mail notifications")}</div>
-      <p class="small muted">{t("Get an e-mail when something needs you, even with TasksPipes closed. Nothing is sent for what you do yourself.")}</p>
+      {#if app.me?.features.notifications}
+        <div class="section-title"><Icon name="mail" />{t("E-mail notifications")}</div>
+        <p class="small muted">{t("Get an e-mail when something needs you, even with TasksPipes closed. Nothing is sent for what you do yourself.")}</p>
+      {:else}
+        <div class="section-title"><Icon name="bolt" />{t("Notifications")}</div>
+        <p class="small muted">{t("What you get at once is pushed to your devices. Nothing is sent for what you do yourself.")}</p>
+      {/if}
       {#each NOTIFICATION_KINDS as kind (kind)}
         <div class="notif row">
           <span class="grow small">{kindLabel(kind)}</span>
@@ -215,6 +245,18 @@
         </select>
       </div>
       <p class="small muted">{t("The daily digest comes in the evening, with the reports; due dates are reminded in the morning, at the hour chosen.")}</p>
+    </div>
+  {/if}
+
+  {#if pushSupported()}
+    <div class="section">
+      <div class="section-title"><Icon name="bolt" />{t("Notifications on this device")}</div>
+      <p class="small muted">{t("Get a notification on this device, while TasksPipes is not open, for what you chose to get at once.")}</p>
+      <label class="check">
+        <input type="checkbox" checked={pushOn} disabled={pushBusy} onchange={(e) => togglePush((e.currentTarget as HTMLInputElement).checked)} />
+        {t("Notify me on this device")}
+      </label>
+      {#if pushError}<p class="error-text small">{pushError}</p>{/if}
     </div>
   {/if}
 
@@ -331,4 +373,5 @@
   .inv { padding: 8px 0; border-top: 1px solid var(--divider); }
   .notif { padding: 6px 0; gap: 12px; flex-wrap: wrap; }
   .notif .hour { min-height: 32px; padding: 4px 8px; font-size: 14px; width: auto; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 </style>

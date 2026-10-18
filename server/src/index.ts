@@ -4,7 +4,7 @@ import { checkOutlineSessions, cleanupSessions, disableUnusedInvitations } from 
 import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
 import { runScheduledReports } from "./reports.js";
-import { cleanupNotifications, runNotifications } from "./notifications.js";
+import { cleanupNotifications, runNotifications, runPush } from "./notifications.js";
 import { cleanupWebhookDeliveries, runWebhooks } from "./webhooks.js";
 import { runRecurrences } from "./recurrence.js";
 import { recordOccurrence } from "./routes.js";
@@ -44,6 +44,16 @@ setInterval(() => {
   runWebhooks()
     .catch((err) => app.log.error({ err }, "Webhook sending failed"))
     .finally(() => (sendingWebhooks = false));
+}, 15_000).unref();
+
+// Push notifications to devices: every 15 seconds, each one pushed once.
+let pushing = false;
+setInterval(() => {
+  if (pushing) return;
+  pushing = true;
+  runPush()
+    .catch((err) => app.log.error({ err }, "Push sending failed"))
+    .finally(() => (pushing = false));
 }, 15_000).unref();
 
 // Reports and notifications by e-mail: checked every minute, each one sent once.

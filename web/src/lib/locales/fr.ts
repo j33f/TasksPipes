@@ -851,4 +851,11 @@ export const FR: Record<string, string> = {
   "deleted {time} logged by {name} on {day}": "a supprimé {time} saisies par {name} le {day}",
   "someone": "quelqu'un",
   "Estimate: {from} → {to}": "Estimation : {from} → {to}",
+  // Installable app and push notifications
+  "Notifications on this device": "Notifications sur cet appareil",
+  "Get a notification on this device, while TasksPipes is not open, for what you chose to get at once.": "Recevez une notification sur cet appareil, quand TasksPipes n'est pas ouvert, pour ce que vous avez choisi de recevoir tout de suite.",
+  "Notify me on this device": "Me notifier sur cet appareil",
+  "Notifications are blocked for this site in the browser.": "Les notifications sont bloquées pour ce site dans le navigateur.",
+  "What you get at once is pushed to your devices. Nothing is sent for what you do yourself.": "Ce que vous recevez tout de suite est envoyé sur vos appareils. Rien n'est envoyé pour ce que vous faites vous-même.",
+  "Notifications": "Notifications",
 };
