@@ -76,6 +76,27 @@ describe("outgoing webhooks", () => {
     expect(listed.deliveries[0]).toMatchObject({ state: "delivered", status: 200 });
   });
 
+  it("post messages to chat channels, in the webhook's language", async () => {
+    const { pipe } = await team("Chatty");
+    const slack = (await alice.post(`/api/pipes/${pipe}/webhooks`, { url, events: ["task.created", "task.commented"], format: "slack" })).body;
+    expect(slack).toMatchObject({ format: "slack", locale: "en" });
+    const teams = (await alice.post(`/api/pipes/${pipe}/webhooks`, { url, events: ["task.created"], format: "teams", locale: "fr" })).body;
+    expect(teams.locale).toBe("fr");
+    expect((await alice.post(`/api/pipes/${pipe}/webhooks`, { url, events: ["task.created"], format: "discord" })).body.error).toBe("Invalid format");
+    expect((await alice.patch(`/api/webhooks/${slack.id}`, { locale: "de" })).body.error).toBe("Invalid language");
+    const id = (await alice.post("/api/tasks", { title: "Chat task", pipeId: pipe })).body.id;
+    await alice.post(`/api/tasks/${id}/comments`, { body: "Ship it" });
+    expect(await runWebhooks()).toBe(3);
+    const [created, card, commented] = received;
+    expect(created.json.text).toMatch(new RegExp(`^Alice Martin created <.+\\?task=${id}\|TP-\\d+ Chat task> in Board$`));
+    expect(card.json.attachments[0].content.body[0].text).toMatch(/^Alice Martin a créé \[TP-\d+ Chat task\]\(.+\) dans Board$/);
+    expect(commented.json.blocks[1].text.text).toBe("> Ship it");
+    // Still signed.
+    expect(created.headers["x-taskspipes-signature"]).toBe(signature(slack.secret, Number(created.headers["x-taskspipes-timestamp"]), created.body));
+    // A format can be changed.
+    expect((await alice.patch(`/api/webhooks/${slack.id}`, { format: "mattermost" })).body.format).toBe("mattermost");
+  });
+
   it("are retried with growing delays, then given up", async () => {
     const { pipe } = await team("Failing");
     await hook(pipe, ["task.created"]);

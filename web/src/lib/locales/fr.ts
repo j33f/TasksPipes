@@ -851,4 +851,9 @@ export const FR: Record<string, string> = {
   "deleted {time} logged by {name} on {day}": "a supprimé {time} saisies par {name} le {day}",
   "someone": "quelqu'un",
   "Estimate: {from} → {to}": "Estimation : {from} → {to}",
+  // Webhooks to chat channels
+  "Signed JSON": "JSON signé",
+  "They can also be posted to a Slack, Mattermost or Microsoft Teams channel: paste the channel's incoming webhook address and choose its format.": "Ils peuvent aussi être publiés dans un canal Slack, Mattermost ou Microsoft Teams : collez l'adresse du webhook entrant du canal et choisissez son format.",
+  "Language of the messages": "Langue des messages",
+  "Format": "Format",
 };

@@ -456,6 +456,17 @@ export const FR: Record<string, string> = {
   "Time logged: {total}": "Temps saisi : {total}",
   "{logged} of {estimate} estimated": "{logged} sur {estimate} estimées",
 
+  // Messages posted to chat channels (Slack, Mattermost, Teams)
+  "{name} created {task} in {pipe}": "{name} a créé {task} dans {pipe}",
+  "{name} moved {task} to {column}": "{name} a déplacé {task} vers {column}",
+  "{name} made {owner} the owner of {task}": "{name} a confié {task} à {owner}",
+  "{name} commented on {task}": "{name} a commenté {task}",
+  "{name} finished {task}": "{name} a terminé {task}",
+  "Test message from TasksPipes, for the pipe {pipe}": "Message de test de TasksPipes, pour le pipe {pipe}",
+  "nobody": "personne",
+  "Open the task": "Ouvrir la tâche",
+  "Invalid format": "Format invalide",
+
   // Data created for the user
   Personal: "Perso",
   "TasksPipes task #{n}": "Tâche TasksPipes #{n}",
