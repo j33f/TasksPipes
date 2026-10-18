@@ -239,7 +239,7 @@ incoming bucket you can see:
 - by **title**, **description**, **sub-tasks**, **field values**, the title of the **linked Outline document** and
   **comments** (refusal reasons included), or by **number** (`TP-123`, `tp123` or `123`);
 - results come as you type: each word is the start of a word to find, all of them must match, accents do not
-  matter, and words are matched in your language (*inscription* also finds *inscriptions*);
+  matter, and words are matched in your language — French or English stemming, English for other languages (*inscription* also finds *inscriptions*);
 - each result shows its key, title, owner and path (space › pipe › column, or the incoming bucket), and an excerpt
   of what matched, the words found highlighted; tasks of archived pipes are marked as such;
 - filters: status (or *not finished*), owner, task type, label and priority; ↑ ↓ and Enter open a task from the keyboard.
@@ -354,7 +354,7 @@ Invitations can be turned off for the whole instance (`ALLOW_EMAIL_INVITATIONS=f
 Your name at the bottom of the sidebar opens a menu, like Outline's:
 
 - **Invite people** — invite someone by e-mail (when invitations are on);
-- **Settings** — language (English or French, following the browser unless chosen), theme (automatic, light or
+- **Settings** — language (English, French or Spanish — one file per language, see [TRANSLATION.md](TRANSLATION.md) — following the browser unless chosen), theme (automatic, light or
   dark), name and picture of e-mail accounts, two-factor authentication, invitations and requests to connect;
 - **Calendar** — your calendar subscription link;
 - **About** — the version, a link to the source code on GitHub and the license;

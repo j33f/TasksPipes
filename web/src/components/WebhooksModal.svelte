@@ -4,7 +4,7 @@
   import { app } from "../lib/app.svelte";
   import { relativeTime } from "../lib/constants";
   import type { Webhook } from "../lib/types";
-  import { t } from "../lib/i18n.svelte";
+  import { LOCALES, prefs, t } from "../lib/i18n.svelte";
 
   let { pipeId, onclose }: { pipeId: string; onclose: () => void } = $props();
 
@@ -22,13 +22,13 @@
     { id: "mattermost", label: () => "Mattermost", placeholder: "https://mattermost.example.com/hooks/…" },
     { id: "teams", label: () => "Microsoft Teams", placeholder: "https://….logic.azure.com/workflows/…" },
   ];
-  const LANGUAGES = [{ id: "en", label: "English" }, { id: "fr", label: "Français" }] as const;
+  const LANGUAGES = LOCALES;
   const formatLabel = (f: Webhook["format"]) => FORMATS.find((x) => x.id === f)!.label();
 
   let hooks = $state<Webhook[]>([]);
   let url = $state("");
   let format = $state<Webhook["format"]>("json");
-  let locale = $state<"en" | "fr">(app.me?.user.locale ?? (document.documentElement.lang === "fr" ? "fr" : "en"));
+  let locale = $state<string>(app.me?.user.locale ?? prefs.lang);
   let events = $state<string[]>(["task.created", "task.done"]);
   let shown = $state<string | null>(null);
   let error = $state("");

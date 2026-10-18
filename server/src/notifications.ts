@@ -163,11 +163,15 @@ export interface NotificationLine {
   toPersonal: boolean;
 }
 
+/** Fills placeholders with values as they are (user text, not translated). */
+const fill = (s: string, values: Record<string, string>) => s.replace(/\{(\w+)\}/g, (all, k: string) => values[k] ?? all);
+
 /** What happened, in a sentence; without user text (comment, reason) when the task is confidential. */
 export function describe(lang: Locale, l: NotificationLine, masked: boolean): string {
   const name = l.actorName ?? tr(lang, "Someone");
   const excerpt = l.comment && !masked ? (l.comment.length > 400 ? `${l.comment.slice(0, 400)}…` : l.comment) : "";
-  const quote = (s: string) => (excerpt ? (lang === "fr" ? `${s}\u00a0: « ${excerpt} »` : `${s}: “${excerpt}”`) : s);
+  // Quoted the way the language does ("{text}: “{excerpt}”").
+  const quote = (s: string) => (excerpt ? fill(tr(lang, "{text}: “{excerpt}”"), { text: s, excerpt }) : s);
   switch (l.kind) {
     case "received":
       return quote(l.toPersonal

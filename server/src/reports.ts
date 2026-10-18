@@ -8,7 +8,7 @@
  */
 import { config } from "./config.js";
 import { one, query, type Queryable } from "./db.js";
-import { localize, tr, type Locale } from "./i18n.js";
+import { intlTag, localize, tr, type Locale } from "./i18n.js";
 import { sendHtmlMail } from "./mail.js";
 import { TASK_KEY_PREFIX } from "./git.js";
 import { pipeTypeById, stageLabel, taskTypeById, type Status } from "./pipeTypes.js";
@@ -345,7 +345,7 @@ export function weeklyEmail(pipe: PipeRow, r: WeeklyReport, lang: Locale, day: s
 }
 
 const when = (iso: string, lang: Locale) =>
-  new Intl.DateTimeFormat(lang === "fr" ? "fr-FR" : "en-GB", { timeZone: config.timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+  new Intl.DateTimeFormat(intlTag(lang), { timeZone: config.timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 
 const wrap = (lang: Locale, title: string, intro: string, body: string, pipe: PipeRow) =>
   `<div lang="${lang}" style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.5;color:#111319;max-width:640px">`

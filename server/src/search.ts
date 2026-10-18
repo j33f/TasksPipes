@@ -10,7 +10,9 @@ import { localize, type Locale } from "./i18n.js";
 import { resolveStage } from "./pipeTypes.js";
 
 export const SEARCH_LIMIT = 50;
+/** Text search configurations of the index (see the schema); other languages search with the English one. */
 const CONFIG: Record<Locale, string> = { fr: "tp_fr", en: "tp_en" };
+const configOf = (lang: Locale) => CONFIG[lang] ?? CONFIG.en;
 // Highlighted words come between these two characters (removed from the text beforehand), never as HTML.
 export const MARK_START = "\u0002";
 export const MARK_END = "\u0003";
@@ -46,7 +48,7 @@ export function taskNumber(q: string): number | null {
 export async function searchTasks(userId: string, lang: Locale, q: string, filters: SearchFilters = {}) {
   const tsq = prefixQuery(q);
   if (!tsq) return [];
-  const cfg = CONFIG[lang];
+  const cfg = configOf(lang);
   const { rows } = await query(
     `WITH hits AS (
        SELECT h.task_id, max(h.rank) AS rank FROM (

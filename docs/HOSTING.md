@@ -69,7 +69,8 @@ let only the proxy reach the port (firewall). A proxy in a container on the same
 | `RATE_LIMIT_BACKOFF_FACTOR` | A client over a limit is blocked for a minute, then this many times longer at each new offence (2 by default; 1 keeps it the same). |
 | `TIMEZONE` | Time zone of the reports (e.g. `Europe/Paris`); `UTC` by default. |
 | `REPORT_HOUR` | Hour (0–23) at which daily reports, and on Fridays weekly time reports, are due: 18 by default. |
-| `DEFAULT_LOCALE` | `en` (default) or `fr`: language used when neither the profile nor the browser gives one. |
+| `DEFAULT_LOCALE` | Language used when neither the profile nor the browser gives one: the code of a file of `locales/` (`en` by default, `fr`, `es`…). |
+| `LOCALES_DIR` | Folder of the language files, when they are not next to the server (`locales/`, found by default). |
 | `SESSION_DAYS` | Session length, 30 days by default. |
 | `LOG_LEVEL` | `info` by default. |
 

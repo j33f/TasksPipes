@@ -14,7 +14,7 @@
         const theme = localStorage.getItem("tp:theme");
         if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
         const lang = localStorage.getItem("tp:locale") || (navigator.language || "en").slice(0, 2);
-        document.documentElement.lang = lang === "fr" ? "fr" : "en";
+        document.documentElement.lang = lang;
       } catch {}
     </script>
   </head>

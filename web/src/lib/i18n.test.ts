@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { intlLocale, prefs, t, tn } from "./i18n.svelte";
+import { LOCALES, intlLocale, prefs, t, tn } from "./i18n.svelte";
 
 afterEach(() => prefs.set({ locale: null, theme: null }));
 
@@ -41,8 +41,22 @@ describe("prefs", () => {
   });
 
   it("ignores values it does not know", () => {
-    prefs.set({ locale: "de" as never, theme: "blue" as never });
+    prefs.set({ locale: "xx", theme: "blue" as never });
     expect(prefs.locale).toBeNull();
     expect(prefs.theme).toBeNull();
+  });
+});
+
+describe("languages", () => {
+  it("are the files of locales/, by their own name, English first", () => {
+    expect(LOCALES[0]).toEqual({ id: "en", label: "English" });
+    expect(LOCALES).toEqual(expect.arrayContaining([{ id: "fr", label: "Français" }, { id: "es", label: "Español" }]));
+  });
+
+  it("include Spanish, with its formats", () => {
+    prefs.set({ locale: "es" });
+    expect(t("New task")).toBe("Nueva tarea");
+    expect(tn(0, "{n} task", "{n} tasks")).toBe("0 tareas");
+    expect(intlLocale()).toBe("es-ES");
   });
 });

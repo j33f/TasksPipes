@@ -15,12 +15,14 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,svelte}"],
-      exclude: ["src/**/*.test.ts", "src/lib/locales/**", "src/main.ts", "src/env.d.ts"],
+      exclude: ["src/**/*.test.ts", "src/main.ts", "src/env.d.ts"],
       reporter: ["text-summary", "html", "lcov"],
       reportsDirectory: "coverage",
     },
   },
   server: {
+    // The language files live at the root of the repository (locales/).
+    fs: { allow: [".."] },
     proxy: {
       "/api": { target: "http://localhost:3000", ws: true },
       "/auth": "http://localhost:3000",

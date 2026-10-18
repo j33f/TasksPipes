@@ -32,7 +32,7 @@ export interface SessionUser {
   /** Second factor enabled (e-mail accounts). */
   totp: boolean;
   /** Chosen language and theme; null follows the browser / the system. */
-  locale: "en" | "fr" | null;
+  locale: string | null;
   theme: "light" | "dark" | null;
 }
 
