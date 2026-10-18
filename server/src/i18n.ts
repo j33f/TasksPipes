@@ -424,6 +424,7 @@ export const FR: Record<string, string> = {
   "This task already waits for this one": "Cette tâche attend déjà celle-ci",
   "A task waits for {n} tasks at most": "Une tâche attend {n} tâches au plus",
   "Blocking task": "Tâche bloquante",
+  "This task type fits none of the recipient's pipes": "Ce type de tâche ne correspond à aucun pipe du destinataire",
 
   // Data created for the user
   Personal: "Perso",

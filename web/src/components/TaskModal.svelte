@@ -121,10 +121,11 @@
   }
 
   const taskType = $derived(app.taskType(task?.taskType));
-  // Types offered: those of the pipe type, plus the current one if it comes from elsewhere.
+  // Types it can be turned into: those of the pipe type (in an incoming, those of the space's pipes), plus the current
+  // one if it comes from elsewhere.
   const typeChoices = $derived.by(() => {
     if (!task) return [];
-    const list = app.taskTypesFor(task.pipe?.kind);
+    const list = task.pipe ? app.taskTypesFor(task.pipe.kind) : app.taskTypesForPipes(pipes);
     return taskType && !list.some((x) => x.id === taskType.id) ? [...list, taskType] : list;
   });
 

@@ -781,4 +781,5 @@ export const FR: Record<string, string> = {
   "added a task it waits for": "a ajouté une tâche attendue",
   "removed a task it waited for": "a retiré une tâche attendue",
   "While it still waited for other tasks": "Alors qu'elle attendait encore d'autres tâches",
+  "This pipe does not offer this type: you can turn the task into one of its types.": "Ce pipe ne propose pas ce type : vous pouvez transformer la tâche en l'un de ses types.",
 };

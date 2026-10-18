@@ -106,6 +106,12 @@ class AppState {
     return ids.map((id) => this.taskType(id)).filter((t): t is TaskType => Boolean(t));
   }
 
+  /** Task types a task may have in an incoming: the plain task, and those of the space's pipes (not archived). */
+  taskTypesForPipes(pipes: { kind: string; archived?: boolean }[]): TaskType[] {
+    const ids = new Set(["task", ...pipes.filter((p) => !p.archived).flatMap((p) => this.pipeType(p.kind)?.taskTypes ?? [])]);
+    return this.taskTypes.filter((t) => ids.has(t.id)).sort((a, b) => Number(b.id === "task") - Number(a.id === "task"));
+  }
+
   isPinned(pipeId: string): boolean {
     return this.sidebar.pinned.some((p) => p.id === pipeId);
   }
