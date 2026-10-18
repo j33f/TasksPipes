@@ -17,10 +17,10 @@ import { LOCALES, localeOf, localize, localizePipeType, localizeTaskType, tr, ty
 import QRCode from "qrcode";
 import { INVITE_LINK_HOURS, createLoginLink, decrypt, encrypt, ensurePersonalSpace, reenableInvited } from "./auth.js";
 import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
-import { sendLinkMail } from "./mail.js";
+import { isEmail, sendLinkMail } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
 import { calendarUrl } from "./calendar.js";
-import { rateLimited } from "./rate-limit.js";
+import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, type TaskPermissions } from "./access.js";
 
@@ -425,11 +425,15 @@ export async function apiRoutes(app: FastifyInstance) {
 
   // ----- Avatar of e-mail accounts (Outline accounts use their Outline picture) ----
 
-  const AVATAR_TYPES: Record<string, (b: Buffer) => boolean> = {
-    "image/png": (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
-    "image/jpeg": (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
-    "image/webp": (b) => b.subarray(0, 4).toString() === "RIFF" && b.subarray(8, 12).toString() === "WEBP",
-    "image/gif": (b) => b.subarray(0, 4).toString() === "GIF8",
+  // A fixed list of checks, not a lookup: a declared type such as "constructor" matches nothing.
+  const isAvatarImage = (mime: string, b: Buffer) => {
+    switch (mime) {
+      case "image/png": return b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      case "image/jpeg": return b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+      case "image/webp": return b.subarray(0, 4).toString() === "RIFF" && b.subarray(8, 12).toString() === "WEBP";
+      case "image/gif": return b.subarray(0, 4).toString() === "GIF8";
+      default: return false;
+    }
   };
 
   app.post("/me/avatar", { bodyLimit: 2 * 1024 * 1024 }, async (req: Req) => {
@@ -437,7 +441,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const content = req.body as unknown as Buffer;
     const mime = String(req.headers["x-file-type"] || "");
     // Checked against the file's first bytes, not only its declared type.
-    if (!Buffer.isBuffer(content) || !AVATAR_TYPES[mime]?.(content)) throw bad("The picture must be a PNG, JPEG, WebP or GIF image");
+    if (!Buffer.isBuffer(content) || !isAvatarImage(mime, content)) throw bad("The picture must be a PNG, JPEG, WebP or GIF image");
     await query(
       `INSERT INTO user_avatars (user_id, mime, content) VALUES ($1, $2, $3)
        ON CONFLICT (user_id) DO UPDATE SET mime = EXCLUDED.mime, content = EXCLUDED.content, updated_at = now()`,
@@ -490,7 +494,7 @@ export async function apiRoutes(app: FastifyInstance) {
   };
 
   // Step 1: a new secret, kept aside until a first code confirms the app is set up.
-  app.post("/me/totp/setup", async (req: Req) => {
+  app.post("/me/totp/setup", rateLimited(LIMITS.totpSettings), async (req: Req) => {
     requireEmailAccount(req);
     if (req.user!.totp) throw bad("Two-factor authentication is already on");
     const secret = newSecret();
@@ -499,7 +503,7 @@ export async function apiRoutes(app: FastifyInstance) {
     return { secret, url, qr: await QRCode.toDataURL(url, { margin: 1, width: 220 }) };
   });
 
-  app.post("/me/totp/enable", async (req: Req) => {
+  app.post("/me/totp/enable", rateLimited(LIMITS.totpSettings), async (req: Req) => {
     requireEmailAccount(req);
     const u = await one(`SELECT totp_pending FROM users WHERE id = $1`, [me(req)]);
     const secret = decrypt(u?.totp_pending);
@@ -510,7 +514,7 @@ export async function apiRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  app.post("/me/totp/disable", async (req: Req) => {
+  app.post("/me/totp/disable", rateLimited(LIMITS.totpSettings), async (req: Req) => {
     requireEmailAccount(req);
     const u = await one(`SELECT totp_secret, totp_last_step FROM users WHERE id = $1`, [me(req)]);
     const secret = decrypt(u?.totp_secret);
@@ -573,12 +577,11 @@ export async function apiRoutes(app: FastifyInstance) {
   }
 
   // Invitations send e-mails: a few per person and hour.
-  const byPerson = (req: FastifyRequest) => req.user?.id ?? req.ip;
-  app.post("/invitations", rateLimited({ name: "invitations", max: 30, timeWindow: 3_600_000, keyGenerator: byPerson }), async (req: Req) => {
+  app.post("/invitations", rateLimited({ name: "invitations", max: 30, timeWindow: 3_600_000, keyGenerator: perPerson }), async (req: Req) => {
     if (!config.allowEmailInvitations) throw forbidden("Invitations by e-mail are turned off on this instance");
     const uid = me(req);
     const email = text(req.body?.email, "E-mail", { required: true, max: 254 }).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw bad("Invalid e-mail address");
+    if (!isEmail(email)) throw bad("Invalid e-mail address");
     if (email === req.user!.email?.toLowerCase()) throw bad("That is your own address");
     const name = text(req.body?.name, "Name", { max: 120 }) || email.split("@")[0];
     const teamId = optUuid(req.body?.teamId, "Team");
@@ -675,7 +678,7 @@ export async function apiRoutes(app: FastifyInstance) {
   app.post("/invitations/:id/accept", (req: Req) => answerRequest(req, true));
   app.post("/invitations/:id/refuse", (req: Req) => answerRequest(req, false));
 
-  app.post("/invitations/:id/resend", rateLimited({ name: "invitation-links", max: 10, timeWindow: 3_600_000, keyGenerator: byPerson }), async (req: Req) => {
+  app.post("/invitations/:id/resend", rateLimited({ name: "invitation-links", max: 10, timeWindow: 3_600_000, keyGenerator: perPerson }), async (req: Req) => {
     const invitee = await one(
       `SELECT u.id, u.name, u.email, u.locale FROM invitations i JOIN users u ON u.id = i.invitee_id
        WHERE i.inviter_id = $1 AND i.invitee_id = $2 AND i.status = 'accepted' AND u.auth_kind = 'email'`,
@@ -934,7 +937,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   // ----- Designer: pipe and task types made by users -----------------------
 
-  app.get("/catalog/usage", async () => {
+  app.get("/catalog/usage", rateLimited(LIMITS.catalogUsage), async () => {
     const [pipes, tasks] = await Promise.all([
       query(`SELECT kind, count(*)::int AS n FROM pipes GROUP BY kind`),
       query(`SELECT task_type, count(*)::int AS n FROM tasks GROUP BY task_type`),
@@ -1728,7 +1731,7 @@ export async function gitWebhooks(app: FastifyInstance) {
   app.removeAllContentTypeParsers();
   app.addContentTypeParser("*", { parseAs: "buffer", bodyLimit: 10 * 1024 * 1024 }, (_req, body, done) => done(null, body));
 
-  app.post<{ Params: { provider: string; token: string } }>("/hooks/:provider/:token", async (req, reply) => {
+  app.post<{ Params: { provider: string; token: string } }>("/hooks/:provider/:token", rateLimited(LIMITS.webhook), async (req, reply) => {
     const provider = req.params.provider as Provider;
     if (!PROVIDERS.includes(provider)) return reply.code(404).send({ error: "Not found" });
     const integ = await one(`SELECT id, pipe_id, secret FROM pipe_integrations WHERE provider = $1 AND token = $2`, [provider, req.params.token]);

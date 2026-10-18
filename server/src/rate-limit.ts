@@ -8,6 +8,7 @@
  *
  * Routes opt in with `...rateLimited({ name, max, timeWindow })` in their options.
  */
+import crypto from "node:crypto";
 import type { FastifyBaseLogger, FastifyInstance, FastifyRequest } from "fastify";
 import fastifyRateLimit from "@fastify/rate-limit";
 import { createClient } from "redis";
@@ -40,6 +41,8 @@ export interface Hit {
 export interface Counter {
   hit(key: string, max: number, windowMs: number, maxBlockMs: number, factor: number): Promise<Hit>;
   reset(key: string): Promise<void>;
+  /** Forgets every counter (tests). */
+  clear(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -93,6 +96,10 @@ export function redisCounter(url: string): Counter {
     async reset(key) {
       await (await ready()).del(keys(key));
     },
+    async clear() {
+      const c = await ready();
+      for await (const batch of c.scanIterator({ MATCH: "rl:*", COUNT: 500 })) if (batch.length) await c.del(batch);
+    },
     async close() {
       const c = client;
       client = null;
@@ -129,6 +136,11 @@ export function memoryCounter(now = () => Date.now()): Counter {
       blocks.delete(key);
       strikes.delete(key);
     },
+    async clear() {
+      counts.clear();
+      blocks.clear();
+      strikes.clear();
+    },
     async close() {},
   };
 }
@@ -144,6 +156,29 @@ export function setRateLimitCounter(c: Counter) {
 export const closeRateLimits = () => counter.close();
 
 export const resetRate = (l: Pick<Limit, "name">, key: string) => counter.reset(`${l.name}:${key}`);
+export const resetAllRates = () => counter.clear();
+
+/** Counts per signed-in person (else per address). */
+export const perPerson = (req: FastifyRequest) => req.user?.id ?? req.ip;
+
+/** Counts per secret in the URL (`param`), hashed: the secret itself is never stored. */
+export const perSecret = (param: string) => (req: FastifyRequest) =>
+  crypto.createHash("sha256").update(String((req.params as Record<string, unknown>)[param] ?? "")).digest("hex").slice(0, 32);
+
+const MIN = 60_000;
+/** Limits of the routes that sign people in, accept a secret or check a code. */
+export const LIMITS = {
+  signup: { name: "signup", max: 10, timeWindow: 60 * MIN },
+  signInLink: { name: "sign-in-link", max: 20, timeWindow: 15 * MIN },
+  magic: { name: "magic", max: 20, timeWindow: 15 * MIN },
+  totp: { name: "totp", max: 20, timeWindow: 15 * MIN },
+  apiKey: { name: "api-key", max: 20, timeWindow: 15 * MIN },
+  oauth: { name: "oauth", max: 30, timeWindow: 15 * MIN },
+  totpSettings: { name: "totp-settings", max: 10, timeWindow: 15 * MIN, keyGenerator: perPerson },
+  catalogUsage: { name: "catalog-usage", max: 60, timeWindow: MIN, keyGenerator: perPerson },
+  webhook: { name: "webhook", max: 600, timeWindow: MIN, keyGenerator: perSecret("token") },
+  calendar: { name: "calendar", max: 60, timeWindow: MIN, keyGenerator: perSecret("file") },
+} satisfies Record<string, Limit>;
 
 interface StoreParams {
   name?: string;
