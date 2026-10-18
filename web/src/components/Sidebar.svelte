@@ -137,6 +137,9 @@
       <a class="sidebar-link" class:active={router.path === "/next"} href="/next">
         <Icon name="target" /><span class="label">{t("Next action")}</span>
       </a>
+      <a class="sidebar-link" class:active={router.path === "/calendar"} href="/calendar">
+        <Icon name="calendar" /><span class="label">{t("Calendar")}</span>
+      </a>
       <a class="sidebar-link" class:active={isActive(`/spaces/${personalId}?tab=incoming`)} href={`/spaces/${personalId}?tab=incoming`}>
         <Icon name="inbox" /><span class="label">Incoming</span>
         {#if myIncoming}<span class="count">{myIncoming}</span>{/if}

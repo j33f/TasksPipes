@@ -440,6 +440,8 @@ export const FR: Record<string, string> = {
   "A label with this name already exists": "Une étiquette porte déjà ce nom",
   "A space has {n} labels at most": "Un espace a {n} étiquettes au plus",
 
+  "Invalid period": "Période invalide",
+
   // Data created for the user
   Personal: "Perso",
   "TasksPipes task #{n}": "Tâche TasksPipes #{n}",

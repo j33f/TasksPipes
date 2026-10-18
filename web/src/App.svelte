@@ -21,6 +21,7 @@
   import PipePage from "./pages/PipePage.svelte";
   import MyTasks from "./pages/MyTasks.svelte";
   import Next from "./pages/Next.svelte";
+  import Calendar from "./pages/Calendar.svelte";
   import Designer from "./pages/Designer.svelte";
   import Admin from "./pages/Admin.svelte";
   import AccountDelete from "./pages/AccountDelete.svelte";
@@ -95,6 +96,7 @@
     if (p === "/") return { name: "home" } as const;
     if (p === "/tasks") return { name: "tasks" } as const;
     if (p === "/next") return { name: "next" } as const;
+    if (p === "/calendar") return { name: "calendar" } as const;
     if (p === "/designer") return { name: "designer" } as const;
     if (p === "/admin" && app.me?.admin) return { name: "admin" } as const;
     if ((m = p.match(/^\/spaces\/([^/]+)$/))) return { name: "space", id: m[1] } as const;
@@ -147,6 +149,8 @@
         <MyTasks />
       {:else if route.name === "next"}
         <Next />
+      {:else if route.name === "calendar"}
+        <Calendar />
       {:else if route.name === "designer"}
         <Designer />
       {:else if route.name === "admin"}
