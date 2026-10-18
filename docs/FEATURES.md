@@ -251,6 +251,19 @@ waiting tasks shows in the tab title and, on mobile, as a badge on the menu butt
 After the server is updated, open pages notice the new version and reload themselves — at once if nothing is being
 edited, otherwise once the edit is over, with a banner offering to reload.
 
+## Installable app and push notifications
+
+- TasksPipes can be **installed** as an app (on a phone's home screen, or from the browser's address bar on a
+  computer): it opens in its own window, with its icon. Its service worker keeps only the interface (the page,
+  scripts, styles, fonts and icons) for quick starts; data — tasks, files, avatars, every `/api` request — always
+  comes from the server and is never kept by it.
+- **Notifications on this device** (*Settings*): once turned on, a device gets a notification for what you chose to
+  get *at once* (task received, owned, refused, mention, task no longer blocked…), while TasksPipes is not open — in
+  the app, the notification shows live. A click opens the task. Confidential and team-only tasks are only named by
+  their key; access is checked again when sending. E-mails follow their own settings. Without e-mail on the
+  instance, the choices of notifications are offered to those who turned push on.
+- Signing out turns push off for that device. A device the push service no longer knows is forgotten.
+
 ## E-mail notifications
 
 With e-mail set up on the instance, TasksPipes tells people by e-mail what needs them, even with the app closed:
