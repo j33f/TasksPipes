@@ -186,6 +186,12 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
 Every person and team has an incoming bucket that receives tasks sent by others. A member **accepts** a task into a
 pipe and column, or **refuses** it with a reason: it then goes back to the sender's incoming.
 
+A task sent to an incoming can have the plain *Task* type or a type offered by the recipient's pipes that the sender
+can see: the **open** pipes of someone else's space (private pipes never show through), every pipe of one's own space
+or team; archived pipes do not count. When accepting a task, it can be **turned into another type** offered by the
+chosen pipe (the dialog says when the pipe does not offer its current type); fields both types share are kept, and
+the change is recorded in the history. In a pipe, a task's page turns it into any type the pipe offers.
+
 ## Search
 
 **Search** at the top of the sidebar, or **Ctrl + K** (**⌘ + K** on a Mac) anywhere, finds tasks in every pipe and

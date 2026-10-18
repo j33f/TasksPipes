@@ -416,6 +416,8 @@ export const FR: Record<string, string> = {
   "Unsubscribed": "Désabonnement effectué",
   "You will no longer get e-mails about: {what}. You can turn them back on in the settings of TasksPipes.": "Vous ne recevrez plus d'e-mails pour : {what}. Vous pouvez les réactiver dans les réglages de TasksPipes.",
 
+  "This task type fits none of the recipient's pipes": "Ce type de tâche ne correspond à aucun pipe du destinataire",
+
   // Data created for the user
   Personal: "Perso",
   "TasksPipes task #{n}": "Tâche TasksPipes #{n}",

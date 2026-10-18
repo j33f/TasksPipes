@@ -761,4 +761,5 @@ export const FR: Record<string, string> = {
   "The daily digest comes in the evening, with the reports; due dates are reminded in the morning, at the hour chosen.": "Le résumé quotidien arrive le soir, avec les rapports ; les échéances sont rappelées le matin, à l'heure choisie.",
   "invitation expired: send a new link to let them in": "invitation expirée : envoyez un nouveau lien pour lui donner accès",
   "Someone mentions me (no e-mail while I am in the app)": "Quelqu'un me mentionne (pas d'e-mail pendant que je suis dans l'application)",
+  "This pipe does not offer this type: you can turn the task into one of its types.": "Ce pipe ne propose pas ce type : vous pouvez transformer la tâche en l'un de ses types.",
 };

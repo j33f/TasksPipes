@@ -110,6 +110,19 @@ function assertTaskTypeUsable(type: TaskType, userId: string, pipeKindId: string
   throw bad("Invalid task type");
 }
 
+/**
+ * Task types of a task sent to a space's incoming: the plain task, and those of the space's pipes the sender sees
+ * (all of them for a member, the open ones otherwise, so that no private pipe shows through), archived ones left out.
+ */
+async function incomingTaskTypes(spaceId: string, userId: string): Promise<Set<string>> {
+  const { rows } = await query(
+    `SELECT DISTINCT p.kind FROM pipes p WHERE p.space_id = $1 AND p.archived_at IS NULL
+       AND (p.visibility = 'open' OR EXISTS (SELECT 1 FROM space_members m WHERE m.space_id = p.space_id AND m.user_id = $2))`,
+    [spaceId, userId]
+  );
+  return new Set(["task", ...rows.flatMap((r) => pipeTypeById(r.kind)?.taskTypes ?? [])]);
+}
+
 // ---------------------------------------------------------------------------
 // Data access helpers
 
@@ -1451,6 +1464,7 @@ export async function apiRoutes(app: FastifyInstance) {
       spaceId = uuid(b.spaceId, "Space");
       if (!(await spaceVisible(spaceId, uid))) throw notFound("Space not found");
       await assertReachable(spaceId);
+      if (!(await incomingTaskTypes(spaceId, uid)).has(type.id)) throw bad("This task type fits none of the recipient's pipes");
       senderId = uid;
     }
     const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Owner")));
@@ -1589,22 +1603,33 @@ export async function apiRoutes(app: FastifyInstance) {
     const wanted = b.stage ?? (b.status === undefined && p.kind === t.pipe_kind ? t.stage : null);
     const c = resolveStage(p.kind, wanted, b.status === undefined ? t.status : status(b.status));
     const comment = text(b.comment, "Comment") || null;
+    // Its type may change on the way, to one the target pipe offers (fields of the same id are kept).
+    const type = b.taskType === undefined ? null : taskType(b.taskType);
+    if (type && type.id !== t.task_type) {
+      if (type.id !== "task" && !pipeTypeById(p.kind)?.taskTypes.includes(type.id)) throw bad("Invalid task type");
+      assertTaskTypeUsable(type, uid, p.kind, t.task_type);
+    }
+    const retyped = type && type.id !== t.task_type ? type : null;
     await tx(async (client) => {
       const position =
         typeof b.position === "number" && Number.isFinite(b.position)
           ? b.position
           : await nextPosition(client, p.space_id, p.id, c.id);
       await client.query(
-        `UPDATE tasks SET space_id = $2, pipe_id = $3, status = $4, stage = $7, position = $5, assignee_id = $6, updated_at = now()
+        `UPDATE tasks SET space_id = $2, pipe_id = $3, status = $4, stage = $7, position = $5, assignee_id = $6,
+           task_type = $8, updated_at = now()
          WHERE id = $1`,
-        [t.id, p.space_id, p.id, c.status, position, await keptAssignee(p.space_id, t.assignee_id, client), c.id]
+        [t.id, p.space_id, p.id, c.status, position, await keptAssignee(p.space_id, t.assignee_id, client), c.id, retyped?.id ?? t.task_type]
       );
       const row = await getTaskRow(t.id, client);
       const before = snapshot(t);
       const after = snapshot(row!);
+      const details = retyped ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: retyped.label } } : null;
       if (before.pipe_id !== after.pipe_id || before.stage !== after.stage || comment) {
         const type = !t.pipe_id ? "accepted" : before.pipe_id !== after.pipe_id ? "moved" : "status";
-        await recordEvent(client, t.id, uid, type, before, after, comment);
+        await recordEvent(client, t.id, uid, type, before, after, comment, details);
+      } else if (details) {
+        await recordEvent(client, t.id, uid, "fields", before, after, null, details);
       }
     });
     // Accepted out of an incoming: the other members' counts drop.

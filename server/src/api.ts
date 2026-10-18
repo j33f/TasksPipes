@@ -105,7 +105,9 @@ export const V1_ROUTES: Record<string, Doc> = {
   },
   "POST /tasks/:id/move": {
     tag: "Tasks", summary: "Move a task to a pipe of its space", params: idParams,
-    body: { type: "object", required: ["pipeId"], properties: { pipeId: uuid, stage: { type: "string" } } }, response: ok,
+    body: { type: "object", required: ["pipeId"], properties: {
+      pipeId: uuid, stage: { type: "string" }, taskType: { type: "string", description: "A task type the target pipe offers, to change it on the way" },
+    } }, response: ok,
   },
   "POST /tasks/:id/send": {
     tag: "Tasks", summary: "Send a task to a space's incoming", params: idParams,
