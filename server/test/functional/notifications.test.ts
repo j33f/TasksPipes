@@ -104,8 +104,11 @@ describe("e-mail notifications", () => {
     const pipe = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Digest board" })).body.id;
     const id = (await alice.post("/api/tasks", { title: "Discussed", pipeId: pipe })).body.id;
     await carol.post(`/api/tasks/${id}/comments`, { body: "Looks good" });
-    expect(to(await run(), await emailOf(alice)).filter((m) => m.html.includes(id))).toHaveLength(0);
-    const evening = at(addDays(localDay(new Date(), "UTC"), 1), "18:30");
+    // Two days ahead, whatever the time the tests run at: the pass of beforeAll (a day ahead) may already have sent
+    // the next day's digest. Before the report hour, nothing goes out yet.
+    const day = addDays(localDay(new Date(), "UTC"), 2);
+    expect(to(await run(at(day, "09:00")), await emailOf(alice)).filter((m) => m.html.includes(id))).toHaveLength(0);
+    const evening = at(day, "18:30");
     const [digest, ...more] = to(await run(evening), await emailOf(alice)).filter((m) => m.html.includes(id));
     expect(more).toHaveLength(0);
     expect(digest.subject).toMatch(/^Your TasksPipes notifications — /);
@@ -232,12 +235,12 @@ describe("unsubscribing", () => {
 });
 
 describe("without e-mail", () => {
-  it("are neither offered nor queued", async () => {
+  it("are neither offered nor queued (without a push device)", async () => {
     notificationState.enabled = false;
     try {
       const me = (await bob.get("/api/me")).body;
       expect(me.features.notifications).toBe(false);
-      expect(me.notificationPrefs).toBeUndefined();
+      // The choices stay readable (they apply to push notifications), but are not offered for change.
       expect((await bob.put("/api/me/notifications", { comment: "off" })).status).toBe(404);
       const id = (await alice.post("/api/tasks", { title: "No SMTP", spaceId: spaces.bob })).body.id;
       expect((await pool.query(`SELECT 1 FROM notifications WHERE task_id = $1`, [id])).rowCount).toBe(0);

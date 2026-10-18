@@ -2,6 +2,8 @@ import { STATUS_BY_ID, formatDate } from "./constants";
 import type { EventSide, TaskEvent } from "./types";
 import { t } from "./i18n.svelte";
 import { gitKindLabel } from "./git";
+import { priorityName } from "./labels";
+import { formatWork } from "./worklog";
 
 /** "#12 “Title”" for a pull/merge request, "“Title”" for a commit. */
 const gitRef = (e: TaskEvent) => {
@@ -53,6 +55,12 @@ export function eventSummary(e: TaskEvent): string {
         : t("removed the file “{name}”", { name: e.details?.removed ?? "" });
     case "linked":
       return t("linked the {kind} {ref}", { kind: gitKindLabel(e.details?.kind ?? "commit"), ref: gitRef(e) });
+    case "time":
+      return t("deleted {time} logged by {name} on {day}", {
+        time: formatWork(e.details?.timeRemoved?.minutes ?? 0), name: e.details?.timeRemoved?.of ?? t("someone"), day: formatDate(e.details?.timeRemoved?.spentOn),
+      });
+    case "dependency":
+      return e.details?.dependency === "removed" ? t("removed a task it waited for") : t("added a task it waits for");
     case "checklist":
       return t(e.details?.done ? "checked “{item}”" : "unchecked “{item}”", { item: e.details?.item ?? "" });
     default:
@@ -92,6 +100,14 @@ export function eventChanges(e: TaskEvent): string[] {
       kind: gitKindLabel(e.details.kind ?? "pull_request"), ref: gitRef(e), action: t(GIT_ACTIONS[e.details.action ?? ""] ?? e.details.action ?? ""),
     }));
   }
+  if (e.details?.estimate) {
+    const est = (m: number | null) => (m ? formatWork(m) : t("none"));
+    out.push(t("Estimate: {from} → {to}", { from: est(e.details.estimate.from), to: est(e.details.estimate.to) }));
+  }
+  if (e.details?.whileBlocked) out.push(t("While it still waited for other tasks"));
+  if (e.details?.priority) out.push(t("Priority: {from} → {to}", { from: priorityName(e.details.priority.from), to: priorityName(e.details.priority.to) }));
+  if (e.details?.labels?.added.length) out.push(t("Labels added: {names}", { names: e.details.labels.added.join(", ") }));
+  if (e.details?.labels?.removed.length) out.push(t("Labels removed: {names}", { names: e.details.labels.removed.join(", ") }));
   if (e.details?.taskType) out.push(t("Type: {from} → {to}", { from: e.details.taskType.from, to: e.details.taskType.to }));
   if (e.details?.fields?.length) out.push(t("Details: {fields}", { fields: e.details.fields.join(", ") }));
   return out;
@@ -99,6 +115,6 @@ export function eventChanges(e: TaskEvent): string[] {
 
 export function eventIcon(type: TaskEvent["type"]) {
   return (
-    { created: "plus", sent: "send", accepted: "check", moved: "arrow", status: "pipe", refused: "return", edited: "edit", updated: "edit", comment: "comment", fields: "edit", file: "doc", checklist: "checklist", linked: "branch" } as const
+    { created: "plus", sent: "send", accepted: "check", moved: "arrow", status: "pipe", refused: "return", edited: "edit", updated: "edit", comment: "comment", fields: "edit", file: "doc", checklist: "checklist", linked: "branch", dependency: "link", time: "history" } as const
   )[type] ?? "history";
 }

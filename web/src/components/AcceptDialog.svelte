@@ -10,11 +10,19 @@
 
   let pipeId = $state<string | null>(untrack(() => pipes[0]?.id ?? null));
   // Column of the chosen pipe; reset to its first column when the pipe changes.
-  const columns = $derived(app.columnsFor(pipes.find((p) => p.id === pipeId)?.kind));
+  const kind = $derived(pipes.find((p) => p.id === pipeId)?.kind);
+  const columns = $derived(app.columnsFor(kind));
   let stage = $state<string | null>(null);
   $effect(() => {
     stage = columns[0]?.id ?? null;
   });
+  // Its type can be changed to one the chosen pipe offers; it keeps its own by default.
+  const current = $derived(app.taskType(task.taskType));
+  const typeChoices = $derived.by(() => {
+    const list = app.taskTypesFor(kind);
+    return current && !list.some((x) => x.id === current.id) ? [current, ...list] : list;
+  });
+  let taskType = $state(untrack(() => task.taskType));
   let comment = $state("");
   let busy = $state(false);
   let error = $state("");
@@ -23,7 +31,7 @@
     e.preventDefault();
     busy = true;
     try {
-      await api.post(`/tasks/${task.id}/move`, { pipeId, stage, comment });
+      await api.post(`/tasks/${task.id}/move`, { pipeId, stage, comment, ...(taskType !== task.taskType ? { taskType } : {}) });
       app.toast(t("Task accepted"));
       app.refresh();
       ondone?.();
@@ -54,6 +62,17 @@
           {#each columns as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
         </select>
       </div>
+      {#if typeChoices.length > 1}
+        <div class="field">
+          <label for="acc-type">{t("Task type")}</label>
+          <select id="acc-type" class="input" bind:value={taskType}>
+            {#each typeChoices as tt (tt.id)}<option value={tt.id}>{tt.label}</option>{/each}
+          </select>
+          {#if current && taskType === current.id && !app.taskTypesFor(kind).some((x) => x.id === current.id)}
+            <div class="hint">{t("This pipe does not offer this type: you can turn the task into one of its types.")}</div>
+          {/if}
+        </div>
+      {/if}
       <div class="field">
         <label for="acc-comment">{t("Comment (optional)")}</label>
         <input id="acc-comment" class="input" bind:value={comment} />

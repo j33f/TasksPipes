@@ -17,7 +17,7 @@
     onsaved: () => void;
   } = $props();
 
-  type DraftColumn = { id?: string; key: number; label: string; status: Status; color: string };
+  type DraftColumn = { id?: string; key: number; label: string; status: Status; color: string; wipLimit?: number | null };
   let key = 0;
 
   // Labels of a built-in type come in the current language: a copy keeps them in that language.
@@ -73,7 +73,7 @@
     error = "";
     const body = {
       ...draft,
-      columns: draft.columns.map(({ id, label, status, color }) => ({ id, label, status, color })),
+      columns: draft.columns.map(({ id, label, status, color, wipLimit }) => ({ id, label, status, color, ...(wipLimit ? { wipLimit } : {}) })),
       templates: draft.templates.split("\n").map((line) => line.trim()).filter(Boolean),
     };
     try {
@@ -164,6 +164,8 @@
             <select class="input status" bind:value={c.status} title={t("State")}>
               {#each STATUSES as s (s.id)}<option value={s.id}>{t(s.label)}</option>{/each}
             </select>
+            <input class="input wip" type="number" min="1" max="999" bind:value={c.wipLimit} placeholder={t("No limit")}
+              title={t("Work in progress limit: the board warns when the column holds more tasks")} aria-label={t("Limit of “{name}”", { name: c.label })} />
             <button type="button" class="btn ghost icon small" title={t("Move up")} disabled={i === 0}
               onclick={() => (draft.columns = moved(draft.columns, i, -1))}><span class="up"><Icon name="chevron" size={14} /></span></button>
             <button type="button" class="btn ghost icon small" title={t("Move down")} disabled={i === draft.columns.length - 1}
@@ -231,6 +233,7 @@
   .col-row { display: flex; align-items: center; gap: 6px; }
   .col-row .input { min-height: 32px; padding: 4px 8px; font-size: 14px; }
   .col-row .status { width: 170px; flex-shrink: 0; }
+  .col-row .wip { width: 92px; flex-shrink: 0; }
   .dot { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; position: relative; overflow: hidden; cursor: pointer; }
   .dot input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
   .up { display: flex; transform: rotate(-90deg); }

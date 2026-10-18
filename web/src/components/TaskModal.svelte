@@ -4,7 +4,7 @@
   import { STATUSES, dueState, formatDate, formatDateTime, relativeTime } from "../lib/constants";
   import TaskFields, { type FieldFile } from "./TaskFields.svelte";
   import { eventChanges, eventIcon, eventSummary } from "../lib/events";
-  import type { ChecklistItem, DocRef, Pipe, TaskDetail, UserRef } from "../lib/types";
+  import type { ChecklistItem, DocRef, Label, Pipe, TaskDetail, UserRef } from "../lib/types";
   import Modal from "./Modal.svelte";
   import Markdown from "./Markdown.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
@@ -18,6 +18,14 @@
   import Checklist from "./Checklist.svelte";
   import DevLinks from "./DevLinks.svelte";
   import TaskTiming from "./TaskTiming.svelte";
+  import RepeatSection from "./RepeatSection.svelte";
+  import TaskBadges from "./TaskBadges.svelte";
+  import LabelsModal from "./LabelsModal.svelte";
+  import { PRIORITIES } from "../lib/labels";
+  import DependenciesSection from "./DependenciesSection.svelte";
+  import TimeSection from "./TimeSection.svelte";
+  import { confirmWhileBlocked } from "../lib/dependencies";
+  import { mentionableOn } from "../lib/mentions";
   import { t, tn } from "../lib/i18n.svelte";
 
   let { id, onclose }: { id: string; onclose: () => void } = $props();
@@ -38,7 +46,15 @@
   let collectionId = $state<string | null>(null);
   let comment = $state("");
   let commentKey = $state(0);
-  let dialog = $state<"send" | "refuse" | "accept" | null>(null);
+  let dialog = $state<"send" | "refuse" | "accept" | "labels" | null>(null);
+  // Labels of the task's space, loaded when choosing them.
+  let spaceLabels = $state<Label[] | null>(null);
+  const loadLabels = () =>
+    api.get<Label[]>(`/spaces/${task!.space.id}/labels`).then((l) => (spaceLabels = l)).catch((err) => (error = errorMessage(err)));
+  function toggleLabel(l: Label) {
+    const ids = task!.labels.some((x) => x.id === l.id) ? task!.labels.filter((x) => x.id !== l.id).map((x) => x.id) : [...task!.labels.map((x) => x.id), l.id];
+    patch({ labelIds: ids });
+  }
 
   async function load() {
     try {
@@ -75,7 +91,12 @@
   }
 
   const patch = (body: Record<string, unknown>, success?: string) => run(() => api.patch(`/tasks/${id}`, body), success);
-  const move = (pipeId: string, stage?: string) => run(() => api.post(`/tasks/${id}/move`, { pipeId, stage }));
+  function move(pipeId: string, stage?: string) {
+    const to = stage ? app.columnsFor(task?.pipe?.kind).find((c) => c.id === stage)?.status : undefined;
+    // Still waiting for other tasks: asked first (the select goes back if not).
+    if (task && !confirmWhileBlocked(task, to)) return load();
+    return run(() => api.post(`/tasks/${id}/move`, { pipeId, stage }));
+  }
 
   // Sub-tasks: changed in place first so the list reacts at once.
   const items = {
@@ -112,10 +133,11 @@
   }
 
   const taskType = $derived(app.taskType(task?.taskType));
-  // Types offered: those of the pipe type, plus the current one if it comes from elsewhere.
+  // Types it can be turned into: those of the pipe type (in an incoming, those of the space's pipes), plus the current
+  // one if it comes from elsewhere.
   const typeChoices = $derived.by(() => {
     if (!task) return [];
-    const list = app.taskTypesFor(task.pipe?.kind);
+    const list = task.pipe ? app.taskTypesFor(task.pipe.kind) : app.taskTypesForPipes(pipes);
     return taskType && !list.some((x) => x.id === taskType.id) ? [...list, taskType] : list;
   });
 
@@ -200,7 +222,7 @@
           onkeydown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()} aria-label={t("Title")} />
 
         {#if editingDescription}
-          <MarkdownEditor bind:value={descriptionDraft} rows={10} autofocus />
+          <MarkdownEditor bind:value={descriptionDraft} rows={10} autofocus mentions={mentionableOn(task.id)} />
           <div class="row" style="margin-top:8px; justify-content:flex-end">
             <button class="btn neutral small" onclick={() => (editingDescription = false)}>{t("Cancel")}</button>
             <button class="btn small" disabled={busy} onclick={saveDescription}>{t("Save")}</button>
@@ -229,6 +251,9 @@
               onadd={items.add} ontoggle={items.toggle} onrename={items.rename} ondelete={items.remove} onmove={items.move} />
           </div>
         {/if}
+
+        <DependenciesSection {task} onchange={load} />
+        <TimeSection {task} onchange={load} />
 
         {#if task.gitConnected || task.links.length}
           <div class="infos">
@@ -273,7 +298,7 @@
           {#if perms?.comment}
             <form class="comment-form" onsubmit={postComment}>
               {#key commentKey}
-                <MarkdownEditor bind:value={comment} rows={3} placeholder={t("Add a comment (Markdown)…")} />
+                <MarkdownEditor bind:value={comment} rows={3} placeholder={t("Add a comment (Markdown)…")} mentions={mentionableOn(task.id)} />
               {/key}
               <div class="row" style="justify-content:flex-end; margin-top:8px">
                 <button class="btn small" disabled={busy || !comment.trim()}>{t("Comment")}</button>
@@ -323,6 +348,38 @@
             </select>
           {:else}
             <div class="value"><Icon name={iconOf(taskType?.icon)} size={16} />{taskType?.label ?? task.taskType}</div>
+          {/if}
+        </div>
+
+        <div class="prop">
+          <span class="label-text">{t("Priority")}</span>
+          {#if perms?.editContent}
+            <select class="input" value={task.priority ?? ""} disabled={busy} aria-label={t("Priority")}
+              onchange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; patch({ priority: v ? Number(v) : null }); }}>
+              <option value="">{t("No priority")}</option>
+              {#each PRIORITIES as p (p.value)}<option value={p.value}>{t(p.label)}</option>{/each}
+            </select>
+          {:else}
+            <div class="value">{#if task.priority}<TaskBadges priority={task.priority} />{t(PRIORITIES[task.priority - 1].label)}{:else}<span class="muted">{t("No priority")}</span>{/if}</div>
+          {/if}
+        </div>
+
+        <div class="prop">
+          <span class="label-text">{t("Labels")}</span>
+          <div class="value wrap"><TaskBadges labels={task.labels} />{#if !task.labels.length}<span class="muted">—</span>{/if}</div>
+          {#if perms?.editContent}
+            <details class="label-pick" ontoggle={(e) => (e.currentTarget as HTMLDetailsElement).open && loadLabels()}>
+              <summary class="btn ghost small">{t("Choose labels")}</summary>
+              {#if spaceLabels}
+                {#each spaceLabels as l (l.id)}
+                  <label class="check"><input type="checkbox" checked={task.labels.some((x) => x.id === l.id)} disabled={busy} onchange={() => toggleLabel(l)} />
+                    <TaskBadges labels={[l]} /></label>
+                {:else}
+                  <p class="muted small">{t("This space has no label yet.")}</p>
+                {/each}
+                {#if perms.manage}<button class="btn ghost small" onclick={() => (dialog = "labels")}>{t("Manage labels")}</button>{/if}
+              {/if}
+            </details>
           {/if}
         </div>
 
@@ -383,6 +440,8 @@
           {/if}
         </div>
 
+        {#if task.pipe}<RepeatSection {task} onchange={load} />{/if}
+
         <div class="prop">
           <span class="label-text">{t("Time per step")}</span>
           <TaskTiming timing={task.timing} />
@@ -403,6 +462,7 @@
 
 {#if task && dialog === "send"}<SendDialog {task} onclose={() => (dialog = null)} />{/if}
 {#if task && dialog === "refuse"}<RefuseDialog {task} onclose={() => (dialog = null)} ondone={onclose} />{/if}
+{#if task && dialog === "labels"}<LabelsModal spaceId={task.space.id} onclose={() => { dialog = null; loadLabels(); }} />{/if}
 {#if task && dialog === "accept"}<AcceptDialog {task} pipes={pipes.filter((p) => !p.archived)} onclose={() => (dialog = null)} />{/if}
 
 <style>
@@ -417,6 +477,9 @@
   .prop .label-text { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-tertiary); }
   .prop .value { font-size: 14px; display: flex; align-items: center; gap: 6px; min-height: 28px; }
   .prop .input { min-height: 32px; padding: 4px 8px; font-size: 14px; }
+  .prop .value.wrap { flex-wrap: wrap; }
+  .label-pick summary { list-style: none; display: inline-flex; }
+  .label-pick .check { display: flex; align-items: center; gap: 6px; font-size: 14px; padding: 2px 0; }
   .timeline { margin-top: 32px; }
   .infos { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--divider); }
   .event { display: flex; gap: 10px; padding: 8px 0; font-size: 14px; }

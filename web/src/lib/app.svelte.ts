@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { disablePush } from "./push";
 import { setParams } from "./router.svelte";
 import type { Column, Me, PipeType, SidebarData, SpaceSummary, Task, TaskType, User, UserRef } from "./types";
 
@@ -14,9 +15,10 @@ class AppState {
   toastMessage = $state<{ message: string; type: "info" | "error"; id: number; action?: { label: string; run: () => void } } | null>(null);
 
   /** Account invited by e-mail: no Outline access, may enable TOTP. */
-  isGuest = $derived(this.me?.user.kind === "email");
-  /** Dialog opened from the user menu (or the dashboard, notifications…). */
-  dialog = $state<"settings" | "calendar" | "about" | "invite" | null>(null);
+  /** An account without Outline (invited by e-mail, or signing in with the company's provider): no Outline features. */
+  isGuest = $derived(this.me?.user.kind === "email" || this.me?.user.kind === "oidc");
+  /** Dialog opened from the user menu (or the dashboard, notifications…, the search with Ctrl/⌘ + K). */
+  dialog = $state<"settings" | "calendar" | "about" | "invite" | "search" | null>(null);
   /** Tasks waiting in my incoming and in my teams' ones. */
   pendingCount = $derived(
     this.spaces.filter((s) => s.myRole && (s.id === this.me?.personalSpaceId || s.kind === "team"))
@@ -106,6 +108,12 @@ class AppState {
     return ids.map((id) => this.taskType(id)).filter((t): t is TaskType => Boolean(t));
   }
 
+  /** Task types a task may have in an incoming: the plain task, and those of the space's pipes (not archived). */
+  taskTypesForPipes(pipes: { kind: string; archived?: boolean }[]): TaskType[] {
+    const ids = new Set(["task", ...pipes.filter((p) => !p.archived).flatMap((p) => this.pipeType(p.kind)?.taskTypes ?? [])]);
+    return this.taskTypes.filter((t) => ids.has(t.id)).sort((a, b) => Number(b.id === "task") - Number(a.id === "task"));
+  }
+
   isPinned(pipeId: string): boolean {
     return this.sidebar.pinned.some((p) => p.id === pipeId);
   }
@@ -143,6 +151,8 @@ class AppState {
   }
 
   async logout() {
+    // A shared device gets nothing more of this person.
+    await disablePush().catch(() => {});
     await api.post("/auth/logout").catch(() => {});
     this.me = null;
   }

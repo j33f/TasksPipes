@@ -1,10 +1,12 @@
-// Minimal fake Outline API for local testing. Tokens: alice-token, bob-token, carol-token.
+// Minimal fake Outline API for local testing. Tokens: alice-token, bob-token, carol-token (dave-token: a colleague
+// listed in the workspace whom the tests never sign in).
 import http from "node:http";
 
 const users = {
   "alice-token": { id: "11111111-1111-4111-8111-111111111111", name: "Alice Martin", email: "alice@example.com", avatarUrl: null },
   "bob-token": { id: "22222222-2222-4222-8222-222222222222", name: "Bob Durand", email: "bob@example.com", avatarUrl: null },
   "carol-token": { id: "33333333-3333-4333-8333-333333333333", name: "Carol Petit", email: "carol@example.com", avatarUrl: null },
+  "dave-token": { id: "44444444-4444-4444-8444-444444444444", name: "Dave Leroy", email: "dave@example.com", avatarUrl: null },
 };
 const docs = [
   { id: "doc-1", title: "Roadmap 2027", url: "/doc/roadmap-2027-abc123", updatedAt: new Date().toISOString(), collectionId: "col-1" },

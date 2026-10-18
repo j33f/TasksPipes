@@ -28,6 +28,15 @@ describe("validatePipeType", () => {
     expect(t.columns.map((c) => c.id)).toEqual(["keep", "same", "same_2"]);
   });
 
+  it("keeps an optional work in progress limit per column", () => {
+    const t = validatePipeType({ label: "X", columns: [{ label: "Doing", status: "ongoing", wipLimit: 3 }, { label: "Done", status: "done", wipLimit: "" }] }, USER);
+    expect(t.columns.map((c) => c.wipLimit)).toEqual([3, undefined]);
+    for (const wipLimit of [0, 1000, 2.5, "many"]) {
+      expect(() => validatePipeType({ label: "X", columns: [{ label: "A", status: "ongoing", wipLimit }, { label: "B", status: "done" }] }, USER))
+        .toThrow("Column {n}: the limit is a number from 1 to 999");
+    }
+  });
+
   it("needs two columns, one of them done", () => {
     expect(err(() => validatePipeType({ label: "X", columns: columns.slice(0, 1) }, USER))).toBe("At least two columns are needed");
     expect(err(() => validatePipeType({ label: "X", columns: [columns[0], columns[0]] }, USER))).toBe("At least one “done” column is needed");

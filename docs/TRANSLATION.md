@@ -1,11 +1,13 @@
 # Translation
 
-TasksPipes is available in English and French. The language follows the browser, unless chosen in **Settings** (account menu).
+TasksPipes is available in English, French and Spanish. The language follows the browser, unless chosen in
+**Settings** (account menu).
 
 ## How it works
 
-Texts are written in English in the code and wrapped in `t()`; dictionaries map them to other languages. A missing
-translation shows the English text.
+Texts are written in English in the code and wrapped in `t()` (web app) or `tr()` (server); each language has **one
+file**, `locales/<code>.json` at the root of the repository, that maps them to that language. A missing translation
+shows the English text.
 
 ```ts
 t("New task")                                   // "Nouvelle tâche" in French
@@ -13,24 +15,36 @@ t("Sent by {name}", { name: task.sender.name }) // placeholders are filled in
 tn(count, "{n} task", "{n} tasks")              // plural forms, following the language's rules
 ```
 
-| Part | Code | Dictionaries |
-| --- | --- | --- |
-| Web app | `web/src/lib/i18n.svelte.ts` | `web/src/lib/locales/fr.ts` |
-| Server: error messages, e-mails, calendar | `server/src/i18n.ts` | `FR` in the same file |
-| Built-in catalog of pipe and task types | `server/src/pipeTypes.ts` | `server/src/catalog-en.ts` |
+A language file holds:
 
-The web app sends its language with each request (`X-Locale` header); otherwise the server uses the browser's
-`Accept-Language`, then `DEFAULT_LOCALE`.
+```jsonc
+{
+  "name": "Español",          // the language's own name, in the language menu
+  "intl": "es-ES",            // BCP 47 tag for dates and numbers
+  "csvSeparator": ";",        // CSV exports for spreadsheets in that language ("," or ";")
+  "web": { "New task": "Nueva tarea" },               // the web app
+  "server": { "{label} is required": "{label}: obligatorio" }, // errors, e-mails, calendar, reports
+  "catalog": { "Tâches générales": "Tareas generales" }        // the built-in pipe and task types
+}
+```
 
-The built-in catalog is the exception: it describes French training centres, so it is written in French and
-translated into English. Choice-list options keep their French value, which is what tasks store, and get a
-translated label for display.
+The web app bundles every file of `locales/` when it is built; the server reads them when it starts. The web app
+sends its language with each request (`X-Locale` header); otherwise the server uses the browser's `Accept-Language`,
+then `DEFAULT_LOCALE`.
+
+The built-in catalog is the exception: it describes French training centres, so it is written in French, and the
+`catalog` part translates it from French (the French file has none). Choice-list options keep their French value,
+which is what tasks store, and get a translated label for display. A catalog label missing in a language shows in
+English.
 
 ## Adding a language
 
-1. Add a dictionary next to `web/src/lib/locales/fr.ts`, and use it in `t()` (`web/src/lib/i18n.svelte.ts`).
-2. Add the language to `LOCALES` in `web/src/lib/i18n.svelte.ts` and `server/src/i18n.ts`, and to the `locale`
-   check of the `users` table in `server/src/db.ts`.
-3. Translate the server messages in `server/src/i18n.ts`, and the catalog if needed.
+1. Copy `locales/fr.json` to `locales/<code>.json` (a two- or three-letter code: `de`, `it`, `pt`, `nl`…).
+2. Set `name`, `intl` and `csvSeparator`, and translate the values of `web` and `server` (the keys are the English
+   texts). Translate `catalog` from `locales/en.json`: its keys are the French labels, its values their English
+   version.
+3. Rebuild and restart (`docker compose up --build`): the language shows in the menu. No code changes.
 
 Keep the placeholders (`{name}`, `{n}`…) as they are, and keep translations short: they appear in buttons and menus.
+A language may be published partly translated: the tests check that every placeholder is kept and that no entry is
+stale, and tell how many texts are still shown in English. French must stay complete.

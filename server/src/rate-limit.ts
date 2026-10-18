@@ -174,10 +174,25 @@ export const LIMITS = {
   totp: { name: "totp", max: 20, timeWindow: 15 * MIN },
   apiKey: { name: "api-key", max: 20, timeWindow: 15 * MIN },
   oauth: { name: "oauth", max: 30, timeWindow: 15 * MIN },
+  oidc: { name: "oidc", max: 30, timeWindow: 15 * MIN },
   totpSettings: { name: "totp-settings", max: 10, timeWindow: 15 * MIN, keyGenerator: perPerson },
   catalogUsage: { name: "catalog-usage", max: 60, timeWindow: MIN, keyGenerator: perPerson },
+  search: { name: "search", max: 120, timeWindow: MIN, keyGenerator: perPerson },
+  outlineInvite: { name: "outline-invite", max: 20, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  pipeExport: { name: "pipe-export", max: 60, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  pipeImportPreview: { name: "pipe-import-preview", max: 300, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  pushSubscriptions: { name: "push-subscriptions", max: 30, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  timeEntries: { name: "time-entries", max: 120, timeWindow: MIN, keyGenerator: perPerson },
+  dependencies: { name: "dependencies", max: 120, timeWindow: MIN, keyGenerator: perPerson },
+  pipeImport: { name: "pipe-import", max: 20, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  dataExport: { name: "data-export", max: 5, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  accountDeletion: { name: "account-deletion", max: 10, timeWindow: 15 * MIN, keyGenerator: perPerson },
   webhook: { name: "webhook", max: 600, timeWindow: MIN, keyGenerator: perSecret("token") },
   calendar: { name: "calendar", max: 60, timeWindow: MIN, keyGenerator: perSecret("file") },
+  // The public API, per token (or address when the token is wrong), and the creation of tokens and webhooks.
+  api: { name: "api", max: 600, timeWindow: MIN },
+  apiTokens: { name: "api-tokens", max: 20, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  webhooks: { name: "webhooks", max: 60, timeWindow: 60 * MIN, keyGenerator: perPerson },
 } satisfies Record<string, Limit>;
 
 interface StoreParams {
@@ -214,6 +229,17 @@ export async function rateLimits(app: FastifyInstance) {
     errorResponseBuilder: () => new HttpError(429, "Too many requests: please try again later"),
   });
   app.addHook("onClose", closeRateLimits);
+}
+
+/** Counts a request against a limit from a hook shared by many routes (the public API); throws 429 past it. */
+export async function enforceLimit(l: Limit, key: string) {
+  const h = await counter
+    .hit(`${l.name}:${key}`, l.max, l.timeWindow, l.maxBlockMs ?? MAX_BLOCK_MS, config.rateLimitBackoffFactor)
+    .catch((err: Error) => {
+      log?.warn({ err, limit: l.name }, "Rate limit store unavailable, request let through");
+      return null;
+    });
+  if (h && (h.blocked || h.count > l.max)) throw new HttpError(429, "Too many requests: please try again later");
 }
 
 /** Route options limiting it. */

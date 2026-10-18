@@ -14,12 +14,17 @@
   import CalendarModal from "./components/CalendarModal.svelte";
   import AboutModal from "./components/AboutModal.svelte";
   import InviteModal from "./components/InviteModal.svelte";
+  import SearchModal from "./components/SearchModal.svelte";
+  import { isSearchShortcut } from "./lib/search";
   import Home from "./pages/Home.svelte";
   import SpacePage from "./pages/SpacePage.svelte";
   import PipePage from "./pages/PipePage.svelte";
   import MyTasks from "./pages/MyTasks.svelte";
   import Next from "./pages/Next.svelte";
+  import Calendar from "./pages/Calendar.svelte";
   import Designer from "./pages/Designer.svelte";
+  import Admin from "./pages/Admin.svelte";
+  import AccountDelete from "./pages/AccountDelete.svelte";
 
   let navOpen = $state(false);
 
@@ -91,18 +96,31 @@
     if (p === "/") return { name: "home" } as const;
     if (p === "/tasks") return { name: "tasks" } as const;
     if (p === "/next") return { name: "next" } as const;
+    if (p === "/calendar") return { name: "calendar" } as const;
     if (p === "/designer") return { name: "designer" } as const;
+    if (p === "/admin" && app.me?.admin) return { name: "admin" } as const;
     if ((m = p.match(/^\/spaces\/([^/]+)$/))) return { name: "space", id: m[1] } as const;
     if ((m = p.match(/^\/pipes\/([^/]+)$/))) return { name: "pipe", id: m[1] } as const;
     return { name: "notfound" } as const;
   });
   const taskId = $derived(router.params.get("task"));
+
+  // Ctrl/⌘ + K opens the search from anywhere once signed in.
+  function onkeydown(e: KeyboardEvent) {
+    if (app.me && isSearchShortcut(e)) {
+      e.preventDefault();
+      app.dialog = "search";
+    }
+  }
 </script>
 
 <svelte:document onclick={interceptLinks} />
+<svelte:window {onkeydown} />
 
 {#if router.path === "/login/magic"}
   {#if app.me !== undefined}<MagicLogin />{/if}
+{:else if router.path === "/account/delete"}
+  {#if app.me !== undefined}<AccountDelete />{/if}
 {:else if app.me === null && router.path === "/login"}
   <Login />
 {:else if app.me}
@@ -131,8 +149,12 @@
         <MyTasks />
       {:else if route.name === "next"}
         <Next />
+      {:else if route.name === "calendar"}
+        <Calendar />
       {:else if route.name === "designer"}
         <Designer />
+      {:else if route.name === "admin"}
+        <Admin />
       {:else if route.name === "space"}
         {#key route.id}<SpacePage id={route.id} />{/key}
       {:else if route.name === "pipe"}
@@ -145,7 +167,8 @@
   {#if app.dialog === "settings"}<AccountModal onclose={() => (app.dialog = null)} />
   {:else if app.dialog === "calendar"}<CalendarModal onclose={() => (app.dialog = null)} />
   {:else if app.dialog === "about"}<AboutModal onclose={() => (app.dialog = null)} />
-  {:else if app.dialog === "invite"}<InviteModal onclose={() => (app.dialog = null)} />{/if}
+  {:else if app.dialog === "invite"}<InviteModal onclose={() => (app.dialog = null)} />
+  {:else if app.dialog === "search"}<SearchModal onclose={() => (app.dialog = null)} />{/if}
   {#if taskId}
     {#key taskId}<TaskModal id={taskId} onclose={() => app.openTask(null)} />{/key}
   {/if}

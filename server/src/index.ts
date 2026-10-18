@@ -1,10 +1,13 @@
 import { config } from "./config.js";
 import { migrate, pool } from "./db.js";
-import { cleanupSessions, disableUnusedInvitations } from "./auth.js";
+import { checkOutlineSessions, cleanupSessions, disableUnusedInvitations } from "./auth.js";
 import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
 import { runScheduledReports } from "./reports.js";
-import { cleanupNotifications, runNotifications } from "./notifications.js";
+import { cleanupNotifications, runNotifications, runPush } from "./notifications.js";
+import { cleanupWebhookDeliveries, runWebhooks } from "./webhooks.js";
+import { runRecurrences } from "./recurrence.js";
+import { recordOccurrence } from "./routes.js";
 
 const app = await buildApp();
 
@@ -19,7 +22,39 @@ setInterval(() => {
   cleanupSessions().catch((err) => app.log.warn({ err }, "Session cleanup failed"));
   disableUnused();
   cleanupNotifications().catch((err) => app.log.warn({ err }, "Notification cleanup failed"));
+  cleanupWebhookDeliveries().catch((err) => app.log.warn({ err }, "Webhook delivery cleanup failed"));
+  // Outline accounts whose access was revoked or suspended in Outline lose their sessions.
+  checkOutlineSessions()
+    .then((n) => n && app.log.info({ closed: n }, "Sessions closed: Outline access ended"))
+    .catch((err) => app.log.warn({ err }, "Checking Outline sessions failed"));
 }, 3_600_000).unref();
+
+// Recurring tasks: the occurrences due, every minute (each made once, whatever the number of instances).
+setInterval(() => {
+  runRecurrences(recordOccurrence)
+    .then((n) => n && app.log.info({ made: n }, "Recurring tasks made"))
+    .catch((err) => app.log.error({ err }, "Making recurring tasks failed"));
+}, 60_000).unref();
+
+// Outgoing webhooks: deliveries due, every 15 seconds.
+let sendingWebhooks = false;
+setInterval(() => {
+  if (sendingWebhooks) return;
+  sendingWebhooks = true;
+  runWebhooks()
+    .catch((err) => app.log.error({ err }, "Webhook sending failed"))
+    .finally(() => (sendingWebhooks = false));
+}, 15_000).unref();
+
+// Push notifications to devices: every 15 seconds, each one pushed once.
+let pushing = false;
+setInterval(() => {
+  if (pushing) return;
+  pushing = true;
+  runPush()
+    .catch((err) => app.log.error({ err }, "Push sending failed"))
+    .finally(() => (pushing = false));
+}, 15_000).unref();
 
 // Reports and notifications by e-mail: checked every minute, each one sent once.
 if (mailEnabled) {

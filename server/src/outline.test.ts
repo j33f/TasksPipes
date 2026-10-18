@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { absoluteOutlineUrl, isPrivateIp, normalizeOutlineUrl } from "./outline.js";
+import { absoluteOutlineUrl, normalizeOutlineUrl } from "./outline.js";
+import { isPrivateIp } from "./net.js";
 
 const reject = async (input: string) => {
   try {

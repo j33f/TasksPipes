@@ -8,11 +8,12 @@
  */
 import { config } from "./config.js";
 import { one, query, type Queryable } from "./db.js";
-import { localize, tr, type Locale } from "./i18n.js";
+import { intlTag, localize, tr, type Locale } from "./i18n.js";
 import { sendHtmlMail } from "./mail.js";
 import { TASK_KEY_PREFIX } from "./git.js";
 import { pipeTypeById, stageLabel, taskTypeById, type Status } from "./pipeTypes.js";
 import { dailyPeriod, isDay, lastWeekday, localDay, weeklyPeriod, zonedParts, type Period } from "./time.js";
+import { loggedInPeriod } from "./worklog.js";
 
 /** Statuses of a task being worked on. */
 const ACTIVE: Status[] = ["started", "ongoing"];
@@ -164,6 +165,8 @@ export function dailyReport(pipeId: string, tasks: Map<string, TaskInfo>, events
 }
 
 export interface WeeklyReport {
+  /** Time logged by hand during the week (worklog.ts), when there is some. */
+  logged?: Awaited<ReturnType<typeof loggedInPeriod>>;
   period: { start: string; end: string };
   /** Per task type: time being worked on, time blocked, tasks worked on, tasks done. */
   byType: { taskType: string; activeMs: number; blockedMs: number; tasks: number; done: number }[];
@@ -252,7 +255,7 @@ export async function pipeDailyReport(pipeId: string, day: string) {
 export async function pipeWeeklyReport(pipeId: string, day: string) {
   const period = weeklyPeriod(day, config.reportHour, config.timezone);
   const { events, tasks } = await loadPipeHistory(pipeId, period.end);
-  return weeklyReport(pipeId, tasks, events, period);
+  return { ...weeklyReport(pipeId, tasks, events, period), logged: await loggedInPeriod(pipeId, period) };
 }
 
 /** Today (local) once the report hour has passed, else yesterday: the latest finished report day. */
@@ -277,6 +280,13 @@ export function duration(ms: number, lang: Locale): string {
   const h = Math.floor(min / 60);
   if (h < 24) return min % 60 ? tr(lang, "{h} h {m}", { h, m: String(min % 60).padStart(2, "0") }) : tr(lang, "{h} h", { h });
   return h % 24 ? tr(lang, "{d} d {h} h", { d: Math.floor(h / 24), h: h % 24 }) : tr(lang, "{d} d", { d: Math.floor(h / 24) });
+}
+
+/** Working time in hours, never in days: "45 min", "26 h 30". */
+export function workDuration(minutes: number, lang: Locale): string {
+  if (minutes < 60) return tr(lang, "{n} min", { n: minutes });
+  const h = Math.floor(minutes / 60);
+  return minutes % 60 ? tr(lang, "{h} h {m}", { h, m: String(minutes % 60).padStart(2, "0") }) : tr(lang, "{h} h", { h });
 }
 
 interface PipeRow {
@@ -315,6 +325,13 @@ export function weeklyEmail(pipe: PipeRow, r: WeeklyReport, lang: Locale, day: s
       + r.byType.map((row) => `<tr>${td(escape(localize(lang, taskTypeById(row.taskType)?.label ?? row.taskType)))}${td(duration(row.activeMs, lang), true)}${td(duration(row.blockedMs, lang), true)}${td(String(row.tasks), true)}${td(String(row.done), true)}</tr>`).join("")
       + `</table>`
     : `<p>${escape(tr(lang, "No time recorded this week."))}</p>`;
+  // Durations only: notes stay in the app.
+  const logged = r.logged?.totalMinutes
+    ? `<h3 style="font-size:15px;margin:18px 0 6px">${escape(tr(lang, "Time logged: {total}", { total: workDuration(r.logged.totalMinutes, lang) }))}</h3>`
+      + `<p style="margin:0">${r.logged.byPerson.map((p) => `${escape(p.name)} ${workDuration(p.minutes, lang)}`).join(" · ")}</p>`
+      + `<ul style="padding-left:18px;margin:6px 0 0">${r.logged.tasks.slice(0, 10).map((t) => taskLine(lang, pipe.kind, t, ` · ${workDuration(t.minutes, lang)}`
+        + (t.estimateMinutes ? ` · ${escape(tr(lang, "{logged} of {estimate} estimated", { logged: workDuration(t.totalMinutes, lang), estimate: workDuration(t.estimateMinutes, lang) }))}` : ""))).join("")}</ul>`
+    : "";
   const top = r.tasks.length
     ? `<h3 style="font-size:15px;margin:18px 0 6px">${escape(tr(lang, "Tasks that took the most time"))}</h3><ul style="padding-left:18px;margin:0">${r.tasks.slice(0, 10).map((t) => taskLine(lang, pipe.kind, t, ` · ${duration(t.activeMs, lang)}`)).join("")}</ul>`
     : "";
@@ -322,13 +339,13 @@ export function weeklyEmail(pipe: PipeRow, r: WeeklyReport, lang: Locale, day: s
     subject: tr(lang, "Time report of {pipe} — week to {day}", { pipe: pipe.name, day }),
     html: wrap(lang, tr(lang, "Time report of {pipe} — week to {day}", { pipe: pipe.name, day }),
       tr(lang, "Time spent on tasks being worked on, from {start} to {end}: {total}.", { start: when(r.period.start, lang), end: when(r.period.end, lang), total: duration(r.totalActiveMs, lang) }),
-      table + top, pipe),
-    empty: !r.tasks.length,
+      table + top + logged, pipe),
+    empty: !r.tasks.length && !r.logged?.totalMinutes,
   };
 }
 
 const when = (iso: string, lang: Locale) =>
-  new Intl.DateTimeFormat(lang === "fr" ? "fr-FR" : "en-GB", { timeZone: config.timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+  new Intl.DateTimeFormat(intlTag(lang), { timeZone: config.timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 
 const wrap = (lang: Locale, title: string, intro: string, body: string, pipe: PipeRow) =>
   `<div lang="${lang}" style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.5;color:#111319;max-width:640px">`
@@ -349,7 +366,8 @@ type Send = (lang: Locale, to: string, subject: string, html: string) => Promise
 async function recipients(spaceId: string) {
   const { rows } = await query(
     `SELECT u.email, u.locale FROM space_members m JOIN users u ON u.id = m.user_id
-     WHERE m.space_id = $1 AND u.email IS NOT NULL AND u.auth_kind <> 'system' AND u.disabled_at IS NULL`,
+     WHERE m.space_id = $1 AND u.email IS NOT NULL AND u.auth_kind <> 'system' AND u.disabled_at IS NULL
+       AND u.last_login_at IS NOT NULL`,
     [spaceId]
   );
   return rows as { email: string; locale: Locale | null }[];

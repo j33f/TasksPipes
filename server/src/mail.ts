@@ -63,3 +63,20 @@ ${paragraphs.map((p) => `<p>${escape(p)}</p>`).join("\n")}
   await transport.sendMail({ from: config.smtp.from, to, subject, text, html });
   return true;
 }
+
+/** The invitation an Outline colleague who never signed in gets: who asks, and which Outline server to sign in with. */
+export function outlineInvite(lang: Locale, inviter: string, server: string | null) {
+  return {
+    subject: tr(lang, "{name} invites you to TasksPipes", { name: inviter }),
+    paragraphs: [
+      tr(lang, "{name} would like to share tasks with you on TasksPipes, the task manager that works with your Outline workspace.", { name: inviter }),
+      tr(lang, "Sign in with your Outline account, on the server {server}.", { server: server || config.outlineUrl || "" }),
+    ],
+  };
+}
+
+/** Sends that invitation; false when e-mail is not configured. */
+export async function sendOutlineInvite(lang: Locale, to: string, inviter: string, server: string | null) {
+  const m = outlineInvite(lang, inviter, server);
+  return sendLinkMail(lang, to, m.subject, m.paragraphs, { label: tr(lang, "Open TasksPipes"), url: config.appUrl });
+}

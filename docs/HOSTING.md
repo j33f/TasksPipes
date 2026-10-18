@@ -45,22 +45,32 @@ let only the proxy reach the port (firewall). A proxy in a container on the same
 | `APP_PORT` | Port published on the host, 3000 by default. |
 | `APP_BIND` | Address that port is published on: `127.0.0.1` by default (only the proxy on this machine). |
 | `APP_SECRET` | At least 32 characters. Encrypts Outline tokens, TOTP secrets and calendar links in the database. |
-| `POSTGRES_PASSWORD` | Password of the bundled database (`DATABASE_URL` when running the server yourself). |
+| `POSTGRES_PASSWORD` | Password of the bundled database (`DATABASE_URL` when running the server yourself). With a database of your own, the account must be allowed to create the `pgcrypto` and `unaccent` extensions (both ship with PostgreSQL). |
 | `OUTLINE_URL` | Optional Outline server known to the instance: needed for OAuth sign-in. It is never suggested on the sign-in page. |
 | `OUTLINE_API_URL` | Optional internal URL the server uses to reach Outline (e.g. `http://outline:3000`). |
 | `OUTLINE_OAUTH_CLIENT_ID`, `OUTLINE_OAUTH_CLIENT_SECRET` | OAuth sign-in, see below. |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Company sign-in with an OpenID Connect provider (its issuer URL, and the client registered there, confidential, with the redirect URI `APP_URL/auth/oidc/callback`). Off without them. |
+| `OIDC_NAME` | Label of the sign-in button (*Continue with …*). Default: `SSO`. |
+| `OIDC_SCOPES` | Scopes asked. Default: `openid email profile`. |
+| `OIDC_ALLOWED_DOMAINS` | Comma-separated e-mail domains allowed to sign in this way (all by default). |
+| `OIDC_ENABLED` | `false` turns company sign-in off while keeping its settings. |
 | `ALLOW_API_KEY_LOGIN` | `true` (default) lets people sign in with a personal Outline API key. |
 | `OUTLINE_TEAM_ID` | Optional: only accept accounts of one workspace of the server set in `OUTLINE_URL`. |
 | `OUTLINE_ALLOWED_HOSTS` | Outline servers people may type on the sign-in page (comma-separated, `*.example.com` allowed). Empty: any public https server. |
 | `OUTLINE_ALLOW_PRIVATE` | `true` also accepts servers over http or on internal addresses (self-hosting on the same network, tests). |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Key pair (base64url) identifying the server to push services, e.g. from `npx web-push generate-vapid-keys`. Optional: without them, a key is derived from `APP_SECRET` (devices subscribe again if `APP_SECRET` changes). |
+| `VAPID_SUBJECT` | A contact for push services, `mailto:` or `https:`. Default: `APP_URL` when it is https, else `mailto:admin@localhost`. |
+| `WEBHOOK_ALLOW_PRIVATE` | `true` lets outgoing webhooks (and push messages) reach http addresses and internal networks (a receiver on the same network, tests). Off by default: https and public addresses only, checked when connecting. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | E-mail for accounts without Outline and invitations, see below. |
 | `ALLOW_EMAIL_SIGNUP` | `true` (default) lets anyone create an account with an e-mail address and a name (needs SMTP). |
 | `ALLOW_EMAIL_INVITATIONS` | `true` (default) lets people invite others by e-mail and send requests to connect. |
+| `ADMIN_EMAILS` | Administrators of the instance (comma-separated addresses): e-mail accounts, Outline accounts of `OUTLINE_URL`, or company sign-in accounts whose address the provider vouches for (`email_verified`), with these addresses. They can disable and enable accounts. |
 | `REDIS_URL` | Redis holding the rate limit counters (the bundled one: `redis://redis:6379`). Without it, they are kept in memory, per process. |
 | `RATE_LIMIT_BACKOFF_FACTOR` | A client over a limit is blocked for a minute, then this many times longer at each new offence (2 by default; 1 keeps it the same). |
 | `TIMEZONE` | Time zone of the reports (e.g. `Europe/Paris`); `UTC` by default. |
 | `REPORT_HOUR` | Hour (0–23) at which daily reports, and on Fridays weekly time reports, are due: 18 by default. |
-| `DEFAULT_LOCALE` | `en` (default) or `fr`: language used when neither the profile nor the browser gives one. |
+| `DEFAULT_LOCALE` | Language used when neither the profile nor the browser gives one: the code of a file of `locales/` (`en` by default, `fr`, `es`…). |
+| `LOCALES_DIR` | Folder of the language files, when they are not next to the server (`locales/`, found by default). |
 | `SESSION_DAYS` | Session length, 30 days by default. |
 | `LOG_LEVEL` | `info` by default. |
 
@@ -160,8 +170,16 @@ of the app, they share it. If Redis cannot be reached, requests go through and a
 | Unsubscribe links | 20 per minute | address |
 | Two-factor settings (set up, turn on or off) | 10 per 15 minutes | person |
 | Invitations, new invitation links | 30 and 10 per hour | person |
+| Invitations of Outline colleagues | 20 per hour | person |
 | GitHub / GitLab webhooks | 600 per minute | pipe token |
 | Calendar feeds | 60 per minute | feed |
+| Search | 120 per minute | person |
+| Pipe exports; import previews; imports | 60, 300 and 20 per hour | person |
+| Public API (`/api/v1`) | 600 per minute | token (address for a wrong token) |
+| Access token creation; webhook changes | 20 and 60 per hour | person |
+| Data export | 5 per hour | person |
+| Account deletion (asking, confirming by code) | 10 per 15 minutes | person |
+| Account deletion links | 20 per 15 minutes | address |
 | `/healthz` | 120 per minute | address |
 
 The client address comes from the reverse proxy (`X-Forwarded-For`): keep the app reachable only through it

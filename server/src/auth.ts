@@ -7,6 +7,8 @@ import { ensureDefaultPipes, one, pool, query, tx, type Queryable, type Row } fr
 import { absoluteOutlineUrl, normalizeOutlineUrl, outlineApi, outlineToken, OutlineError, type OutlineUser } from "./outline.js";
 import { isEmail, mailEnabled, sendLinkMail } from "./mail.js";
 import { LIMITS, rateLimited } from "./rate-limit.js";
+import { closeUserConnections } from "./realtime.js";
+import { V1, tokenUser } from "./api.js";
 import { verifyTotp } from "./totp.js";
 import { localeOf, tr, type Locale } from "./i18n.js";
 
@@ -30,7 +32,7 @@ export interface SessionUser {
   /** Second factor enabled (e-mail accounts). */
   totp: boolean;
   /** Chosen language and theme; null follows the browser / the system. */
-  locale: "en" | "fr" | null;
+  locale: string | null;
   theme: "light" | "dark" | null;
 }
 
@@ -63,7 +65,7 @@ export function decrypt(blob: string | null | undefined): string | null {
   return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]).toString("utf8");
 }
 
-const cookieOptions = (maxAgeSeconds: number): CookieSerializeOptions => ({
+export const cookieOptions = (maxAgeSeconds: number): CookieSerializeOptions => ({
   httpOnly: true,
   sameSite: "lax",
   secure: config.secureCookies,
@@ -172,6 +174,26 @@ async function syncWorkspaceUsers(token: string, instance: string) {
   }
 }
 
+/**
+ * Signs in an account proven otherwise (OpenID Connect): with a second factor, its step comes first (the TOTP
+ * cookie, then the code page); otherwise a session at once.
+ */
+export async function signInAccount(reply: FastifyReply, userId: string): Promise<"totp" | "session"> {
+  const user = await one(`SELECT totp_secret FROM users WHERE id = $1`, [userId]);
+  if (user?.totp_secret) {
+    const pending = crypto.randomBytes(32).toString("base64url");
+    await query(`INSERT INTO login_tokens (id, user_id, purpose, expires_at) VALUES ($1, $2, 'totp', now() + interval '10 minutes')`, [
+      hash(pending),
+      userId,
+    ]);
+    reply.setCookie(TOTP_COOKIE, pending, cookieOptions(600));
+    return "totp";
+  }
+  await query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [userId]);
+  await createSession(reply, userId, null);
+  return "session";
+}
+
 async function establishSession(
   req: FastifyRequest,
   reply: FastifyReply,
@@ -184,6 +206,10 @@ async function establishSession(
     throw new OutlineError(403, "This account does not belong to the allowed Outline workspace.");
   }
   const userId = await tx((client) => upsertOutlineUser(client, data.user, { login: true, instance, lang: localeOf(req) }));
+  // An account disabled by an administrator of the instance stays out, even with a valid Outline account.
+  if ((await one(`SELECT disabled_reason FROM users WHERE id = $1`, [userId]))?.disabled_reason === "admin") {
+    throw new OutlineError(403, "This account is disabled on this instance.");
+  }
   await createSession(reply, userId, tokens, instance);
   req.log.info({ userId, instance }, "User logged in");
 
@@ -240,8 +266,22 @@ async function auth(app: FastifyInstance) {
     req.outlineUrl = config.outlineUrl;
   });
 
-  // Loads the session (if any) on every request.
+  // Loads the session (if any) on every request; on the public API, an access token instead.
+  app.decorateRequest("apiToken", null);
+  app.decorateRequest("apiTokenRefused", false);
   app.addHook("onRequest", async (req) => {
+    if (req.url.startsWith(`${V1}/`) && req.headers.authorization) {
+      const t = await tokenUser(req.headers.authorization);
+      if (t === null) req.apiTokenRefused = true;
+      if (t) {
+        req.user = {
+          id: t.user_id, name: t.name, email: t.email, avatarUrl: t.avatar_url,
+          kind: t.auth_kind, totp: t.totp, locale: t.locale, theme: t.theme,
+        };
+        req.apiToken = { id: t.id, scope: t.scope };
+      }
+      if (t !== undefined) return;
+    }
     const token = req.cookies[SESSION_COOKIE];
     if (!token) return;
     const session = await one(
@@ -266,6 +306,8 @@ async function auth(app: FastifyInstance) {
     outlineUrl: config.oauthEnabled ? config.outlineUrl : null,
     mail: mailEnabled,
     signup: config.allowEmailSignup && mailEnabled,
+    // Company sign-in (OpenID Connect): the button's label.
+    oidc: config.oidc.enabled ? { name: config.oidc.name } : null,
   }));
 
   // ----- Sign-up with an e-mail address and a name -----------------------------
@@ -286,7 +328,13 @@ async function auth(app: FastifyInstance) {
     );
     const send = (l: Locale, subject: string, lines: string[], link: string, label: string) =>
       sendLinkMail(l, email, subject, lines, { label, url: link }).catch((err) => req.log.error({ err }, "Sign-up e-mail failed"));
-    if (existing?.auth_kind === "outline") {
+    if (existing?.auth_kind === "oidc") {
+      const l: Locale = existing.locale ?? lang;
+      await send(l, tr(l, "Welcome to TasksPipes"), [
+        tr(l, "Hello {name},", { name: existing.name }),
+        tr(l, "You already have an account on TasksPipes: sign in with {provider}.", { provider: config.oidc.name }),
+      ], `${config.appUrl}/login`, tr(l, "Sign in"));
+    } else if (existing?.auth_kind === "outline") {
       const l: Locale = existing.locale ?? lang;
       await send(l, tr(l, "Welcome to TasksPipes"), [
         tr(l, "Hello {name},", { name: existing.name }),
@@ -512,6 +560,30 @@ export async function disableUnusedInvitations(): Promise<number> {
 /** Turns an account disabled for an unused invitation back on (it is being invited again). */
 export async function reenableInvited(userId: string, db: Queryable = pool) {
   await db.query(`UPDATE users SET disabled_at = NULL, disabled_reason = NULL WHERE id = $1 AND disabled_reason = 'unused_invitation'`, [userId]);
+}
+
+/**
+ * Closes the sessions of Outline accounts whose Outline access ended (token revoked, account suspended or deleted in
+ * Outline): each session's token is checked with auth.info, refreshed first when it can be. Returns how many closed.
+ * Outline being unreachable closes nothing.
+ */
+export async function checkOutlineSessions(): Promise<number> {
+  const { rows } = await query(
+    `SELECT s.* FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE u.auth_kind = 'outline' AND s.access_token IS NOT NULL AND s.expires_at > now()`
+  );
+  let closed = 0;
+  for (const session of rows) {
+    try {
+      await outlineCallerFor(session)("auth.info", {});
+    } catch (err) {
+      if (!(err instanceof OutlineError) || (err.status !== 401 && err.status !== 403)) continue;
+      await query(`DELETE FROM sessions WHERE id = $1`, [session.id]);
+      if (!(await one(`SELECT 1 FROM sessions WHERE user_id = $1`, [session.user_id]))) closeUserConnections(session.user_id);
+      closed++;
+    }
+  }
+  return closed;
 }
 
 export async function cleanupSessions() {

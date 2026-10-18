@@ -6,7 +6,8 @@
 
   // The token is posted on a click, so that mail scanners following the link do not use it up.
   const token = router.params.get("token") ?? "";
-  let step = $state<"link" | "totp">("link");
+  // Signed in by the company's provider, the second factor is all that is left (?totp=1).
+  let step = $state<"link" | "totp">(router.params.get("totp") === "1" ? "totp" : "link");
   let code = $state("");
   let busy = $state(false);
   let error = $state("");

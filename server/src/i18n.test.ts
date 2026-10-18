@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FastifyRequest } from "fastify";
-import { localeOf, localize, localizePipeType, localizeTaskType, tr } from "./i18n.js";
+import { LOCALES, csvSeparator, intlTag, localeOf, localize, localizePipeType, localizeTaskType, tr } from "./i18n.js";
 import { pipeTypeById, taskTypeById } from "./pipeTypes.js";
 
 const req = (headers: Record<string, string>) => ({ headers }) as unknown as FastifyRequest;
@@ -10,7 +10,8 @@ describe("localeOf", () => {
     expect(localeOf(req({ "x-locale": "fr", "accept-language": "en" }))).toBe("fr");
     expect(localeOf(req({ "accept-language": "de-DE,fr;q=0.8,en;q=0.5" }))).toBe("fr");
     expect(localeOf(req({ "accept-language": "de" }))).toBe("en");
-    expect(localeOf(req({ "x-locale": "es" }))).toBe("en");
+    expect(localeOf(req({ "x-locale": "xx" }))).toBe("en");
+    expect(localeOf(req({ "accept-language": "fr-CA;q=0.9" }))).toBe("fr");
   });
 });
 
@@ -43,5 +44,21 @@ describe("catalog localisation", () => {
     const f = localizeTaskType("en", taskTypeById("accompagnement_psh")!).fields.find((x) => x.id === "rqth")!;
     expect(f.options).toEqual(["Oui", "Non"]);
     expect(f.optionLabels).toEqual(["Yes", "No"]);
+  });
+});
+
+describe("languages", () => {
+  it("are the files of locales/, English first", () => {
+    expect(LOCALES[0]).toBe("en");
+    expect(LOCALES).toEqual(expect.arrayContaining(["fr", "es"]));
+    expect(localeOf(req({ "accept-language": "es-ES,es;q=0.9" }))).toBe("es");
+  });
+
+  it("translate messages and the catalog, with their own formats", () => {
+    expect(tr("es", "{label} is required", { label: "Title" })).toBe("Título: obligatorio");
+    expect(localize("es", "Tâches générales")).toBe("Tareas generales");
+    expect(intlTag("es")).toBe("es-ES");
+    expect(csvSeparator("es")).toBe(";");
+    expect(csvSeparator("en")).toBe(",");
   });
 });

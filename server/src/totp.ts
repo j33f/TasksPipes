@@ -36,7 +36,7 @@ function base32Decode(s: string): Buffer {
 
 export const newSecret = () => base32Encode(crypto.randomBytes(20));
 
-function codeAt(secret: string, step: number): string {
+export function codeAt(secret: string, step: number): string {
   const counter = Buffer.alloc(8);
   counter.writeBigUInt64BE(BigInt(step));
   const h = crypto.createHmac("sha1", base32Decode(secret)).update(counter).digest();

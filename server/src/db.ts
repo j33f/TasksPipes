@@ -234,7 +234,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_outline_idx ON users(outline_url, outlin
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS outline_url text;
 
 -- Display preferences of the account (NULL: follow the browser / the system).
-ALTER TABLE users ADD COLUMN IF NOT EXISTS locale text CHECK (locale IN ('en', 'fr'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locale text;
+-- Languages are the files of locales/ (i18n.ts): checked by the app, no longer by a fixed list here.
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_locale_check;
 -- Pipe types someone turned off (no longer offered to them; their task types follow when no other type offers them).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_pipe_types text[] NOT NULL DEFAULT '{}';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS theme text CHECK (theme IN ('light', 'dark'));
@@ -334,6 +336,15 @@ CREATE INDEX IF NOT EXISTS login_tokens_user_idx ON login_tokens(user_id, create
 -- turns it back on.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_at timestamptz;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_reason text CHECK (disabled_reason IN ('unused_invitation'));
+-- Disabled by an administrator of the instance (admin.ts), and by whom.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_by uuid REFERENCES users(id) ON DELETE SET NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_disabled_reason_check'
+                 AND pg_get_constraintdef(oid) LIKE '%admin%') THEN
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_disabled_reason_check;
+    ALTER TABLE users ADD CONSTRAINT users_disabled_reason_check CHECK (disabled_reason IN ('unused_invitation', 'admin'));
+  END IF;
+END $$;
 -- A sign-in link sent by signing up again: using it turns an account disabled for an unused invitation back on.
 ALTER TABLE login_tokens ADD COLUMN IF NOT EXISTS reactivates boolean NOT NULL DEFAULT false;
 
@@ -394,6 +405,269 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS notifications_pending_idx ON notifications(user_id, task_id) WHERE sent_at IS NULL AND dropped_at IS NULL;
 CREATE INDEX IF NOT EXISTS notifications_sent_idx ON notifications(user_id, task_id, sent_at) WHERE channel = 'immediate';
 CREATE UNIQUE INDEX IF NOT EXISTS notifications_overdue_idx ON notifications(user_id, task_id, due_date) WHERE kind = 'overdue';
+
+-- Global search (search.ts). Text is indexed in French and in English, accents ignored; a search uses the
+-- language of the person searching. Each task has one row, kept up to date by triggers.
+CREATE EXTENSION IF NOT EXISTS unaccent;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_ts_config WHERE cfgname = 'tp_fr') THEN
+    CREATE TEXT SEARCH CONFIGURATION tp_fr (COPY = french);
+    ALTER TEXT SEARCH CONFIGURATION tp_fr ALTER MAPPING FOR hword, hword_part, word WITH unaccent, french_stem;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_ts_config WHERE cfgname = 'tp_en') THEN
+    CREATE TEXT SEARCH CONFIGURATION tp_en (COPY = english);
+    ALTER TEXT SEARCH CONFIGURATION tp_en ALTER MAPPING FOR hword, hword_part, word WITH unaccent, english_stem;
+  END IF;
+END $$;
+
+-- The searchable text of a task, by weight: title; field values (people's ids left out) and linked document;
+-- description and sub-tasks; comments (history entries with a comment, refusal reasons included).
+CREATE OR REPLACE FUNCTION task_search_parts(tid uuid, OUT a text, OUT b text, OUT c text, OUT d text)
+LANGUAGE sql STABLE AS $$
+  SELECT t.title,
+    left(concat_ws(' ',
+      (SELECT string_agg(v #>> '{}', ' ') FROM jsonb_path_query(t.fields, 'strict $.**') v
+       WHERE jsonb_typeof(v) = 'string' AND (v #>> '{}') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
+      t.outline_doc_title), 100000),
+    left(concat_ws(' ', t.description,
+      (SELECT string_agg(i.text, ' ' ORDER BY i.position) FROM task_items i WHERE i.task_id = t.id)), 100000),
+    left((SELECT string_agg(e.comment, ' ' ORDER BY e.id) FROM task_events e WHERE e.task_id = t.id AND e.comment IS NOT NULL), 100000)
+  FROM tasks t WHERE t.id = tid
+$$;
+
+CREATE TABLE IF NOT EXISTS task_search (
+  task_id uuid PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+  doc tsvector NOT NULL,
+  -- Version of the indexed text (task_search_refresh): rows of an older one are rebuilt at start.
+  version smallint NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_search_doc_idx ON task_search USING gin(doc);
+
+CREATE OR REPLACE FUNCTION task_search_refresh(tid uuid) RETURNS void LANGUAGE sql AS $$
+  INSERT INTO task_search (task_id, doc, version)
+  SELECT tid,
+    setweight(to_tsvector('tp_fr', coalesce(p.a, '')), 'A') || setweight(to_tsvector('tp_en', coalesce(p.a, '')), 'A') ||
+    setweight(to_tsvector('tp_fr', coalesce(p.b, '')), 'B') || setweight(to_tsvector('tp_en', coalesce(p.b, '')), 'B') ||
+    setweight(to_tsvector('tp_fr', coalesce(p.c, '')), 'C') || setweight(to_tsvector('tp_en', coalesce(p.c, '')), 'C') ||
+    setweight(to_tsvector('tp_fr', coalesce(p.d, '')), 'D') || setweight(to_tsvector('tp_en', coalesce(p.d, '')), 'D'),
+    1
+  FROM task_search_parts(tid) p WHERE p.a IS NOT NULL
+  ON CONFLICT (task_id) DO UPDATE SET doc = EXCLUDED.doc, version = EXCLUDED.version
+$$;
+
+CREATE OR REPLACE FUNCTION task_search_on_task() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM task_search_refresh(NEW.id);
+  RETURN NULL;
+END $$;
+-- Sub-tasks and history entries. A task being deleted is no longer found, so nothing is written for it.
+CREATE OR REPLACE FUNCTION task_search_on_item() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM task_search_refresh(CASE WHEN TG_OP = 'DELETE' THEN OLD.task_id ELSE NEW.task_id END);
+  RETURN NULL;
+END $$;
+-- History entries only matter when they hold a comment.
+CREATE OR REPLACE FUNCTION task_search_on_event() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.comment IS NOT NULL THEN PERFORM task_search_refresh(OLD.task_id); END IF;
+  ELSIF NEW.comment IS NOT NULL OR (TG_OP = 'UPDATE' AND OLD.comment IS NOT NULL) THEN
+    PERFORM task_search_refresh(NEW.task_id);
+  END IF;
+  RETURN NULL;
+END $$;
+CREATE OR REPLACE TRIGGER task_search_tasks AFTER INSERT OR UPDATE OF title, description, fields, outline_doc_title ON tasks
+  FOR EACH ROW EXECUTE FUNCTION task_search_on_task();
+CREATE OR REPLACE TRIGGER task_search_items AFTER INSERT OR UPDATE OF text OR DELETE ON task_items
+  FOR EACH ROW EXECUTE FUNCTION task_search_on_item();
+CREATE OR REPLACE TRIGGER task_search_events AFTER INSERT OR UPDATE OF comment OR DELETE ON task_events
+  FOR EACH ROW EXECUTE FUNCTION task_search_on_event();
+-- Tasks made before the search, or indexed by an older version.
+SELECT task_search_refresh(t.id) FROM tasks t LEFT JOIN task_search s ON s.task_id = t.id WHERE s.version IS DISTINCT FROM 1;
+
+-- Deleting one's account (account.ts): a link confirms it (purpose 'delete'). What the account did stays in the
+-- history under a placeholder account of its own ("Deleted account", auth_kind 'deleted'), never signed in.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'login_tokens_purpose_check'
+                 AND pg_get_constraintdef(oid) LIKE '%delete%') THEN
+    ALTER TABLE login_tokens DROP CONSTRAINT IF EXISTS login_tokens_purpose_check;
+    ALTER TABLE login_tokens ADD CONSTRAINT login_tokens_purpose_check CHECK (purpose IN ('magic', 'totp', 'delete'));
+  END IF;
+END $$;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+
+-- Personal access tokens of the public API (api.ts): only a hash is kept; the token is shown once, at creation.
+CREATE TABLE IF NOT EXISTS api_tokens (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  token_hash text NOT NULL UNIQUE,
+  -- The first characters of the token, to tell tokens apart in the list.
+  prefix text NOT NULL,
+  scope text NOT NULL CHECK (scope IN ('read', 'write')),
+  expires_at timestamptz NOT NULL,
+  last_used_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id);
+
+-- Outgoing webhooks of a pipe (webhooks.ts): the secret signing the deliveries is encrypted with APP_SECRET.
+CREATE TABLE IF NOT EXISTS pipe_webhooks (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  pipe_id uuid NOT NULL REFERENCES pipes(id) ON DELETE CASCADE,
+  url text NOT NULL,
+  secret text NOT NULL,
+  events text[] NOT NULL,
+  active boolean NOT NULL DEFAULT true,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS pipe_webhooks_pipe_idx ON pipe_webhooks(pipe_id);
+-- Posting to a chat channel (chat.ts): how deliveries are written, and in which language.
+ALTER TABLE pipe_webhooks ADD COLUMN IF NOT EXISTS format text NOT NULL DEFAULT 'json' CHECK (format IN ('json', 'slack', 'mattermost', 'teams'));
+ALTER TABLE pipe_webhooks ADD COLUMN IF NOT EXISTS locale text;
+-- Deliveries, written with the history entry that causes them, then sent and retried with growing delays.
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id bigserial PRIMARY KEY,
+  webhook_id uuid NOT NULL REFERENCES pipe_webhooks(id) ON DELETE CASCADE,
+  event text NOT NULL,
+  payload jsonb NOT NULL,
+  attempts integer NOT NULL DEFAULT 0,
+  next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  delivered_at timestamptz,
+  failed_at timestamptz,
+  last_status integer,
+  last_error text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS webhook_deliveries_due_idx ON webhook_deliveries(next_attempt_at) WHERE delivered_at IS NULL AND failed_at IS NULL;
+CREATE INDEX IF NOT EXISTS webhook_deliveries_hook_idx ON webhook_deliveries(webhook_id, id DESC);
+
+-- Recurring tasks (recurrence.ts): a series makes a task on each date of its rule; each task knows its series and
+-- date, and a series has one task per date at most.
+CREATE TABLE IF NOT EXISTS task_recurrences (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  -- {"freq": "monthly", "interval": 1, "monthly": {"kind": "weekday", "nth": 1, "weekday": 1}}…
+  rule jsonb NOT NULL,
+  -- At fixed dates (made lead_days ahead), or once the previous task is done.
+  mode text NOT NULL CHECK (mode IN ('schedule', 'after_done')),
+  lead_days integer NOT NULL DEFAULT 0 CHECK (lead_days BETWEEN 0 AND 90),
+  starts_on date NOT NULL,
+  ends_on date,
+  -- The next date to make a task for (none once ended).
+  next_on date,
+  active boolean NOT NULL DEFAULT true,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS task_recurrences_due_idx ON task_recurrences(next_on) WHERE active;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_id uuid REFERENCES task_recurrences(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS occurrence_on date;
+CREATE UNIQUE INDEX IF NOT EXISTS tasks_occurrence_idx ON tasks(recurrence_id, occurrence_on) WHERE recurrence_id IS NOT NULL;
+
+-- @mentions (mentions.ts) are notified too.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'notifications_kind_check'
+                 AND pg_get_constraintdef(oid) LIKE '%mention%') THEN
+    ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_kind_check;
+    ALTER TABLE notifications ADD CONSTRAINT notifications_kind_check
+      CHECK (kind IN ('received', 'assigned', 'refused', 'comment', 'mention', 'overdue'));
+  END IF;
+END $$;
+
+-- Dependencies between tasks (dependencies.ts): task_id waits for blocker_id to be done or abandoned.
+CREATE TABLE IF NOT EXISTS task_dependencies (
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  blocker_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (task_id, blocker_id),
+  CHECK (task_id <> blocker_id)
+);
+CREATE INDEX IF NOT EXISTS task_dependencies_blocker_idx ON task_dependencies(blocker_id);
+
+-- A task no longer blocked is notified too.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'notifications_kind_check'
+                 AND pg_get_constraintdef(oid) LIKE '%unblocked%') THEN
+    ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_kind_check;
+    ALTER TABLE notifications ADD CONSTRAINT notifications_kind_check
+      CHECK (kind IN ('received', 'assigned', 'refused', 'comment', 'mention', 'unblocked', 'overdue'));
+  END IF;
+END $$;
+
+-- Labels of a space (labels.ts), put on its tasks.
+CREATE TABLE IF NOT EXISTS space_labels (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  space_id uuid NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  color text NOT NULL,
+  position double precision NOT NULL DEFAULT 0,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS space_labels_name_idx ON space_labels(space_id, lower(name));
+CREATE TABLE IF NOT EXISTS task_labels (
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  label_id uuid NOT NULL REFERENCES space_labels(id) ON DELETE CASCADE,
+  PRIMARY KEY (task_id, label_id)
+);
+CREATE INDEX IF NOT EXISTS task_labels_label_idx ON task_labels(label_id);
+-- Priority of any task: 1 urgent, 2 high, 3 medium, 4 low; none when null.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority smallint CHECK (priority BETWEEN 1 AND 4);
+
+-- Estimates and time logged by hand (worklog.ts), beside the time computed from the history.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimate_minutes integer CHECK (estimate_minutes BETWEEN 1 AND 60000);
+CREATE TABLE IF NOT EXISTS task_time_entries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  -- Kept when the account is deleted: moved to its placeholder, as comments are.
+  user_id uuid NOT NULL REFERENCES users(id),
+  spent_on date NOT NULL,
+  minutes integer NOT NULL CHECK (minutes BETWEEN 1 AND 1440),
+  note text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS task_time_entries_task_idx ON task_time_entries(task_id, spent_on);
+CREATE INDEX IF NOT EXISTS task_time_entries_user_idx ON task_time_entries(user_id, spent_on);
+
+-- Web Push (push.ts): the devices people turned notifications on for. The endpoint and keys are kept encrypted with
+-- APP_SECRET (they are read to send), the endpoint's hash finds a device again.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint_hash text NOT NULL UNIQUE,
+  data text NOT NULL,
+  user_agent text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id);
+-- When a notification was pushed to devices, or found needing no push.
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pushed_at timestamptz;
+
+-- Accounts signing in with the company's OpenID Connect provider (oidc.ts): auth_kind 'oidc', or an e-mail account
+-- linked to it. The provider and the person's id there name the account; whether it vouched for the address counts
+-- for ADMIN_EMAILS.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_issuer text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_sub text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_email_verified boolean NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX IF NOT EXISTS users_oidc_idx ON users(oidc_issuer, oidc_sub) WHERE oidc_sub IS NOT NULL;
+
+-- Changes of data made once (their name is kept when done).
+CREATE TABLE IF NOT EXISTS schema_steps (name text PRIMARY KEY, done_at timestamptz NOT NULL DEFAULT now());
+-- The "Priorité" field of user stories became the priority of every task: its values are copied once (they stay
+-- in the fields, no longer shown).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_steps WHERE name = 'user-story-priority') THEN
+    UPDATE tasks SET priority = CASE fields->>'priorite' WHEN 'Critique' THEN 1 WHEN 'Haute' THEN 2 WHEN 'Moyenne' THEN 3 WHEN 'Basse' THEN 4 END
+    WHERE task_type = 'user_story' AND priority IS NULL AND fields->>'priorite' IN ('Critique', 'Haute', 'Moyenne', 'Basse');
+    INSERT INTO schema_steps (name) VALUES ('user-story-priority') ON CONFLICT DO NOTHING;
+  END IF;
+END $$;
 `;
 
 /**

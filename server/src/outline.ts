@@ -1,9 +1,7 @@
 import dns from "node:dns/promises";
-import { lookup as dnsLookup, type LookupAddress, type LookupOptions } from "node:dns";
-import http from "node:http";
-import https from "node:https";
 import net from "node:net";
 import { config } from "./config.js";
+import { guardedLookup, isPrivateIp, postJson, type LookupFunction } from "./net.js";
 import type { Params } from "./errors.js";
 
 export class OutlineError extends Error {
@@ -41,19 +39,6 @@ export interface OAuthTokens {
 // ---------------------------------------------------------------------------
 // Outline servers: the configured one, and others people sign in with.
 
-/** Private, loopback, link-local… addresses: never reached on behalf of a user-given server. */
-const PRIVATE = new net.BlockList();
-for (const [a, p] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16],
-  ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 3]] as const) {
-  PRIVATE.addSubnet(a, p, "ipv4");
-}
-for (const [a, p] of [["::", 127], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8]] as const) PRIVATE.addSubnet(a, p, "ipv6");
-
-export function isPrivateIp(ip: string): boolean {
-  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
-  if (mapped) return isPrivateIp(mapped[1]);
-  return PRIVATE.check(ip, net.isIPv6(ip) ? "ipv6" : "ipv4");
-}
 
 const isDefault = (instance: string) => Boolean(config.outlineUrl) && instance === config.outlineUrl;
 
@@ -96,49 +81,13 @@ export async function normalizeOutlineUrl(input: unknown): Promise<string> {
   return url;
 }
 
-type LookupCallback = (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
-
 /**
- * DNS lookup for the connections to user-given servers: the address actually connected to is the one checked, so a
- * name that resolves to a public address when checked and to an internal one when connecting (DNS rebinding) fails.
+ * DNS lookup for the connections to user-given Outline servers: internal addresses refused when connecting
+ * (OUTLINE_ALLOW_PRIVATE aside), see net.ts.
  */
-export function publicLookup(hostname: string, options: LookupOptions, callback: LookupCallback) {
-  dnsLookup(hostname, { ...options, all: true }, (err, addresses) => {
-    if (err) return callback(err, []);
-    if (!config.outlineAllowPrivate && addresses.some((a) => isPrivateIp(a.address))) {
-      return callback(Object.assign(new Error("internal address"), { code: "EPRIVATE" }), []);
-    }
-    if (options.all) return callback(null, addresses);
-    callback(null, addresses[0].address, addresses[0].family);
-  });
-}
+export const publicLookup: LookupFunction = (hostname, options, callback) => guardedLookup(config.outlineAllowPrivate)(hostname, options, callback);
 
-const MAX_RESPONSE = 20 * 1024 * 1024;
-
-/** POSTs JSON to a user-given server, through publicLookup, without following redirects. */
-function postToUserServer(url: string, headers: Record<string, string>, body: string): Promise<{ status: number; text: string }> {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const req = (u.protocol === "https:" ? https : http).request(
-      u,
-      { method: "POST", headers: { ...headers, "Content-Length": String(Buffer.byteLength(body)) }, lookup: publicLookup, timeout: 15_000 },
-      (res) => {
-        const chunks: Buffer[] = [];
-        let size = 0;
-        res.on("data", (c: Buffer) => {
-          size += c.length;
-          if (size > MAX_RESPONSE) req.destroy(new Error("response too large"));
-          else chunks.push(c);
-        });
-        res.on("end", () => resolve({ status: res.statusCode ?? 502, text: Buffer.concat(chunks).toString("utf8") }));
-        res.on("error", reject);
-      }
-    );
-    req.on("timeout", () => req.destroy(new Error("timeout")));
-    req.on("error", reject);
-    req.end(body);
-  });
-}
+const postToUserServer = (url: string, headers: Record<string, string>, body: string) => postJson(url, headers, body, publicLookup);
 
 /** Calls an Outline RPC-style API method (POST /api/<method>) on a server (the configured one by default). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

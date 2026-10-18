@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="theme-color" content="#111319" />
     <title>TasksPipes</title>
     <script>
       // Theme and language chosen in the profile, applied before the page draws (no flash).
@@ -11,7 +14,7 @@
         const theme = localStorage.getItem("tp:theme");
         if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
         const lang = localStorage.getItem("tp:locale") || (navigator.language || "en").slice(0, 2);
-        document.documentElement.lang = lang === "fr" ? "fr" : "en";
+        document.documentElement.lang = lang;
       } catch {}
     </script>
   </head>

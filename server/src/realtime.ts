@@ -14,7 +14,7 @@ const alive = new WeakSet<WebSocket>();
 
 export interface LiveEvent {
   /** task.sent: a task arrived in an incoming bucket; task.refused: one came back; incoming.changed: one left. */
-  type: "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "connection.request" | "connection.accepted" | "hello";
+  type: "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello";
   spaceId?: string;
   task?: { id: string; number: number; title: string };
   by?: string;
@@ -83,3 +83,12 @@ export async function notifySpace(spaceId: string, event: Omit<LiveEvent, "space
     // Live updates are a convenience: the page also reloads its data when it comes back.
   }
 }
+
+/** Closes the open pages of someone whose access ended (disabled, deleted, signed out by Outline). */
+export function closeUserConnections(userId: string) {
+  for (const s of sockets.get(userId) ?? []) s.close(4401, "unauthorized");
+  sockets.delete(userId);
+}
+
+/** Whether someone has a page of the app open and in use (pages close their connection when left idle). */
+export const isOnline = (userId: string) => (sockets.get(userId)?.size ?? 0) > 0;

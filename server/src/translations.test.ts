@@ -1,12 +1,15 @@
 /**
- * Every message the server can send has its French version (FR), the dictionary holds no stale entry,
- * and the French built-in catalog has its English version (CATALOG_EN).
+ * Every message the server can send has its French version (locales/fr.json, "server"), the dictionary holds no
+ * stale entry, and the French built-in catalog has its English version (locales/en.json, "catalog"). Other
+ * languages may lack entries (shown in English), but hold no stale one and keep the placeholders.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { FR } from "./i18n.js";
-import { CATALOG_EN } from "./catalog-en.js";
+import { CATALOG_SOURCE, LOCALE_FILES } from "./i18n.js";
+
+const FR = LOCALE_FILES.fr.server ?? {};
+const CATALOG_EN = LOCALE_FILES.en.catalog ?? {};
 import { PIPE_TYPES, TASK_TYPES } from "./pipeTypes.js";
 import { CUSTOM_GROUP } from "./designer.js";
 
@@ -19,7 +22,7 @@ const parse = (s: string) => {
   }
 };
 const code = readdirSync(__dirname)
-  .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !["i18n.ts", "catalog-en.ts", "pipeTypes.ts"].includes(f))
+  .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && !["i18n.ts", "pipeTypes.ts"].includes(f))
   .map((f) => readFileSync(join(__dirname, f), "utf8"))
   .join("\n");
 
@@ -92,4 +95,22 @@ describe("English catalog", () => {
   it("has no entry for labels that no longer exist", () => {
     expect(Object.keys(CATALOG_EN).filter((k) => !strings.has(k) && k !== "Modèles personnalisés")).toEqual([]);
   });
+});
+
+describe("other languages", () => {
+  const names = (s: string) => [...new Set([...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].sort().join();
+  for (const [code, file] of Object.entries(LOCALE_FILES).filter(([c]) => c !== "en" && c !== "fr")) {
+    it(`${code}: keeps the placeholders, holds no stale entry, and tells what is left to translate`, () => {
+      expect(file.name, "name").toBeTruthy();
+      expect(file.intl, "intl").toBeTruthy();
+      const server = file.server ?? {};
+      expect(Object.keys(server).filter((k) => !(k in FR))).toEqual([]);
+      expect(Object.entries(server).filter(([en, t]) => names(en) !== names(t))).toEqual([]);
+      const catalog = file.catalog ?? {};
+      expect(Object.keys(catalog).filter((k) => !(k in CATALOG_EN) && !(k in FR))).toEqual([]);
+      const missing = Object.keys(FR).filter((k) => !(k in server)).length + Object.keys(CATALOG_EN).filter((k) => !(k in catalog)).length;
+      if (missing) console.warn(`locales/${code}.json: ${missing} server or catalog texts shown in English`);
+      expect(code).not.toBe(CATALOG_SOURCE);
+    });
+  }
 });

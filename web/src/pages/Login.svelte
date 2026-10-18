@@ -6,7 +6,7 @@
   import Icon from "../components/Icon.svelte";
   import { LOCALES, prefs, t, type Locale } from "../lib/i18n.svelte";
 
-  let cfg = $state<{ oauth: boolean; apiKey: boolean; outlineUrl: string | null; mail: boolean; signup: boolean } | null>(null);
+  let cfg = $state<{ oauth: boolean; apiKey: boolean; outlineUrl: string | null; mail: boolean; signup: boolean; oidc: { name: string } | null } | null>(null);
 
   // Outline servers typed here, remembered in this browser: no server is suggested.
   const readList = (): string[] => {
@@ -117,6 +117,11 @@
     <p class="muted">{t("Use your Outline account, or your e-mail address.")}</p>
 
     {#if error}<div class="callout danger">{error}</div>{/if}
+
+    {#if cfg?.oidc}
+      <a class="btn full" href="/auth/oidc">{t("Continue with {provider}", { provider: cfg.oidc.name })}</a>
+      <div class="divider-text">{t("or")}</div>
+    {/if}
 
     {#if cfg?.apiKey || cfg?.oauth}
       <div class="field">

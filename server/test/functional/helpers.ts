@@ -24,16 +24,16 @@ export async function stopApp() {
 
 export interface Agent {
   cookie: string;
-  lang: "en" | "fr";
+  lang: string;
   get<T = any>(url: string): Promise<{ status: number; body: T }>;
   post<T = any>(url: string, body?: unknown): Promise<{ status: number; body: T }>;
   patch<T = any>(url: string, body?: unknown): Promise<{ status: number; body: T }>;
   put<T = any>(url: string, body?: unknown): Promise<{ status: number; body: T }>;
-  del<T = any>(url: string): Promise<{ status: number; body: T }>;
+  del<T = any>(url: string, body?: unknown): Promise<{ status: number; body: T }>;
 }
 
 /** An agent sending requests with a session cookie (empty: signed out) in a language. */
-export function agent(cookie = "", lang: "en" | "fr" = "en"): Agent {
+export function agent(cookie = "", lang = "en"): Agent {
   const call = async (method: string, url: string, body?: unknown) => {
     const res = await app!.inject({
       method: method as "GET",
@@ -58,13 +58,13 @@ export function agent(cookie = "", lang: "en" | "fr" = "en"): Agent {
     post: (url, body) => call("POST", url, body),
     patch: (url, body) => call("PATCH", url, body),
     put: (url, body) => call("PUT", url, body),
-    del: (url) => call("DELETE", url),
+    del: (url, body) => call("DELETE", url, body),
   };
   return a;
 }
 
-/** Signs in with an API key of the fake Outline (alice-token, bob-token, carol-token). */
-export async function signIn(token: "alice-token" | "bob-token" | "carol-token", lang: "en" | "fr" = "en", outlineUrl?: string) {
+/** Signs in with an API key of the fake Outline (alice-token, bob-token, carol-token; dave-token, see mock-outline). */
+export async function signIn(token: "alice-token" | "bob-token" | "carol-token" | "dave-token", lang: "en" | "fr" = "en", outlineUrl?: string) {
   const a = agent("", lang);
   const res = await a.post("/api/auth/apikey", { token, ...(outlineUrl ? { outlineUrl } : {}) });
   if (res.status !== 200) throw new Error(`sign-in failed: ${JSON.stringify(res.body)}`);

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
   import { t } from "../lib/i18n.svelte";
+  import { awaitingSignIn } from "../lib/people";
 
   let { value = $bindable(null), excludeId = null, includeSelf = true }: {
     value?: string | null;
@@ -21,6 +22,12 @@
     </optgroup>
   {/if}
   <optgroup label={t("People")}>
-    {#each people as s (s.id)}<option value={s.id}>{s.id === me ? t("{name} (me)", { name: s.name }) : s.name}</option>{/each}
+    {#each people as s (s.id)}
+      {#if awaitingSignIn(s)}
+        <option value={s.id} disabled>{t("{name} (has not signed in yet)", { name: s.name })}</option>
+      {:else}
+        <option value={s.id}>{s.id === me ? t("{name} (me)", { name: s.name }) : s.name}</option>
+      {/if}
+    {/each}
   </optgroup>
 </select>

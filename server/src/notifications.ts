@@ -1,6 +1,6 @@
 /**
  * E-mail notifications: a task received in one's incoming (or a team's), a task one now owns, a task one sent
- * refused, a comment on a task one wrote or owns, and a morning reminder of due dates.
+ * refused, a comment on a task one wrote or owns, a mention, a task no longer blocked, and a morning reminder of due dates.
  *
  * Notifications are written with the history entry that causes them (same transaction), then e-mailed by
  * runNotifications(), called every minute: at once (grouped per task, see GROUP_DELAY_MS and TASK_GAP_MS), in a
@@ -12,16 +12,18 @@ import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "./config.js";
 import { one, query, type Queryable, type Row } from "./db.js";
-import { getTaskRow, taskPermissions } from "./access.js";
+import { getTaskRow, isConfidential, taskPermissions } from "./access.js";
+import { isOnline } from "./realtime.js";
 import { bad } from "./errors.js";
 import { localeOf, localize, tr, type Locale } from "./i18n.js";
 import { mailEnabled, sendHtmlMail } from "./mail.js";
-import { allPipeTypes, pipeTypeById, stageLabel } from "./pipeTypes.js";
+import { stageLabel } from "./pipeTypes.js";
 import { TASK_KEY_PREFIX } from "./git.js";
 import { dailyPeriod, addDays, localDay, zonedInstant } from "./time.js";
 import { rateLimited, type Limit } from "./rate-limit.js";
+import { pushTo } from "./push.js";
 
-export const KINDS = ["received", "assigned", "refused", "comment", "due"] as const;
+export const KINDS = ["received", "assigned", "refused", "comment", "mention", "unblocked", "due"] as const;
 export type Kind = (typeof KINDS)[number];
 export type Mode = "immediate" | "digest" | "off";
 export type Prefs = Record<Kind, Mode> & { dueHour: number };
@@ -31,6 +33,10 @@ export const DEFAULT_PREFS: Prefs = {
   assigned: "immediate",
   refused: "immediate",
   comment: "digest",
+  // At once, unless the person is online in the app then (they had it live).
+  mention: "immediate",
+  // Same: told live when online.
+  unblocked: "immediate",
   // Due dates have their own e-mail, in the morning: "immediate" means that reminder.
   due: "immediate",
   dueHour: 8,
@@ -41,8 +47,14 @@ export const GROUP_DELAY_MS = 2 * 60_000;
 /** At most one immediate e-mail per task and person in this time. */
 export const TASK_GAP_MS = 15 * 60_000;
 
-/** Whether notifications are on: with e-mail set up (tests turn them on without SMTP). */
+/** Whether notifications are e-mailed: with e-mail set up (tests turn them on without SMTP). */
 export const notificationState = { enabled: mailEnabled };
+
+/**
+ * Who a notification is written for: those who may get e-mails (with e-mail on the instance), or who turned push
+ * on for a device. `u` is the users table, `$mail` the placeholder of notificationState.enabled.
+ */
+const RECIPIENT = (mail: string) => `${ELIGIBLE} AND (${mail} OR EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id))`;
 
 const MODES: Mode[] = ["immediate", "digest", "off"];
 
@@ -81,21 +93,20 @@ export async function savePrefs(userId: string, change: Partial<Prefs>): Promise
 }
 
 /**
- * Accounts that may get e-mails: with an address, not a system account, and for e-mail accounts, signed in at
- * least once (an invitation not taken up gets nothing more); never disabled accounts. `u` is the users table.
+ * Accounts that may get e-mails: with an address, not a system account, signed in at least once (an invitation not
+ * taken up, or an Outline colleague who never came, gets nothing); never disabled accounts. `u` is the users table.
  */
-const ELIGIBLE = `u.email IS NOT NULL AND u.auth_kind <> 'system' AND u.disabled_at IS NULL
-  AND NOT (u.auth_kind = 'email' AND u.last_login_at IS NULL)`;
+const ELIGIBLE = `u.email IS NOT NULL AND u.auth_kind <> 'system' AND u.disabled_at IS NULL AND u.last_login_at IS NOT NULL`;
 
-type RowKind = "received" | "assigned" | "refused" | "comment" | "overdue";
+type RowKind = "received" | "assigned" | "refused" | "comment" | "mention" | "unblocked" | "overdue";
 const prefKind = (k: RowKind): Kind => (k === "overdue" ? "due" : k);
 
 // ---------------------------------------------------------------------------
 // Queueing, with the history entry
 
 /** Writes the notifications caused by a history entry (call it in the transaction that wrote it). */
-export async function queueNotifications(db: Queryable, eventId: number) {
-  if (!notificationState.enabled) return;
+/** `mentioned`: the people the entry mentions who can open the task (mentions.ts). */
+export async function queueNotifications(db: Queryable, eventId: number, mentioned: string[] = []) {
   const e = await one(
     `SELECT e.*, t.author_id, COALESCE(s.user_id, t.assignee_id) AS owner_id
      FROM task_events e JOIN tasks t ON t.id = e.task_id JOIN spaces s ON s.id = t.space_id WHERE e.id = $1`,
@@ -111,6 +122,7 @@ export async function queueNotifications(db: Queryable, eventId: number) {
     for (const r of rows) add(r.user_id, e.type === "sent" ? "received" : "refused");
   }
   if (e.to_assignee_id && e.to_assignee_id !== e.from_assignee_id) add(e.to_assignee_id, "assigned");
+  for (const id of mentioned) add(id, "mention");
   // A comment, on its own or written with another change; a refusal's reason is in its own notification.
   if (e.comment && e.type !== "refused") {
     add(e.author_id, "comment");
@@ -121,8 +133,19 @@ export async function queueNotifications(db: Queryable, eventId: number) {
   await db.query(
     `INSERT INTO notifications (user_id, task_id, kind, event_id)
      SELECT u.id, $3, x.kind, $4 FROM unnest($1::uuid[], $2::text[]) AS x(user_id, kind) JOIN users u ON u.id = x.user_id
-     WHERE ${ELIGIBLE}`,
-    [[...to.keys()], [...to.values()], e.task_id, eventId]
+     WHERE ${RECIPIENT("$5")}`,
+    [[...to.keys()], [...to.values()], e.task_id, eventId, notificationState.enabled]
+  );
+}
+
+/** Tasks no longer blocked since the history entry `eventId` finished their last blocker (dependencies.ts). */
+export async function queueUnblocked(db: Queryable, eventId: number, told: { userId: string; taskId: string }[]) {
+  if (!told.length) return;
+  await db.query(
+    `INSERT INTO notifications (user_id, task_id, kind, event_id)
+     SELECT u.id, x.task_id, 'unblocked', $3 FROM unnest($1::uuid[], $2::uuid[]) AS x(user_id, task_id) JOIN users u ON u.id = x.user_id
+     WHERE ${RECIPIENT("$4")}`,
+    [told.map((t) => t.userId), told.map((t) => t.taskId), eventId, notificationState.enabled]
   );
 }
 
@@ -130,13 +153,6 @@ export async function queueNotifications(db: Queryable, eventId: number) {
 // E-mails
 
 const escape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
-/** Tasks whose content stays in the app: in a confidential or team-only pipe, or of a type only such pipes offer. */
-export function isConfidential(t: Row): boolean {
-  const p = pipeTypeById(t.pipe_kind);
-  if (p) return Boolean(p.confidential || p.teamOnly);
-  return allPipeTypes().some((x) => (x.confidential || x.teamOnly) && x.taskTypes.includes(t.task_type));
-}
 
 export interface NotificationLine {
   kind: Exclude<RowKind, "overdue">;
@@ -147,11 +163,15 @@ export interface NotificationLine {
   toPersonal: boolean;
 }
 
+/** Fills placeholders with values as they are (user text, not translated). */
+const fill = (s: string, values: Record<string, string>) => s.replace(/\{(\w+)\}/g, (all, k: string) => values[k] ?? all);
+
 /** What happened, in a sentence; without user text (comment, reason) when the task is confidential. */
 export function describe(lang: Locale, l: NotificationLine, masked: boolean): string {
   const name = l.actorName ?? tr(lang, "Someone");
   const excerpt = l.comment && !masked ? (l.comment.length > 400 ? `${l.comment.slice(0, 400)}…` : l.comment) : "";
-  const quote = (s: string) => (excerpt ? (lang === "fr" ? `${s}\u00a0: « ${excerpt} »` : `${s}: “${excerpt}”`) : s);
+  // Quoted the way the language does ("{text}: “{excerpt}”").
+  const quote = (s: string) => (excerpt ? fill(tr(lang, "{text}: “{excerpt}”"), { text: s, excerpt }) : s);
   switch (l.kind) {
     case "received":
       return quote(l.toPersonal
@@ -163,6 +183,11 @@ export function describe(lang: Locale, l: NotificationLine, masked: boolean): st
       return quote(tr(lang, "{name} refused this task", { name }));
     case "comment":
       return quote(tr(lang, "{name} commented", { name }));
+    case "mention":
+      return quote(tr(lang, "{name} mentioned you", { name }));
+    // Nothing of the blocker: one may not be able to open it.
+    case "unblocked":
+      return tr(lang, "The tasks it waited for are finished");
   }
 }
 
@@ -201,6 +226,8 @@ const SUBJECTS: Record<NotificationLine["kind"], string> = {
   assigned: "You now own {task}",
   refused: "Task refused: {task}",
   comment: "New comment on {task}",
+  mention: "You were mentioned in {task}",
+  unblocked: "No longer blocked: {task}",
 };
 
 export function immediateEmail(lang: Locale, t: Row, lines: NotificationLine[], unsubscribe: string) {
@@ -265,6 +292,8 @@ const KIND_LABELS: Record<Kind, string> = {
   assigned: "Tasks you now own",
   refused: "Tasks refused",
   comment: "Comments",
+  mention: "Mentions",
+  unblocked: "Tasks no longer blocked",
   due: "Due date reminders",
 };
 
@@ -390,7 +419,11 @@ async function sendImmediate(now: Date, send: Send): Promise<number> {
   let sent = 0;
   for (const rows of groups.values()) {
     const u = users.get(rows[0].user_id)!;
-    const ready = rows.filter((r) => u.prefs[prefKind(r.kind)] === "immediate");
+    // A mention or a release already seen live (the person is in the app) needs no e-mail.
+    const live = (r: Row) => (r.kind === "mention" || r.kind === "unblocked") && u.prefs[prefKind(r.kind)] === "immediate";
+    const seen = isOnline(u.id) ? rows.filter(live) : [];
+    if (seen.length) await settle(seen.map((r) => Number(r.id)), "online", true);
+    const ready = rows.filter((r) => u.prefs[prefKind(r.kind)] === "immediate" && !seen.includes(r));
     if (!ready.length || now.getTime() - new Date(ready[0].created_at).getTime() < GROUP_DELAY_MS) continue;
     const last = await one(
       `SELECT max(sent_at) AS at FROM notifications WHERE user_id = $1 AND task_id = $2 AND channel = 'immediate'`,
@@ -506,6 +539,43 @@ export async function runNotifications(now = new Date(), send: Send = defaultSen
   }
   sent += await sendDueReminders(now, send);
   return sent;
+}
+
+/**
+ * Push notifications (push.ts): each new notification of a kind one gets "at once", to the devices one turned push
+ * on for, while one is not in the app; at most an hour late. Claimed first, so that none goes twice. Without e-mail
+ * on the instance, the notification is then done. Returns how many were pushed.
+ */
+export async function runPush(now = new Date()): Promise<number> {
+  const { rows: claimed } = await query(
+    `UPDATE notifications SET pushed_at = $1 WHERE id IN (
+       SELECT id FROM notifications WHERE pushed_at IS NULL AND kind <> 'overdue' AND created_at > $1::timestamptz - interval '1 hour'
+       ORDER BY id LIMIT 200 FOR UPDATE SKIP LOCKED)
+     RETURNING id`,
+    [now]
+  );
+  if (!claimed.length) return 0;
+  const ids = claimed.map((r) => Number(r.id));
+  const { rows } = await query(`${LINE_SELECT} WHERE n.id = ANY($1) ORDER BY n.id`, [ids]);
+  const users = await recipientsOf([...new Set(rows.map((r) => r.user_id as string))]);
+  let pushed = 0;
+  for (const r of rows) {
+    const u = users.get(r.user_id);
+    if (!u || u.prefs[prefKind(r.kind)] !== "immediate" || isOnline(u.id)) continue;
+    const t = await visibleTask(r.task_id, u.id);
+    if (!t) continue;
+    const masked = isConfidential(t);
+    const line = toLine(r);
+    const message = {
+      title: tr(u.lang, SUBJECTS[line.kind], { task: taskName(t, masked) }),
+      body: describe(u.lang, line, masked),
+      url: taskUrl(t),
+      tag: `task-${t.id}`,
+    };
+    if (await pushTo(u.id, message)) pushed++;
+  }
+  if (!notificationState.enabled) await settle(ids, "push", true);
+  return pushed;
 }
 
 /** Forgets notifications gone out more than 30 days ago (overdue ones are kept while they apply). */

@@ -6,6 +6,8 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
+# The language files (locales/*.json) are bundled with the front-end.
+COPY locales/ /locales/
 RUN npm run check && npm run build
 
 # ---- Back-end (Fastify, TypeScript) -----------------------------------------
@@ -26,6 +28,8 @@ COPY --from=server /server/node_modules ./node_modules
 COPY --from=server /server/dist ./dist
 COPY --from=server /server/package.json ./
 COPY --from=web /web/dist ./web
+# Read by the server at start (i18n.ts).
+COPY locales/ ./locales/
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \

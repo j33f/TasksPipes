@@ -13,20 +13,37 @@ import { lastWeekday } from "./time.js";
 import { PROVIDERS, TASK_KEY_PREFIX, gitItems, verifyGithub, verifyGitlab, type GitItem, type Provider } from "./git.js";
 import crypto from "node:crypto";
 import { cleanFields } from "./fields.js";
-import { LOCALES, localeOf, localize, localizePipeType, localizeTaskType, tr, type Locale } from "./i18n.js";
+import { csvSeparator, isLocale, localeOf, localize, localizePipeType, localizeTaskType, tr, type Locale } from "./i18n.js";
 import QRCode from "qrcode";
 import { INVITE_LINK_HOURS, createLoginLink, decrypt, encrypt, ensurePersonalSpace, reenableInvited } from "./auth.js";
 import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
-import { isEmail, sendLinkMail } from "./mail.js";
+import { isEmail, sendLinkMail, sendOutlineInvite } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
 import { calendarUrl } from "./calendar.js";
+import { adminRoutes, requestIsAdmin } from "./admin.js";
+import { accountRoutes } from "./account.js";
+import { tokenRoutes } from "./api.js";
+import { queueWebhooks, webhookRoutes } from "./webhooks.js";
+import { mentionRecipients, mentionable, mentionedIds, newMentions } from "./mentions.js";
+import { presentRecurrence, recurrenceRoutes, type RecordCreated } from "./recurrence.js";
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
-import { SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, type TaskPermissions } from "./access.js";
+import { searchTasks } from "./search.js";
+import { hasDevices, pushRoutes } from "./push.js";
+import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
+import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
+import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
+import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
+import {
+  SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, taskVisibleSql, teamOnlyKinds, type TaskPermissions,
+} from "./access.js";
 
 export const STATUSES = ["backlog", "ready", "started", "ongoing", "blocked", "abandoned", "done"] as const;
 type Status = (typeof STATUSES)[number];
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
+/** The calendar shows at most this many days, and tasks. */
+const CALENDAR_DAYS = 62;
+const CALENDAR_LIMIT = 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,6 +119,26 @@ function assertTaskTypeUsable(type: TaskType, userId: string, pipeKindId: string
   throw bad("Invalid task type");
 }
 
+/**
+ * Task types of a task sent to a space's incoming: the plain task, and those of the space's pipes the sender sees
+ * (all of them for a member, the open ones otherwise, so that no private pipe shows through), archived ones left out.
+ */
+async function incomingTaskTypes(spaceId: string, userId: string): Promise<Set<string>> {
+  const { rows } = await query(
+    `SELECT DISTINCT p.kind FROM pipes p WHERE p.space_id = $1 AND p.archived_at IS NULL
+       AND (p.visibility = 'open' OR EXISTS (SELECT 1 FROM space_members m WHERE m.space_id = p.space_id AND m.user_id = $2))`,
+    [spaceId, userId]
+  );
+  return new Set(["task", ...rows.flatMap((r) => pipeTypeById(r.kind)?.taskTypes ?? [])]);
+}
+
+/** A priority filter: 1 to 4, or 0 for tasks without one. */
+function searchPriority(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 4) throw bad("Invalid priority");
+  return n;
+}
+
 // ---------------------------------------------------------------------------
 // Data access helpers
 
@@ -120,7 +157,7 @@ function getSpace(id: string, userId: string) {
 const personalSpaceId = async (userId: string, db?: Queryable): Promise<string> =>
   (await one(`SELECT id FROM spaces WHERE user_id = $1`, [userId], db))?.id;
 
-function presentTask(t: Row) {
+export function presentTask(t: Row) {
   return {
     id: t.id,
     number: t.number,
@@ -148,6 +185,12 @@ function presentTask(t: Row) {
     // State of the latest pull/merge request naming the task.
     gitState: t.git_state ?? null,
     checklist: t.checklist ?? { total: 0, done: 0, next: null },
+    // Tasks it waits for, still to finish.
+    blockers: Number(t.open_blockers ?? 0),
+    priority: t.priority ?? null,
+    labels: t.labels ?? [],
+    estimateMinutes: t.estimate_minutes ?? null,
+    loggedMinutes: Number(t.logged_minutes ?? 0),
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   };
@@ -219,6 +262,12 @@ const snapshot = (t: Row): Snapshot => ({
   doc: t.outline_doc_id ? { id: t.outline_doc_id, title: t.outline_doc_title, url: t.outline_doc_url } : null,
 });
 
+/** The history entry of a task made by a recurring series (recurrence.ts), as any creation. */
+export const recordOccurrence: RecordCreated = async (db, taskId, actorId, recurrenceId) => {
+  const row = await getTaskRow(taskId, db);
+  await recordEvent(db, taskId, actorId, "created", null, snapshot(row!), null, { recurrence: recurrenceId });
+};
+
 /** Writes one entry of a task's history, with the state before and after the change, and queues its notifications. */
 async function recordEvent(
   db: Queryable,
@@ -228,7 +277,9 @@ async function recordEvent(
   before: Snapshot | null,
   after: Snapshot,
   comment: string | null = null,
-  details: object | null = null
+  details: object | null = null,
+  /** Off for imports: a whole file of tasks would otherwise e-mail everyone named in it. */
+  notify = true
 ) {
   const { rows } = await db.query(
     `INSERT INTO task_events (task_id, actor_id, type, comment,
@@ -250,8 +301,17 @@ async function recordEvent(
     ]
   );
   // E-mail notifications it causes, in the same transaction.
-  await queueNotifications(db, Number(rows[0].id));
+  if (notify) await queueNotifications(db, Number(rows[0].id), await mentionRecipients(db, Number(rows[0].id)));
+  // Finished: the tasks that waited only for it are released.
+  if (notify && before && !isResolved(before.status) && isResolved(after.status)) await releaseWaiting(db, Number(rows[0].id));
+  // Outgoing webhooks of the pipes concerned (imports too: integrations want every task).
+  await queueWebhooks(db, Number(rows[0].id));
 }
+
+/** Statuses of work under way or finished: reaching one while blocked is allowed, and noted in the history. */
+const FORWARD: Status[] = ["started", "ongoing", "done"];
+const movedWhileBlocked = async (db: Queryable, t: Row, to: Status) =>
+  to !== t.status && FORWARD.includes(to) && (await openBlockers(db, t.id)) > 0;
 
 async function nextPosition(db: Queryable, spaceId: string, pipeId: string | null, stage: string | null): Promise<number> {
   const r = pipeId
@@ -272,7 +332,7 @@ function localizeDetails(lang: Locale, d: Row): Row {
 }
 
 /** History of a task; column, type and field names recorded with it are shown in `lang`. */
-async function getEvents(taskId: string, lang: Locale) {
+export async function getEvents(taskId: string, lang: Locale) {
   const { rows } = await query(
     `SELECT e.*, a.name AS actor_name, a.avatar_url AS actor_avatar,
             COALESCE(fsu.name, fs.name) AS from_space_name, COALESCE(tsu.name, ts.name) AS to_space_name,
@@ -344,6 +404,7 @@ async function keptAssignee(spaceId: string, assigneeId: string | null, db?: Que
 /** Like keptAssignee, but rejects an assignee that was explicitly asked for and cannot be kept. */
 async function checkAssignee(spaceId: string, assigneeId: string | null, db?: Queryable): Promise<string | null> {
   const disabled = assigneeId && (await one(`SELECT 1 FROM users WHERE id = $1 AND disabled_at IS NOT NULL`, [assigneeId], db));
+  if (assigneeId) await assertSignedInOnce(assigneeId, db);
   if (!assigneeId || (!disabled && (await keptAssignee(spaceId, assigneeId, db)))) return assigneeId;
   const s = await one(`SELECT kind FROM spaces WHERE id = $1`, [spaceId], db);
   throw bad(
@@ -351,6 +412,21 @@ async function checkAssignee(spaceId: string, assigneeId: string | null, db?: Qu
       ? "The owner must be a member of the team"
       : "A task in a personal space belongs to its holder: send it to someone instead."
   );
+}
+
+/**
+ * Outline accounts imported from the workspace take part once they have signed in: until then they get no task and
+ * join no team, and are invited instead (POST /users/:id/invite).
+ */
+async function assertSignedInOnce(userId: string, db?: Queryable) {
+  const u = await one(`SELECT name FROM users WHERE id = $1 AND auth_kind = 'outline' AND last_login_at IS NULL`, [userId], db);
+  if (u) throw bad("{name} has not signed in to TasksPipes yet: invite them first.", { name: u.name });
+}
+
+/** The same for a recipient space: the person of a personal space must have signed in once. */
+async function assertReachable(spaceId: string) {
+  const s = await one(`SELECT user_id FROM spaces WHERE id = $1`, [spaceId]);
+  if (s?.user_id) await assertSignedInOnce(s.user_id);
 }
 
 async function assertKindAllowed(kind: string, spaceId: string) {
@@ -406,20 +482,28 @@ export async function apiRoutes(app: FastifyInstance) {
     if (!req.user) throw new HttpError(401, "Not signed in");
   });
   const me = (req: FastifyRequest) => req.user!.id;
+  await app.register(adminRoutes);
+  await app.register(tokenRoutes);
+  await app.register(webhookRoutes);
+  await app.register(recurrenceRoutes);
+  await app.register(labelRoutes);
+  await app.register(pushRoutes);
+  await app.register(accountRoutes, { present: presentTask, events: getEvents });
 
   app.get("/me", async (req) => ({
     user: req.user,
     personalSpaceId: await personalSpaceId(me(req)),
     outlineUrl: req.outlineUrl,
+    // Administrator of the instance (ADMIN_EMAILS): the administration page is offered.
+    admin: await requestIsAdmin(req),
     features: { invitations: config.allowEmailInvitations, notifications: notificationState.enabled },
-    // E-mail notifications are only offered when e-mail is set up.
-    ...(notificationState.enabled
-      ? { notificationPrefs: prefsOf((await one(`SELECT notification_prefs FROM users WHERE id = $1`, [me(req)]))?.notification_prefs) }
-      : {}),
+    // Choices of notifications: by e-mail when it is set up, and for push notifications.
+    notificationPrefs: prefsOf((await one(`SELECT notification_prefs FROM users WHERE id = $1`, [me(req)]))?.notification_prefs),
   }));
 
   app.put("/me/notifications", async (req: Req) => {
-    if (!notificationState.enabled) throw notFound("Not found");
+    // Without e-mail, the choices still apply to push notifications, for those who turned them on.
+    if (!notificationState.enabled && !(await hasDevices(me(req)))) throw notFound("Not found");
     return { notificationPrefs: await savePrefs(me(req), cleanPrefs(req.body)) };
   });
 
@@ -437,7 +521,7 @@ export async function apiRoutes(app: FastifyInstance) {
   };
 
   app.post("/me/avatar", { bodyLimit: 2 * 1024 * 1024 }, async (req: Req) => {
-    if (req.user!.kind !== "email") throw bad("The picture of an Outline account is changed in Outline");
+    if (req.user!.kind === "outline") throw bad("The picture of an Outline account is changed in Outline");
     const content = req.body as unknown as Buffer;
     const mime = String(req.headers["x-file-type"] || "");
     // Checked against the file's first bytes, not only its declared type.
@@ -453,7 +537,7 @@ export async function apiRoutes(app: FastifyInstance) {
   });
 
   app.delete("/me/avatar", async (req: Req) => {
-    if (req.user!.kind !== "email") throw bad("The picture of an Outline account is changed in Outline");
+    if (req.user!.kind === "outline") throw bad("The picture of an Outline account is changed in Outline");
     await query(`DELETE FROM user_avatars WHERE user_id = $1`, [me(req)]);
     await query(`UPDATE users SET avatar_url = NULL, updated_at = now() WHERE id = $1`, [me(req)]);
     return { ok: true };
@@ -478,10 +562,10 @@ export async function apiRoutes(app: FastifyInstance) {
     const u = req.user!;
     let name = u.name;
     if ("name" in b) {
-      if (u.kind !== "email") throw bad("The name of an Outline account is changed in Outline");
+      if (u.kind === "outline") throw bad("The name of an Outline account is changed in Outline");
       name = text(b.name, "Name", { required: true, max: 120 });
     }
-    const locale = "locale" in b ? (b.locale === null ? null : LOCALES.includes(b.locale) ? b.locale : bad("Invalid language")) : u.locale;
+    const locale = "locale" in b ? (b.locale === null ? null : isLocale(b.locale) ? b.locale : bad("Invalid language")) : u.locale;
     const theme = "theme" in b ? (b.theme === null ? null : ["light", "dark"].includes(b.theme) ? b.theme : bad("Invalid theme")) : u.theme;
     if (locale instanceof HttpError) throw locale;
     if (theme instanceof HttpError) throw theme;
@@ -490,7 +574,7 @@ export async function apiRoutes(app: FastifyInstance) {
   });
 
   const requireEmailAccount = (req: Req) => {
-    if (req.user!.kind !== "email") throw bad("Two-factor authentication is for accounts invited by e-mail; an Outline account sets it up in Outline.");
+    if (req.user!.kind === "outline") throw bad("Two-factor authentication is for accounts invited by e-mail; an Outline account sets it up in Outline.");
   };
 
   // Step 1: a new secret, kept aside until a first code confirms the app is set up.
@@ -705,6 +789,20 @@ export async function apiRoutes(app: FastifyInstance) {
     }));
   });
 
+  // An Outline colleague who never signed in: an e-mail inviting them (or, without e-mail, the link to give them).
+  app.post("/users/:id/invite", rateLimited(LIMITS.outlineInvite), async (req: Req) => {
+    const id = uuid(req.params.id, "Person");
+    const u = await one(
+      `SELECT name, email, locale, outline_url, auth_kind, last_login_at FROM users WHERE id = $1 AND user_visible($2, id)`,
+      [id, me(req)]
+    );
+    if (!u) throw bad("Unknown user");
+    if (u.auth_kind !== "outline" || u.last_login_at) throw bad("{name} already uses TasksPipes.", { name: u.name });
+    const sent = Boolean(u.email) && (await sendOutlineInvite(u.locale ?? config.defaultLocale, u.email, req.user!.name, u.outline_url));
+    req.log.info({ userId: id, sent }, "Outline colleague invited");
+    return sent ? { sent: true } : { sent: false, link: config.appUrl };
+  });
+
   // ----- Home ---------------------------------------------------------------
 
   app.get("/home", async (req) => {
@@ -744,6 +842,51 @@ export async function apiRoutes(app: FastifyInstance) {
       [uid]
     );
     return rows.map(presentTask);
+  });
+
+  // Calendar: tasks due in a period (at most CALENDAR_DAYS), in the pipes one sees, archived ones left out; one's
+  // own (scope=mine, the default) or all those one sees. canMove: one may change the due date (a member).
+  app.get("/calendar", rateLimited(LIMITS.search), async (req: Req) => {
+    const uid = me(req);
+    const q = req.query;
+    const day = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null);
+    const from = day(q.from);
+    const to = day(q.to);
+    if (!from || !to || to < from || (Date.parse(to) - Date.parse(from)) / 86_400_000 > CALENDAR_DAYS) throw bad("Invalid period");
+    const { rows } = await query(
+      `${TASK_SELECT.replace("SELECT t.*,", `SELECT t.*, EXISTS (SELECT 1 FROM space_members cm WHERE cm.space_id = t.space_id AND cm.user_id = $1) AS can_move,`)}
+       WHERE t.due_date BETWEEN $2 AND $3 AND t.pipe_id IS NOT NULL AND p.archived_at IS NULL
+         AND ${taskVisibleSql("$1", "$4")}
+         AND ($5 OR COALESCE(s.user_id, t.assignee_id) = $1)
+         AND ($6::uuid IS NULL OR t.space_id = $6)
+         AND ($7 OR t.status NOT IN ('done', 'abandoned'))
+       ORDER BY t.due_date, t.priority NULLS LAST, t.position, t.created_at LIMIT ${CALENDAR_LIMIT + 1}`,
+      [uid, from, to, teamOnlyKinds(), q.scope === "all", optUuid(q.space, "Space"), q.done === "1"]
+    );
+    return {
+      tasks: rows.slice(0, CALENDAR_LIMIT).map((t) => ({ ...presentTask(t), canMove: t.can_move })),
+      truncated: rows.length > CALENDAR_LIMIT,
+    };
+  });
+
+  // People one may @mention on a task (who can open it, among those one sees).
+  app.get("/tasks/:id/mentionable", async (req: Req) => {
+    const { t } = await loadTaskFor(req.params.id, me(req));
+    return mentionable(t.id, me(req), String(req.query.q ?? ""));
+  });
+
+  // ----- Search -------------------------------------------------------------
+
+  // Tasks one can see anywhere, by text or number; filters by status ("open" too), owner, task type, label and priority.
+  app.get("/search", rateLimited(LIMITS.search), async (req: Req) => {
+    const q = req.query;
+    return searchTasks(me(req), localeOf(req), String(q.q ?? "").slice(0, 200), {
+      status: q.status === "open" ? "open" : q.status ? status(q.status) : null,
+      owner: optUuid(q.owner, "Owner"),
+      type: q.type ? String(q.type).slice(0, 100) : null,
+      label: q.label ? String(q.label).slice(0, 40) : null,
+      priority: q.priority === undefined || q.priority === "" ? null : searchPriority(q.priority),
+    });
   });
 
   // ----- Spaces -------------------------------------------------------------
@@ -799,6 +942,7 @@ export async function apiRoutes(app: FastifyInstance) {
         await ensureUser(m.userId, client);
         // Only people one can see, as when adding a member to an existing team.
         if (!(await one(`SELECT user_visible($1, $2) AS ok`, [uid, m.userId], client))?.ok) throw bad("Unknown user");
+        await assertSignedInOnce(m.userId, client);
         await client.query(
           `INSERT INTO space_members (space_id, user_id, role, added_by) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
           [space!.id, m.userId, m.role === "admin" ? "admin" : "member", uid]
@@ -816,8 +960,9 @@ export async function apiRoutes(app: FastifyInstance) {
     const isMember = Boolean(s.my_role);
     const [members, pipes, incoming] = await Promise.all([
       query(
-        `SELECT u.id, u.name, u.avatar_url, m.role FROM space_members m JOIN users u ON u.id = m.user_id
-         WHERE m.space_id = $1 AND u.disabled_at IS NULL ORDER BY m.role, lower(u.name)`,
+        // Accounts disabled by an administrator stay listed, marked; unused invitations do not.
+        `SELECT u.id, u.name, u.avatar_url, m.role, u.disabled_at IS NOT NULL AS disabled FROM space_members m JOIN users u ON u.id = m.user_id
+         WHERE m.space_id = $1 AND (u.disabled_at IS NULL OR u.disabled_reason = 'admin') ORDER BY m.role, lower(u.name)`,
         [s.id]
       ),
       query(
@@ -840,7 +985,7 @@ export async function apiRoutes(app: FastifyInstance) {
       color: s.color,
       avatarUrl: s.avatar_url,
       myRole: s.my_role,
-      members: members.rows.map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatar_url, role: m.role })),
+      members: members.rows.map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatar_url, role: m.role, disabled: m.disabled })),
       pipes: pipes.rows.map(presentPipe),
       incoming: incoming ? incoming.rows.map(presentTask) : null,
     };
@@ -872,6 +1017,7 @@ export async function apiRoutes(app: FastifyInstance) {
     if (!userId) throw bad("A user is required");
     // Only people one can see: someone invited by e-mail joins a team through whoever invited them.
     if (!(await one(`SELECT user_visible($1, $2) AS ok`, [me(req), userId]))?.ok) throw bad("Unknown user");
+    await assertSignedInOnce(userId);
     await query(
       `INSERT INTO space_members (space_id, user_id, role, added_by) VALUES ($1, $2, $3, $4)
        ON CONFLICT (space_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
@@ -1146,6 +1292,141 @@ export async function apiRoutes(app: FastifyInstance) {
     };
   });
 
+  // ----- Export and import of a pipe's tasks --------------------------------
+
+  // Anyone who sees the pipe may export it, as CSV (one column per field) or JSON.
+  app.get("/pipes/:id/export", rateLimited(LIMITS.pipeExport), async (req: Req, reply) => {
+    const uid = me(req);
+    const lang = localeOf(req);
+    const { p } = await loadPipeFor(req.params.id, uid);
+    const { rows } = await query(
+      `SELECT t.number, t.title, t.description, t.status, t.stage, t.task_type, t.fields, t.due_date, t.created_at, t.updated_at,
+              au.name AS author_name, ow.name AS owner_name, t.priority, t.estimate_minutes,
+              (SELECT COALESCE(sum(te.minutes), 0) FROM task_time_entries te WHERE te.task_id = t.id) AS logged_minutes,
+              COALESCE((SELECT json_agg(l.name ORDER BY l.position, lower(l.name)) FROM task_labels tl
+                        JOIN space_labels l ON l.id = tl.label_id WHERE tl.task_id = t.id), '[]') AS labels,
+              COALESCE((SELECT json_agg(json_build_object('text', i.text, 'done', i.done) ORDER BY i.position, i.created_at)
+                        FROM task_items i WHERE i.task_id = t.id), '[]') AS items
+       FROM tasks t JOIN spaces s ON s.id = t.space_id JOIN users au ON au.id = t.author_id
+       LEFT JOIN users ow ON ow.id = COALESCE(s.user_id, t.assignee_id)
+       WHERE t.pipe_id = $1 ORDER BY t.position, t.created_at`,
+      [p.id]
+    );
+    // People named in fields, by name — only those one may see, as in the app.
+    const ids = [...new Set(rows.flatMap((t) => Object.values(t.fields as Row).filter((v): v is string => typeof v === "string" && UUID.test(v))))];
+    const named = ids.length ? await query(`SELECT id, name FROM users WHERE id = ANY($1) AND user_visible($2, id)`, [ids, uid]) : { rows: [] };
+    const names = new Map(named.rows.map((u) => [u.id as string, u.name as string]));
+    const key = (n: number) => `${TASK_KEY_PREFIX}-${n}`;
+    const file = (p.name.normalize("NFD").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "") || "pipe").slice(0, 60);
+    const json = req.query.format === "json";
+    reply.header("content-disposition", `attachment; filename="${file}.${json ? "json" : "csv"}"`);
+    reply.header("cache-control", "no-store");
+    if (json) return reply.type("application/json; charset=utf-8").send(JSON.stringify(exportJson({ name: p.name, kind: p.kind }, rows as ExportedTask[], lang, names, key), null, 2));
+    // Spreadsheets in French expect semicolons.
+    const sep = req.query.sep === ";" || (req.query.sep === undefined && csvSeparator(lang) === ";") ? ";" : ",";
+    return reply.type("text/csv; charset=utf-8").send(exportCsv(p.kind, rows as ExportedTask[], lang, names, key, sep));
+  });
+
+  /** An import checked against the pipe, for its members: a CSV file and how its columns map, or a Trello board. */
+  async function importPlan(req: Req) {
+    const uid = me(req);
+    const lang = localeOf(req);
+    const { p, role } = await loadPipeFor(req.params.id, uid);
+    if (!role) throw forbidden("Only the space's members can import tasks");
+    if (p.archived_at) throw bad("This pipe is archived");
+    const b = req.body || {};
+    const content = typeof b.content === "string" ? b.content : "";
+    if (!content.trim()) throw bad("Choose a file");
+    const trello = b.source === "trello";
+    let rows: string[][];
+    if (trello) {
+      let board: unknown;
+      try {
+        board = JSON.parse(content);
+      } catch {
+        throw bad("This is not a Trello board exported as JSON");
+      }
+      rows = trelloRows(board, lang);
+    } else rows = csvRows(content);
+    const allowed = new Set(targetsFor(p.kind, lang).map((t) => t.id as string).concat("comments"));
+    const mapping: Record<string, Target> = trello ? TRELLO_MAPPING : {};
+    if (!trello && b.mapping && typeof b.mapping === "object") {
+      for (const [i, t] of Object.entries(b.mapping as Record<string, unknown>)) if (typeof t === "string" && allowed.has(t) && t !== "comments") mapping[i] = t as Target;
+    }
+    const columnValues: Record<string, string> = {};
+    for (const [v, c] of Object.entries((b.columnValues ?? {}) as Record<string, unknown>)) if (typeof c === "string") columnValues[v] = c;
+    const space = await one(`SELECT kind, user_id FROM spaces WHERE id = $1`, [p.space_id]);
+    // Possible owners: the members who could be given a task (signed in once, not disabled).
+    const people = await query(
+      `SELECT u.id, u.name, u.email FROM space_members m JOIN users u ON u.id = m.user_id
+       WHERE m.space_id = $1 AND u.disabled_at IS NULL AND (u.auth_kind <> 'outline' OR u.last_login_at IS NOT NULL)`,
+      [p.space_id]
+    );
+    const plan = planImport(p.kind, lang, { rows, mapping, taskType: typeof b.taskType === "string" ? b.taskType : undefined, columnValues },
+      people.rows as Person[], space?.kind === "user" ? space.user_id : null);
+    return { p, plan, lang, source: trello ? "trello" : "csv", people: people.rows };
+  }
+
+  const IMPORT_BODY = { bodyLimit: 12 * 1024 * 1024 };
+
+  // What an import would do: the columns and their targets, the first tasks, every error.
+  app.post("/pipes/:id/import/preview", { ...IMPORT_BODY, ...rateLimited(LIMITS.pipeImportPreview) }, async (req: Req) => {
+    const { p, plan, lang, people } = await importPlan(req);
+    const names = new Map(people.map((u) => [u.id as string, u.name as string]));
+    return {
+      headers: plan.headers,
+      mapping: plan.mapping,
+      targets: targetsFor(p.kind, lang),
+      taskTypes: taskTypesOf(p.kind).map((t) => ({ id: t.id, label: localize(lang, t.label) })),
+      columns: columnsFor(p.kind, lang),
+      columnValues: plan.columnValues,
+      count: plan.tasks.length,
+      tasks: plan.tasks.slice(0, 20).map((t) => ({ ...t, owner: t.assigneeId ? names.get(t.assigneeId) ?? null : null })),
+      errors: plan.errors.slice(0, 200),
+      errorCount: plan.errors.length,
+    };
+  });
+
+  // The import itself: all lines or none, in one transaction, without e-mail notifications.
+  app.post("/pipes/:id/import", { ...IMPORT_BODY, ...rateLimited(LIMITS.pipeImport) }, async (req: Req, reply) => {
+    const uid = me(req);
+    const { p, plan, lang, source } = await importPlan(req);
+    if (plan.errors.length) {
+      return reply.code(400).send({
+        error: tr(lang, "{n} lines cannot be imported: nothing was imported", { n: plan.errors.length }),
+        errors: plan.errors.slice(0, 200),
+      });
+    }
+    if (!plan.tasks.length) throw bad("The file holds no task");
+    const created = await tx(async (client) => {
+      const positions = new Map<string, number>();
+      for (const t of plan.tasks) {
+        const position = (positions.get(t.stage) ?? (await nextPosition(client, p.space_id, p.id, t.stage)) - 1) + 1;
+        positions.set(t.stage, position);
+        const row = await one(
+          `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date, author_id, task_type, fields)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) RETURNING id`,
+          [t.title, t.description, p.space_id, p.id, t.status, t.stage, position, t.assigneeId, t.dueDate, uid, t.taskType, JSON.stringify(t.fields)],
+          client
+        ).then((r) => getTaskRow(r!.id, client));
+        for (const [i, item] of t.items.entries()) {
+          await client.query(
+            `INSERT INTO task_items (task_id, text, done, position, done_by, done_at)
+             VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN $5::uuid END, CASE WHEN $3 THEN now() END)`,
+            [row!.id, item.text, item.done, i + 1, uid]
+          );
+        }
+        const s = snapshot(row!);
+        await recordEvent(client, row!.id, uid, "created", null, s, null, { imported: source }, false);
+        for (const c of t.comments) await recordEvent(client, row!.id, uid, "comment", s, s, c, null, false);
+      }
+      return plan.tasks.length;
+    });
+    req.log.info({ pipeId: p.id, created, source }, "Tasks imported");
+    notifySpace(p.space_id, { type: "task.updated" }, uid);
+    return { created };
+  });
+
   app.patch("/pipes/:id", async (req: Req) => {
     const { p, role } = await loadPipeFor(req.params.id, me(req));
     if (!role) throw forbidden();
@@ -1215,6 +1496,8 @@ export async function apiRoutes(app: FastifyInstance) {
     const comment = text(b.comment, "Comment") || null;
     const type = taskType(b.taskType);
     const { values } = cleanFields(type, b.fields ?? {});
+    const priority = cleanPriority(b.priority);
+    const estimate = cleanEstimate(b.estimateMinutes);
     if (b.items !== undefined && !Array.isArray(b.items)) throw bad("Invalid sub-tasks");
     const items = ((b.items ?? []) as unknown[])
       .map((x) => (typeof x === "object" && x ? x : { text: x }) as { text?: unknown; done?: unknown })
@@ -1242,20 +1525,27 @@ export async function apiRoutes(app: FastifyInstance) {
       // Otherwise the task is sent to a space's incoming bucket.
       spaceId = uuid(b.spaceId, "Space");
       if (!(await spaceVisible(spaceId, uid))) throw notFound("Space not found");
+      await assertReachable(spaceId);
+      if (!(await incomingTaskTypes(spaceId, uid)).has(type.id)) throw bad("This task type fits none of the recipient's pipes");
       senderId = uid;
     }
     const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Owner")));
+    // Labels of the space, put by those who edit its tasks: in a pipe one adds to, or in an incoming of one's own.
+    const labelIds = b.labelIds === undefined ? [] : await cleanLabelIds(b.labelIds, spaceId);
+    if (labelIds.length && !pipeId && !(await memberRole(spaceId, uid))) throw forbidden();
 
     const id = await tx(async (client) => {
       const position = await nextPosition(client, spaceId, pipeId, stage);
       const row = await one(
         `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date,
-                            outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb)) RETURNING id`,
+                            outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields, priority,
+                            estimate_minutes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18) RETURNING id`,
         [title, description, spaceId, pipeId, st, stage, position, assigneeId, dueDate,
-         doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values)],
+         doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority, estimate],
         client
       ).then((r) => getTaskRow(r!.id, client));
+      if (labelIds.length) await setTaskLabels(client, row!.id, labelIds);
       for (const [i, item] of items.entries()) {
         await client.query(
           `INSERT INTO task_items (task_id, text, done, position, done_by, done_at)
@@ -1263,7 +1553,8 @@ export async function apiRoutes(app: FastifyInstance) {
           [row!.id, item.text, item.done, i + 1, uid]
         );
       }
-      await recordEvent(client, row!.id, uid, pipeId ? "created" : "sent", null, snapshot(row!), comment);
+      const mentioned = mentionedIds(description);
+      await recordEvent(client, row!.id, uid, pipeId ? "created" : "sent", null, snapshot(row!), comment, mentioned.length ? { mentioned } : null);
       return row!.id as string;
     });
     if (!pipeId) {
@@ -1275,7 +1566,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.get("/tasks/:id", async (req: Req) => {
     const { t, perms } = await loadTaskFor(req.params.id, me(req));
-    const [events, files, items, links] = await Promise.all([
+    const [events, files, items, links, dependencies] = await Promise.all([
       getEvents(t.id, localeOf(req)),
       query(
         `SELECT f.id, f.field, f.name, f.mime, f.size, f.created_at, u.name AS uploaded_by_name
@@ -1288,10 +1579,14 @@ export async function apiRoutes(app: FastifyInstance) {
          WHERE task_id = $1 ORDER BY kind = 'commit', updated_at DESC LIMIT 100`,
         [t.id]
       ),
+      dependenciesOf(pool, t.id, me(req)),
     ]);
     return {
       ...presentTask(t),
       permissions: perms,
+      ...dependencies,
+      recurrence: t.recurrence_id ? presentRecurrence(await one(`SELECT * FROM task_recurrences WHERE id = $1`, [t.recurrence_id])) : null,
+      occurrenceOn: t.occurrence_on,
       events,
       items,
       key: `${TASK_KEY_PREFIX}-${t.number}`,
@@ -1331,24 +1626,37 @@ export async function apiRoutes(app: FastifyInstance) {
     const type = "taskType" in b ? taskType(b.taskType) : taskType(t.task_type);
     assertTaskTypeUsable(type, uid, t.pipe_kind, t.task_type);
     const { values, labels } = "fields" in b ? cleanFields(type, b.fields) : { values: {}, labels: [] };
-    const details = {
+    const priority = "priority" in b ? cleanPriority(b.priority) : t.priority;
+    const estimate = "estimateMinutes" in b ? cleanEstimate(b.estimateMinutes) : t.estimate_minutes;
+    const labelIds = "labelIds" in b ? await cleanLabelIds(b.labelIds, t.space_id) : null;
+    const details: Record<string, unknown> = {
       ...(type.id !== t.task_type ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: type.label } } : {}),
       ...(labels.length ? { fields: labels } : {}),
+      ...(priority !== (t.priority ?? null) ? { priority: { from: t.priority ?? null, to: priority } } : {}),
+      ...(estimate !== (t.estimate_minutes ?? null) ? { estimate: { from: t.estimate_minutes ?? null, to: estimate } } : {}),
     };
 
     await tx(async (client) => {
       const row = await one(
         `UPDATE tasks SET title = $2, description = $3, assignee_id = $4, due_date = $5, status = $6, stage = $10,
            outline_doc_id = $7, outline_doc_title = $8, outline_doc_url = $9,
-           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), updated_at = now()
+           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, estimate_minutes = $14, updated_at = now()
          WHERE id = $1 RETURNING id`,
         [t.id, title, description, assigneeId, dueDate, st, doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, stage,
-         type.id, JSON.stringify(values)],
+         type.id, JSON.stringify(values), priority, estimate],
         client
       ).then(() => getTaskRow(t.id, client));
+      if (labelIds) {
+        const changed = await setTaskLabels(client, t.id, labelIds);
+        if (changed.added.length || changed.removed.length) details.labels = changed;
+      }
       const before = snapshot(t);
       const after = snapshot(row!);
-      const d = Object.keys(details).length ? details : null;
+      // People newly mentioned in the description are told.
+      const mentioned = newMentions(t.description, description);
+      const blocked = await movedWhileBlocked(client, t, after.status);
+      const all = { ...details, ...(mentioned.length ? { mentioned } : {}), ...(blocked ? { whileBlocked: true } : {}) };
+      const d = Object.keys(all).length ? all : null;
       if (JSON.stringify(before) !== JSON.stringify(after)) {
         await recordEvent(client, t.id, uid, before.stage !== after.stage ? "status" : "updated", before, after, comment, d);
       } else if (title !== t.title || description !== t.description) {
@@ -1374,22 +1682,35 @@ export async function apiRoutes(app: FastifyInstance) {
     const wanted = b.stage ?? (b.status === undefined && p.kind === t.pipe_kind ? t.stage : null);
     const c = resolveStage(p.kind, wanted, b.status === undefined ? t.status : status(b.status));
     const comment = text(b.comment, "Comment") || null;
+    // Its type may change on the way, to one the target pipe offers (fields of the same id are kept).
+    const type = b.taskType === undefined ? null : taskType(b.taskType);
+    if (type && type.id !== t.task_type) {
+      if (type.id !== "task" && !pipeTypeById(p.kind)?.taskTypes.includes(type.id)) throw bad("Invalid task type");
+      assertTaskTypeUsable(type, uid, p.kind, t.task_type);
+    }
+    const retyped = type && type.id !== t.task_type ? type : null;
     await tx(async (client) => {
       const position =
         typeof b.position === "number" && Number.isFinite(b.position)
           ? b.position
           : await nextPosition(client, p.space_id, p.id, c.id);
       await client.query(
-        `UPDATE tasks SET space_id = $2, pipe_id = $3, status = $4, stage = $7, position = $5, assignee_id = $6, updated_at = now()
+        `UPDATE tasks SET space_id = $2, pipe_id = $3, status = $4, stage = $7, position = $5, assignee_id = $6,
+           task_type = $8, updated_at = now()
          WHERE id = $1`,
-        [t.id, p.space_id, p.id, c.status, position, await keptAssignee(p.space_id, t.assignee_id, client), c.id]
+        [t.id, p.space_id, p.id, c.status, position, await keptAssignee(p.space_id, t.assignee_id, client), c.id, retyped?.id ?? t.task_type]
       );
       const row = await getTaskRow(t.id, client);
       const before = snapshot(t);
       const after = snapshot(row!);
+      const details = retyped ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: retyped.label } } : null;
       if (before.pipe_id !== after.pipe_id || before.stage !== after.stage || comment) {
         const type = !t.pipe_id ? "accepted" : before.pipe_id !== after.pipe_id ? "moved" : "status";
-        await recordEvent(client, t.id, uid, type, before, after, comment);
+        const blocked = await movedWhileBlocked(client, t, after.status);
+        const d = details || blocked ? { ...details, ...(blocked ? { whileBlocked: true } : {}) } : null;
+        await recordEvent(client, t.id, uid, type, before, after, comment, d);
+      } else if (details) {
+        await recordEvent(client, t.id, uid, "fields", before, after, null, details);
       }
     });
     // Accepted out of an incoming: the other members' counts drop.
@@ -1402,6 +1723,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const { t } = await loadTaskFor(req.params.id, uid, "manage");
     const spaceId = uuid(req.body?.spaceId, "Recipient");
     if (!(await spaceVisible(spaceId, uid))) throw notFound("Recipient not found");
+    await assertReachable(spaceId);
     if (spaceId === t.space_id && !t.pipe_id) throw bad("The task is already in this incoming");
     assertStaysInSpace(t, spaceId);
     const comment = text(req.body?.comment, "Comment") || null;
@@ -1415,8 +1737,10 @@ export async function apiRoutes(app: FastifyInstance) {
          WHERE id = $1`,
         [t.id, spaceId, uid, position, assigneeId]
       );
+      // Labels belong to the space it left.
+      const lost = await keepSpaceLabels(client, t.id, spaceId);
       const row = await getTaskRow(t.id, client);
-      await recordEvent(client, t.id, uid, "sent", snapshot(t), snapshot(row!), comment);
+      await recordEvent(client, t.id, uid, "sent", snapshot(t), snapshot(row!), comment, lost.length ? { labels: { added: [], removed: lost } } : null);
     });
     notifySpace(spaceId, { type: "task.sent", task: { id: t.id, number: t.number, title: t.title }, by: req.user!.name }, uid);
     // The incoming it left (if any) has one task less.
@@ -1438,8 +1762,9 @@ export async function apiRoutes(app: FastifyInstance) {
          WHERE id = $1`,
         [t.id, target, uid, position]
       );
+      const lost = await keepSpaceLabels(client, t.id, target);
       const row = await getTaskRow(t.id, client);
-      await recordEvent(client, t.id, uid, "refused", snapshot(t), snapshot(row!), reason);
+      await recordEvent(client, t.id, uid, "refused", snapshot(t), snapshot(row!), reason, lost.length ? { labels: { added: [], removed: lost } } : null);
     });
     notifySpace(target, { type: "task.refused", task: { id: t.id, number: t.number, title: t.title }, by: req.user!.name, reason }, uid);
     notifySpace(t.space_id, { type: "incoming.changed" }, uid);
@@ -1453,6 +1778,96 @@ export async function apiRoutes(app: FastifyInstance) {
       const s = snapshot(t);
       await recordEvent(client, t.id, me(req), "comment", s, s, body);
       await client.query(`UPDATE tasks SET updated_at = now() WHERE id = $1`, [t.id]);
+    });
+    return { ok: true };
+  });
+
+  // ----- Dependencies between tasks (dependencies.ts) -----------------------------
+
+  // Those who may edit a task choose what it waits for, among the tasks they can open.
+  app.post("/tasks/:id/dependencies", rateLimited(LIMITS.dependencies), async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    const { t: blocker } = await loadTaskFor(uuid(req.body?.blockerId, "Blocking task"), uid);
+    await tx(async (client) => {
+      if (!(await addDependency(client, t.id, blocker.id, uid))) return;
+      const s = snapshot(t);
+      await recordEvent(client, t.id, uid, "dependency", s, s, null, { dependency: "added" });
+    });
+    return dependenciesOf(pool, t.id, uid);
+  });
+
+  // A blocker one cannot open can still be unlinked by those who may edit the task.
+  app.delete("/tasks/:id/dependencies/:blockerId", rateLimited(LIMITS.dependencies), async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    const blockerId = uuid(req.params.blockerId, "Blocking task");
+    await tx(async (client) => {
+      const { rowCount } = await client.query(`DELETE FROM task_dependencies WHERE task_id = $1 AND blocker_id = $2`, [t.id, blockerId]);
+      if (!rowCount) return;
+      const s = snapshot(t);
+      await recordEvent(client, t.id, uid, "dependency", s, s, null, { dependency: "removed" });
+    });
+    return dependenciesOf(pool, t.id, uid);
+  });
+
+  // ----- Time logged by hand (worklog.ts) -------------------------------------------
+
+  /** Whether someone may delete everyone's entries on a task: an admin of its team. */
+  const timeAdmin = async (t: Row, uid: string) => (await memberRole(t.space_id, uid)) === "admin" && t.space_kind === "team";
+
+  app.get("/tasks/:id/time", async (req: Req) => {
+    const { t } = await loadTaskFor(req.params.id, me(req));
+    return timeEntries(t.id, me(req), await timeAdmin(t, me(req)));
+  });
+
+  // Those who edit the task log their own time on it.
+  app.post("/tasks/:id/time", rateLimited(LIMITS.timeEntries), async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    const b = req.body || {};
+    const row = await one(
+      `INSERT INTO task_time_entries (task_id, user_id, spent_on, minutes, note) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [t.id, uid, cleanDay(b.spentOn), cleanMinutes(b.minutes), cleanNote(b.note)]
+    );
+    return presentEntry({ ...row, name: req.user!.name, avatar_url: req.user!.avatarUrl ?? null }, uid, false);
+  });
+
+  /** An entry and its task, for someone who can see the task (404 otherwise). */
+  async function entryFor(id: string, uid: string) {
+    const e = await getEntry(uuid(id, "Time entry"));
+    if (!e) throw notFound("Time entry not found");
+    const { t } = await loadTaskFor(e.task_id, uid).catch(() => {
+      throw notFound("Time entry not found");
+    });
+    return { e, t };
+  }
+
+  // Only its author changes an entry.
+  app.patch("/time/:id", rateLimited(LIMITS.timeEntries), async (req: Req) => {
+    const uid = me(req);
+    const { e } = await entryFor(req.params.id, uid);
+    if (e.user_id !== uid) throw forbidden();
+    const b = req.body || {};
+    const row = await one(
+      `UPDATE task_time_entries SET spent_on = $2, minutes = $3, note = $4 WHERE id = $1 RETURNING *`,
+      [e.id, "spentOn" in b ? cleanDay(b.spentOn) : e.spent_on, "minutes" in b ? cleanMinutes(b.minutes) : e.minutes, "note" in b ? cleanNote(b.note) : e.note]
+    );
+    return presentEntry({ ...row, name: req.user!.name, avatar_url: req.user!.avatarUrl ?? null }, uid, false);
+  });
+
+  // Its author deletes an entry, or an admin of the task's team (noted in the task's history).
+  app.delete("/time/:id", rateLimited(LIMITS.timeEntries), async (req: Req) => {
+    const uid = me(req);
+    const { e, t } = await entryFor(req.params.id, uid);
+    if (e.user_id !== uid && !(await timeAdmin(t, uid))) throw forbidden();
+    await tx(async (client) => {
+      await client.query(`DELETE FROM task_time_entries WHERE id = $1`, [e.id]);
+      if (e.user_id !== uid) {
+        const s = snapshot(t);
+        const person = await one(`SELECT name FROM users WHERE id = $1`, [e.user_id], client);
+        await recordEvent(client, t.id, uid, "time", s, s, null, { timeRemoved: { minutes: e.minutes, spentOn: e.spent_on, of: person?.name ?? null } });
+      }
     });
     return { ok: true };
   });

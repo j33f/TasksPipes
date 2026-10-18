@@ -13,6 +13,7 @@
   import { api, errorMessage } from "../lib/api";
   import { navigate } from "../lib/router.svelte";
   import { openTaskCount } from "../lib/constants";
+  import { awaitingSignIn, inviteColleague } from "../lib/people";
   import type { SidebarPipe } from "../lib/types";
   import { t, tn } from "../lib/i18n.svelte";
 
@@ -25,6 +26,8 @@
   const isActive = (href: string) => router.path + router.search === href || router.path === href;
   const matches = (name: string) => name.toLowerCase().includes(filter.trim().toLowerCase());
   const personalId = $derived(app.me?.personalSpaceId);
+  // The search shortcut as written on this computer.
+  const shortcut = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘K" : "Ctrl K";
   const myIncoming = $derived(app.personalSpace?.incomingCount ?? 0);
 
   // Foldable entries ("My pipes", each team, "People"…), like Outline collections; remembered per browser.
@@ -122,6 +125,9 @@
   <div class="sidebar-scroll">
     <div class="sidebar-section first">
       <div class="sidebar-section-title"><span>{t("Me")}</span></div>
+      <button class="sidebar-link" onclick={() => { app.dialog = "search"; onclose(); }}>
+        <Icon name="search" /><span class="label">{t("Search")}</span><kbd class="shortcut">{shortcut}</kbd>
+      </button>
       <a class="sidebar-link" class:active={router.path === "/"} href="/">
         <Icon name="home" /><span class="label">{t("My dashboard")}</span>
       </a>
@@ -130,6 +136,9 @@
       </a>
       <a class="sidebar-link" class:active={router.path === "/next"} href="/next">
         <Icon name="target" /><span class="label">{t("Next action")}</span>
+      </a>
+      <a class="sidebar-link" class:active={router.path === "/calendar"} href="/calendar">
+        <Icon name="calendar" /><span class="label">{t("Calendar")}</span>
       </a>
       <a class="sidebar-link" class:active={isActive(`/spaces/${personalId}?tab=incoming`)} href={`/spaces/${personalId}?tab=incoming`}>
         <Icon name="inbox" /><span class="label">Incoming</span>
@@ -213,12 +222,27 @@
         {@render foldTitle("people", t("People"), people.length, app.me?.features.invitations ? () => (showInvite = true) : undefined, t("Invite by e-mail"))}
         {#if isOpen("people")}
           {#each people as s (s.id)}
-            <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}
-              href={`/spaces/${s.id}`} title={s.active ? s.name : t("{name} (has not signed in yet)", { name: s.name })}>
-              <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
-              {#if s.guest}<span class="guest" title={t("Invited by e-mail")}><Icon name="mail" size={14} /></span>{/if}
-              {#if s.pipeCount}<span class="count neutral">{s.pipeCount}</span>{/if}
-            </a>
+            {#if awaitingSignIn(s) && s.userId}
+              {@const userId = s.userId}
+              <div class="sidebar-link has-disclosure hover-actions muted" class:active={router.path === `/spaces/${s.id}`}>
+                <span class="disclosure-space"></span>
+                <a class="row-link" href={`/spaces/${s.id}`} title={t("{name} (has not signed in yet)", { name: s.name })}>
+                  <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
+                </a>
+                <span class="actions">
+                  <button class="act" title={t("Invite {name} to TasksPipes", { name: s.name })} onclick={() => inviteColleague(userId, s.name)}>
+                    <Icon name="send" size={16} />
+                  </button>
+                </span>
+              </div>
+            {:else}
+              <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}
+                href={`/spaces/${s.id}`} title={s.active ? s.name : t("{name} (has not signed in yet)", { name: s.name })}>
+                <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
+                {#if s.guest}<span class="guest" title={t("Invited by e-mail")}><Icon name="mail" size={14} /></span>{/if}
+                {#if s.pipeCount}<span class="count neutral">{s.pipeCount}</span>{/if}
+              </a>
+            {/if}
           {/each}
         {/if}
       </div>
@@ -240,6 +264,9 @@
         <button class="menu-item" role="menuitem" onclick={() => openDialog("settings")}><Icon name="settings" size={16} />{t("Settings")}</button>
         <button class="menu-item" role="menuitem" onclick={() => openDialog("calendar")}><Icon name="calendar" size={16} />{t("Calendar")}</button>
         <button class="menu-item" role="menuitem" onclick={() => openDialog("about")}><Icon name="info" size={16} />{t("About")}</button>
+        {#if app.me?.admin}
+          <a class="menu-item" role="menuitem" href="/admin" onclick={() => { userMenu = false; onclose(); }}><Icon name="shield" size={16} />{t("Administration")}</a>
+        {/if}
         <div class="menu-sep"></div>
         <button class="menu-item" role="menuitem" onclick={() => { userMenu = false; app.logout(); }}><Icon name="logout" size={16} />{t("Sign out")}</button>
       </div>
@@ -370,6 +397,7 @@
   }
   .sidebar-link:hover { background: var(--sidebar-hover); text-decoration: none; color: var(--text); }
   .sidebar-link.active { background: var(--sidebar-active); color: var(--text); }
+  .shortcut { margin-left: auto; font: inherit; font-size: 12px; color: var(--text-tertiary); }
   .has-disclosure { padding-left: 0; gap: 0; }
   .has-disclosure .row-link { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: inherit; text-decoration: none; padding: 0 0 0 2px; }
   .disclosure {

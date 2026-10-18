@@ -18,7 +18,7 @@ let n = 0;
 const task = (over: Partial<Task>): Task => ({
   id: `t${++n}`, number: n, title: `Task ${n}`, description: "", status: "backlog", stage: "backlog", taskType: "task", fields: {},
   position: n, dueDate: null, space: { id: "s", name: "Me", kind: "user" }, pipe: { id: "p", name: "Personal", visibility: "private", kind: "general" },
-  inIncoming: false, author: { id: "u", name: "Me", avatarUrl: null }, assignee: null, sender: null, outlineDoc: null, commentCount: 0,
+  inIncoming: false, author: { id: "u", name: "Me", avatarUrl: null }, assignee: null, sender: null, outlineDoc: null, commentCount: 0, blockers: 0, priority: null, labels: [], estimateMinutes: null, loggedMinutes: 0,
   checklist: { total: 0, done: 0, next: null }, gitState: null, createdAt: "2026-10-15T09:00:00Z", updatedAt: "2026-10-15T09:00:00Z",
   ...over,
 });
@@ -51,6 +51,12 @@ describe("next action", () => {
     expect(list.map((s) => s.task.title)).toEqual(["late", "soon", "ready", "later"]);
     expect(list[0].reasons).toContain("3 days late");
     expect(list[1].reasons).toContain("due in 2 days");
+  });
+
+  it("never suggests a task still waiting for other tasks", () => {
+    const blocked = task({ title: "blocked", status: "ready", dueDate: "2026-10-01", blockers: 1 });
+    const free = task({ title: "free", status: "backlog" });
+    expect(suggestions([blocked, free]).map((s) => s.task.title)).toEqual(["free"]);
   });
 
   it("explains a long wait and progress on sub-tasks", () => {

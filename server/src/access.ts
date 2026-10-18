@@ -3,7 +3,8 @@
  * (e-mail notifications…). Visibility of people and spaces is decided in SQL (user_visible, space_visible).
  */
 import { one, type Queryable, type Row } from "./db.js";
-import { pipeTypeById } from "./pipeTypes.js";
+import { allPipeTypes, pipeTypeById } from "./pipeTypes.js";
+import { LOGGED_MINUTES } from "./worklog.js";
 
 export const SPACE_NAME = `COALESCE(su.name, s.name)`;
 
@@ -11,6 +12,14 @@ export async function memberRole(spaceId: string, userId: string, db?: Queryable
   const r = await one(`SELECT role FROM space_members WHERE space_id = $1 AND user_id = $2`, [spaceId, userId], db);
   return r?.role ?? null;
 }
+
+/** Blockers of the task `t` (tasks joined as `t`) still to finish (dependencies.ts). */
+export const OPEN_BLOCKERS = `(SELECT count(*) FROM task_dependencies od JOIN tasks ob ON ob.id = od.blocker_id
+  WHERE od.task_id = t.id AND ob.status NOT IN ('done', 'abandoned'))`;
+
+/** The labels of the task `t`, as JSON (labels.ts). */
+export const TASK_LABELS = `(SELECT json_agg(json_build_object('id', l.id, 'name', l.name, 'color', l.color) ORDER BY l.position, lower(l.name))
+  FROM task_labels tl JOIN space_labels l ON l.id = tl.label_id WHERE tl.task_id = t.id) AS labels`;
 
 export const TASK_SELECT = `
   SELECT t.*, p.name AS pipe_name, p.visibility AS pipe_visibility, p.kind AS pipe_kind,
@@ -23,7 +32,10 @@ export const TASK_SELECT = `
          (SELECT json_build_object('total', count(*), 'done', count(*) FILTER (WHERE i.done),
                    'next', (array_agg(json_build_object('id', i.id, 'text', i.text) ORDER BY i.position, i.created_at)
                             FILTER (WHERE NOT i.done))[1])
-          FROM task_items i WHERE i.task_id = t.id) AS checklist
+          FROM task_items i WHERE i.task_id = t.id) AS checklist,
+         ${OPEN_BLOCKERS} AS open_blockers,
+         ${TASK_LABELS},
+         ${LOGGED_MINUTES}
   FROM tasks t
   JOIN spaces s ON s.id = t.space_id
   LEFT JOIN users su ON su.id = s.user_id
@@ -61,3 +73,22 @@ export async function taskPermissions(t: Row, userId: string): Promise<TaskPermi
 /** Whether someone may reach a space (see space_visible in the schema). */
 export const spaceVisible = async (spaceId: string, userId: string, db?: Queryable) =>
   Boolean((await one(`SELECT space_visible($2, $1) AS ok`, [spaceId, userId], db))?.ok);
+
+/** Tasks whose content stays in the app: in a confidential or team-only pipe, or of a type only such pipes offer. */
+export function isConfidential(t: Row): boolean {
+  const p = pipeTypeById(t.pipe_kind);
+  if (p) return Boolean(p.confidential || p.teamOnly);
+  return allPipeTypes().some((x) => (x.confidential || x.teamOnly) && x.taskTypes.includes(t.task_type));
+}
+
+/** Ids of the pipe types reserved to a team (see taskPermissions). */
+export const teamOnlyKinds = () => allPipeTypes().filter((p) => p.teamOnly).map((p) => p.id);
+
+/**
+ * The view rule of taskPermissions, in SQL, for a query over tasks `t` joined to their pipe `p` (LEFT JOIN):
+ * `user` is the placeholder of the person, `teamOnly` that of teamOnlyKinds(). Keep both in step.
+ */
+export const taskVisibleSql = (user: string, teamOnly: string) => `(
+  EXISTS (SELECT 1 FROM space_members vm WHERE vm.space_id = t.space_id AND vm.user_id = ${user})
+  OR (p.visibility = 'open' AND space_visible(${user}, t.space_id))
+  OR ((t.author_id = ${user} OR t.sender_id = ${user}) AND NOT COALESCE(p.kind = ANY(${teamOnly}::text[]), false)))`;

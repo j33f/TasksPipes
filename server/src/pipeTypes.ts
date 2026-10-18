@@ -13,6 +13,8 @@ export interface Column {
   label: string;
   color: string;
   status: Status;
+  /** Work in progress limit: the board warns when the column holds more tasks. */
+  wipLimit?: number;
 }
 
 export type FieldType =
@@ -435,8 +437,8 @@ export const TASK_TYPES: TaskType[] = [
     id: "user_story", label: "User story", icon: "user", description: "Un besoin exprimé du point de vue de l'utilisateur.",
     fields: [
       f("role", "En tant que…", "text"), f("besoin", "Je veux…", "textarea"), f("benefice", "Afin de…", "textarea"),
+      // Its priority is that of every task (tasks.priority).
       f("criteres", "Critères d'acceptation", "textarea"), f("points", "Points", "number"),
-      f("priorite", "Priorité", "select", { options: ["Critique", "Haute", "Moyenne", "Basse"] }),
     ],
   },
   {

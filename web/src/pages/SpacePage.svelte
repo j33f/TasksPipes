@@ -12,15 +12,18 @@
   import PipeModal from "../components/PipeModal.svelte";
   import PipeIcon from "../components/PipeIcon.svelte";
   import TeamModal from "../components/TeamModal.svelte";
+  import LabelsModal from "../components/LabelsModal.svelte";
   import NewTaskModal from "../components/NewTaskModal.svelte";
   import AcceptDialog from "../components/AcceptDialog.svelte";
   import RefuseDialog from "../components/RefuseDialog.svelte";
+  import { awaitingSignIn, inviteColleague } from "../lib/people";
 
   let { id }: { id: string } = $props();
 
   let space = $state<SpaceDetail | null>(null);
   let error = $state("");
   let showSettings = $state(false);
+  let showLabels = $state(false);
   let showNewTask = $state(false);
   let accepting = $state<Task | null>(null);
   let refusing = $state<Task | null>(null);
@@ -38,6 +41,8 @@
   const showNewPipe = $derived(router.params.get("newPipe") === "1");
   const meId = $derived(app.me?.user.id);
   const activePipes = $derived(space?.pipes.filter((p) => !p.archived) ?? []);
+  // An Outline colleague who never signed in: invited rather than sent tasks.
+  const waiting = $derived(app.spaces.find((s) => s.id === id && s.kind === "user" && s.userId && awaitingSignIn(s)) ?? null);
   const archivedPipes = $derived(space?.pipes.filter((p) => p.archived) ?? []);
 
   async function leave() {
@@ -70,15 +75,21 @@
             <div class="avatar-stack">{#each space.members.slice(0, 8) as m (m.id)}<Avatar user={m} size={22} />{/each}</div>
             <span>{tn(space.members.length, "{n} member", "{n} members")} · {t("admins: {names}", { names: space.members.filter((m) => m.role === "admin").map((m) => m.name).join(", ") })}</span>
           </div>
+        {:else if waiting}
+          <div class="subtitle">{t("{name} has not signed in to TasksPipes yet: invite them to send them tasks.", { name: space.name })}</div>
         {:else if !isMember}
           <div class="subtitle">{t("You see the open pipes of {name}. You can add tasks to them or send tasks to {name}.", { name: space.name })}</div>
         {/if}
       </div>
       <div class="row wrap actions">
-        {#if !isMine}
+        {#if waiting?.userId}
+          {@const userId = waiting.userId}
+          <button class="btn neutral" onclick={() => inviteColleague(userId, waiting.name)}><Icon name="send" size={18} />{t("Invite to TasksPipes")}</button>
+        {:else if !isMine}
           <button class="btn neutral" onclick={() => (showNewTask = true)}><Icon name="send" size={18} />{t("Send a task")}</button>
         {/if}
         {#if isMember}
+          <button class="btn neutral" onclick={() => (showLabels = true)}><Icon name="flag" size={18} />{t("Labels")}</button>
           <button class="btn" onclick={() => setParams({ newPipe: "1" })}><Icon name="plus" size={18} />{t("New pipe")}</button>
         {/if}
         {#if isAdminOfTeam}
@@ -175,6 +186,7 @@
   </div>
 
   {#if showNewPipe && isMember}<PipeModal spaceId={space.id} onclose={() => setParams({ newPipe: null }, { replace: true })} />{/if}
+  {#if showLabels}<LabelsModal spaceId={space.id} onclose={() => (showLabels = false)} />{/if}
   {#if showSettings}<TeamModal team={space} onclose={() => (showSettings = false)} />{/if}
   {#if showNewTask}<NewTaskModal spaceId={space.id} onclose={() => (showNewTask = false)} />{/if}
   {#if accepting}<AcceptDialog task={accepting} pipes={activePipes} onclose={() => (accepting = null)} />{/if}

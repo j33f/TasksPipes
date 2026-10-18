@@ -13,7 +13,7 @@
   <a href="http://www.typescriptlang.org" rel="nofollow"><img src="https://img.shields.io/badge/%3C%2F%3E-TypeScript-%230074c1.svg" alt="TypeScript"></a>
   <a href="https://svelte.dev" rel="nofollow"><img src="https://img.shields.io/badge/Svelte-5-%23ff3e00.svg" alt="Svelte 5"></a>
   <a href="https://fastify.dev" rel="nofollow"><img src="https://img.shields.io/badge/Fastify-5-%23202020.svg" alt="Fastify 5"></a>
-  <a href="docs/TRANSLATION.md"><img src="https://img.shields.io/badge/i18n-English%20%7C%20French-%233ad984.svg" alt="English and French"></a>
+  <a href="docs/TRANSLATION.md"><img src="https://img.shields.io/badge/i18n-English%20%7C%20French%20%7C%20Spanish-%233ad984.svg" alt="English, French and Spanish"></a>
   <a href="https://github.com/j33f/TasksPipes/actions/workflows/ci.yml"><img src="https://github.com/j33f/TasksPipes/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://codecov.io/gh/j33f/TasksPipes"><img src="https://codecov.io/gh/j33f/TasksPipes/graph/badge.svg" alt="Coverage"></a>
 </p>
@@ -36,7 +36,7 @@ follows Outline's look and feel.
 - **Calendar** — subscribe to your tasks with a due date in Google Calendar, Apple Calendar or any calendar app,
   with reminders five days before, the day before and on the day.
 - **Your Outline workspace, ready** — once connected to Outline, everyone in the workspace is there straight away:
-  you can send them tasks or build teams with them before they have even signed in.
+  invite the colleagues who have not signed in yet, and send them tasks or build teams with them once they have.
 - **Any Outline server** — you type the address of your Outline server when signing in; it is then remembered in
   your browser, and you can switch between several servers.
 - **Without Outline too** — anyone can create an account with just an e-mail address and a display name, sign in
@@ -48,7 +48,17 @@ follows Outline's look and feel.
   report per task type for development pipes, readable in the app and sent by e-mail at 18:00 if asked.
 - **Notifications by e-mail** — tasks sent to you, given to you or refused, comments and due dates, at once, in a
   daily digest or not at all, as each person chooses.
-- **Sub-tasks, history, live updates**, English and French, light and dark themes.
+- **Recurring tasks** — every day, chosen weekdays, a day or the first Monday of the month, the last business day,
+  every year…, at fixed dates (made ahead if wanted) or once the previous one is done.
+- **Search** — every task you can see, by text, field values, comments or number (`TP-123`), from the sidebar
+  or with Ctrl/⌘ + K, filtered by status, owner and task type.
+- **Import and export** — a pipe's tasks as CSV or JSON, fields included; import a CSV file (columns matched,
+  previewed, checked line by line) or a Trello board.
+- **API and webhooks** — personal access tokens for a documented API (`/api/v1`, OpenAPI and Swagger UI), and
+  signed webhooks sending a pipe's task events to your tools.
+- **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
+  keeps a “Deleted account”), and administrators of the instance can disable accounts.
+- **Sub-tasks, history, live updates**, English, French and Spanish (a language is one file), light and dark themes.
 
 TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:
 course design, admissions, exams, Qualiopi quality, funding… But nothing ties it to training: the general,

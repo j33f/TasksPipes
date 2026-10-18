@@ -2,7 +2,9 @@
   import { untrack } from "svelte";
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
-  import type { DocRef, UserRef } from "../lib/types";
+  import type { DocRef, Label, Pipe, UserRef } from "../lib/types";
+  import TaskBadges from "./TaskBadges.svelte";
+  import { PRIORITIES } from "../lib/labels";
   import Modal from "./Modal.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import SpaceSelect from "./SpaceSelect.svelte";
@@ -29,8 +31,10 @@
   const columns = $derived(pipe ? app.columnsFor(pipe.kind) : []);
   let stage = $state<string | null>(untrack(() => initialStage ?? (pipe ? app.columnsFor(pipe.kind)[0]?.id : null) ?? null));
 
-  // Task type: those of the pipe type, or any of them when sending to an incoming bucket.
-  const typeChoices = $derived(pipe ? app.taskTypesFor(pipe.kind) : app.taskTypes.filter((tt) => app.offered(tt)));
+  // Task type: those of the pipe type, or, sent to an incoming, those of the pipes of its space one sees (the open
+  // ones of someone else's space).
+  let targetPipes = $state<Pipe[]>([]);
+  const typeChoices = $derived(pipe ? app.taskTypesFor(pipe.kind) : app.taskTypesForPipes(targetPipes));
   // Default: the pipe type's main task type, except in checklist processes (with starter tasks) where plain tasks prevail.
   let taskTypeId = $state(
     untrack(() => (pipe && !app.pipeType(pipe.kind)?.templates.length ? app.taskTypesFor(pipe.kind)[1]?.id : null) ?? "task")
@@ -41,6 +45,16 @@
   let spaceId = $state<string | null>(untrack(() => initialSpaceId ?? app.me?.personalSpaceId ?? null));
   let assigneeId = $state<string | null>(null);
   let dueDate = $state("");
+  let priority = $state("");
+  let labelIds = $state<string[]>([]);
+  // Labels are put by those who edit the space's tasks: in a pipe, or in one's own incoming.
+  let spaceLabels = $state<Label[]>([]);
+  $effect(() => {
+    const id = pipe ? pipe.spaceId : spaceId === app.me?.personalSpaceId ? spaceId : null;
+    labelIds = [];
+    spaceLabels = [];
+    if (id) api.get<Label[]>(`/spaces/${id}/labels`).then((l) => (spaceLabels = l)).catch(() => {});
+  });
   let outlineDoc = $state<DocRef | null>(null);
   let comment = $state("");
   let items = $state<ChecklistItem[]>([]);
@@ -54,6 +68,16 @@
   const targetSpaceId = $derived(pipe ? pipe.spaceId : spaceId);
   const isTeam = $derived(app.spaces.find((s) => s.id === targetSpaceId)?.kind === "team");
   let members = $state<UserRef[]>([]);
+  $effect(() => {
+    if (pipe || !spaceId) return;
+    const id = spaceId;
+    targetPipes = [];
+    api.get<{ pipes: Pipe[] }>(`/spaces/${id}`).then((s) => { if (spaceId === id) targetPipes = s.pipes; }).catch(() => {});
+  });
+  // A type the new recipient's pipes do not offer falls back to the plain task.
+  $effect(() => {
+    if (!pipe && !typeChoices.some((tt) => tt.id === taskTypeId)) taskTypeId = "task";
+  });
   $effect(() => {
     const id = targetSpaceId;
     assigneeId = null;
@@ -70,6 +94,8 @@
         title, description, outlineDoc, comment,
         assigneeId: isTeam ? assigneeId : null,
         dueDate: dueDate || null,
+        priority: priority ? Number(priority) : null,
+        ...(labelIds.length ? { labelIds } : {}),
         taskType: taskTypeId,
         items: items.map(({ text, done }) => ({ text, done })),
         // Only the fields of the chosen type (the type may have changed after filling some).
@@ -161,6 +187,23 @@
         <label for="nt-due">{t("Due date")}</label>
         <input id="nt-due" class="input" type="date" bind:value={dueDate} />
       </div>
+      <div class="field">
+        <label for="nt-priority">{t("Priority")}</label>
+        <select id="nt-priority" class="input" bind:value={priority}>
+          <option value="">{t("No priority")}</option>
+          {#each PRIORITIES as p (p.value)}<option value={String(p.value)}>{t(p.label)}</option>{/each}
+        </select>
+      </div>
+      {#if spaceLabels.length}
+        <div class="field">
+          <span class="label-text">{t("Labels")}</span>
+          <div class="labels">
+            {#each spaceLabels as l (l.id)}
+              <label class="check"><input type="checkbox" value={l.id} bind:group={labelIds} /><TaskBadges labels={[l]} /></label>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </div>
 
     {#if !app.isGuest}
@@ -203,4 +246,6 @@
   }
   .type-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .section-title { margin-top: 4px; }
+  .labels { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+  .labels .check { display: inline-flex; align-items: center; gap: 4px; }
 </style>
