@@ -29,7 +29,7 @@ export interface Agent {
   post<T = any>(url: string, body?: unknown): Promise<{ status: number; body: T }>;
   patch<T = any>(url: string, body?: unknown): Promise<{ status: number; body: T }>;
   put<T = any>(url: string, body?: unknown): Promise<{ status: number; body: T }>;
-  del<T = any>(url: string): Promise<{ status: number; body: T }>;
+  del<T = any>(url: string, body?: unknown): Promise<{ status: number; body: T }>;
 }
 
 /** An agent sending requests with a session cookie (empty: signed out) in a language. */
@@ -58,7 +58,7 @@ export function agent(cookie = "", lang: "en" | "fr" = "en"): Agent {
     post: (url, body) => call("POST", url, body),
     patch: (url, body) => call("PATCH", url, body),
     put: (url, body) => call("PUT", url, body),
-    del: (url) => call("DELETE", url),
+    del: (url, body) => call("DELETE", url, body),
   };
   return a;
 }

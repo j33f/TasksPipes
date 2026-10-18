@@ -456,6 +456,7 @@ export const FR: Record<string, string> = {
   "Time logged: {total}": "Temps saisi : {total}",
   "{logged} of {estimate} estimated": "{logged} sur {estimate} estimées",
 
+  "Invalid push subscription": "Abonnement aux notifications invalide",
   // Messages posted to chat channels (Slack, Mattermost, Teams)
   "{name} created {task} in {pipe}": "{name} a créé {task} dans {pipe}",
   "{name} moved {task} to {column}": "{name} a déplacé {task} vers {column}",

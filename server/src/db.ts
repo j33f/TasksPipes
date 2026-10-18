@@ -632,6 +632,21 @@ CREATE TABLE IF NOT EXISTS task_time_entries (
 CREATE INDEX IF NOT EXISTS task_time_entries_task_idx ON task_time_entries(task_id, spent_on);
 CREATE INDEX IF NOT EXISTS task_time_entries_user_idx ON task_time_entries(user_id, spent_on);
 
+-- Web Push (push.ts): the devices people turned notifications on for. The endpoint and keys are kept encrypted with
+-- APP_SECRET (they are read to send), the endpoint's hash finds a device again.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint_hash text NOT NULL UNIQUE,
+  data text NOT NULL,
+  user_agent text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id);
+-- When a notification was pushed to devices, or found needing no push.
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pushed_at timestamptz;
+
 -- Changes of data made once (their name is kept when done).
 CREATE TABLE IF NOT EXISTS schema_steps (name text PRIMARY KEY, done_at timestamptz NOT NULL DEFAULT now());
 -- The "Priorité" field of user stories became the priority of every task: its values are copied once (they stay
