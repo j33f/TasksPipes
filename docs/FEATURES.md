@@ -104,6 +104,10 @@ those types keep working. This is a personal choice: others still see every type
   [the integration guide](GIT-INTEGRATION.md).
 - **Outline**: search documents or paste a URL, link and unlink, or create an Outline document from a task.
 - **Markdown** in descriptions, comments and refusal reasons, with a preview.
+- **@mentions** in comments, descriptions and refusal reasons: typing `@` suggests the people who can open the task
+  (among those you see), and the mention shows as a link to their space. The person mentioned is told at once in
+  the app, and by e-mail if they are not in the app then; in a description, only people newly mentioned are told.
+  Mentioning someone who cannot open the task tells them nothing.
 - **Repeat** (a task in a pipe, for those who manage it): a new task is made on each date of a rule —
   - every *n* days;
   - every *n* weeks, on chosen days;
@@ -224,6 +228,7 @@ With e-mail set up on the instance, TasksPipes tells people by e-mail what needs
 | A task becomes yours | its new owner | at once |
 | A task you sent is refused | the sender, with the reason | at once |
 | A comment (also one written while moving or sending a task) | the task's author and owner | daily digest |
+| A mention (`@name` in a comment or a description) | the person mentioned | at once, unless they are in the app then |
 | Due dates | the owner: overdue tasks (once), and those due today and tomorrow | in the morning, at 8:00 |
 
 - **Settings** (account menu) let each person choose, for each kind, *at once*, *daily digest* (sent at the report
@@ -330,6 +335,7 @@ of Outline accounts; links you click (Outline documents, France Compétences pag
 | Find a task with the search | whoever may see it |
 | Export a pipe's tasks | everyone who can see the pipe |
 | Import tasks into a pipe | members of the space holding the pipe |
+| Be suggested in an @mention, be told of it | people who can open the task |
 | Use the API with a token | the token's owner, with their own rights (read only for a read token) |
 | Manage a pipe's webhooks | members of its space (not on confidential pipes) |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |

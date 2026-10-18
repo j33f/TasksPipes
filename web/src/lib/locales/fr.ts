@@ -451,6 +451,7 @@ export const FR: Record<string, string> = {
   "Payload URL and secret below; content type: application/json.": "Payload URL et secret ci-dessous ; content type : application/json.",
   "Pending": "En attente",
   "People": "Personnes",
+  "People to mention": "Personnes à mentionner",
   "Person": "Personne",
   "Personal": "Perso",
   "Personal space": "Personnel",
@@ -704,6 +705,7 @@ export const FR: Record<string, string> = {
   "{name} (you)": "{name} (vous)",
   "{name} accepted to connect with you": "{name} a accepté de se connecter avec vous",
   "{name} has not signed in to TasksPipes yet: invite them to send them tasks.": "{name} ne s'est pas encore connecté·e à TasksPipes : invitez cette personne pour lui envoyer des tâches.",
+  "{name} mentioned you in “{title}”": "{name} vous a mentionné·e dans « {title} »",
   "{name} put this task in the incoming of {space}.": "{name} a déposé cette tâche dans l'incoming de {space}.",
   "{name} refused “{title}”": "{name} a refusé « {title} »",
   "{name} refused “{title}”: {reason}": "{name} a refusé « {title} » : {reason}",
@@ -758,4 +760,5 @@ export const FR: Record<string, string> = {
   "Get an e-mail when something needs you, even with TasksPipes closed. Nothing is sent for what you do yourself.": "Recevez un e-mail quand quelque chose vous attend, même TasksPipes fermé. Rien n'est envoyé pour ce que vous faites vous-même.",
   "The daily digest comes in the evening, with the reports; due dates are reminded in the morning, at the hour chosen.": "Le résumé quotidien arrive le soir, avec les rapports ; les échéances sont rappelées le matin, à l'heure choisie.",
   "invitation expired: send a new link to let them in": "invitation expirée : envoyez un nouveau lien pour lui donner accès",
+  "Someone mentions me (no e-mail while I am in the app)": "Quelqu'un me mentionne (pas d'e-mail pendant que je suis dans l'application)",
 };

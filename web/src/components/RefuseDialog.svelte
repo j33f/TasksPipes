@@ -5,6 +5,7 @@
   import Modal from "./Modal.svelte";
   import { t } from "../lib/i18n.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
+  import { mentionableOn } from "../lib/mentions";
 
   let { task, onclose, ondone }: { task: Task; onclose: () => void; ondone?: () => void } = $props();
 
@@ -36,7 +37,7 @@
     </p>
     <div class="field">
       <span class="label-text">{t("Reason for refusing")}</span>
-      <MarkdownEditor bind:value={reason} rows={4} autofocus placeholder={t("Why do you refuse this task?")} />
+      <MarkdownEditor bind:value={reason} rows={4} autofocus placeholder={t("Why do you refuse this task?")} mentions={mentionableOn(task.id)} />
     </div>
     {#if error}<div class="error-text">{error}</div>{/if}
     <div class="modal-actions">

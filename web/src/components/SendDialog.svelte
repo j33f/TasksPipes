@@ -6,6 +6,7 @@
   import Modal from "./Modal.svelte";
   import { t } from "../lib/i18n.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
+  import { mentionableOn } from "../lib/mentions";
   import SpaceSelect from "./SpaceSelect.svelte";
   import UserSelect from "./UserSelect.svelte";
 
@@ -61,7 +62,7 @@
     {/if}
     <div class="field">
       <span class="label-text">{t("Message (optional)")}</span>
-      <MarkdownEditor bind:value={comment} rows={4} placeholder={t("Context, expectations…")} />
+      <MarkdownEditor bind:value={comment} rows={4} placeholder={t("Context, expectations…")} mentions={mentionableOn(task.id)} />
     </div>
     {#if error}<div class="error-text">{error}</div>{/if}
     <div class="modal-actions">

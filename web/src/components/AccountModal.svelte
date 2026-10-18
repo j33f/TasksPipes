@@ -71,12 +71,13 @@
 
   // E-mail notifications: one choice per kind, saved at once.
   let notif = $state<NotificationPrefs | undefined>(app.me?.notificationPrefs);
-  const NOTIFICATION_KINDS = ["received", "assigned", "refused", "comment"] as const;
+  const NOTIFICATION_KINDS = ["received", "assigned", "refused", "comment", "mention"] as const;
   const kindLabel = (k: NotificationKind) =>
     k === "received" ? t("A task arrives in my incoming or my teams'")
     : k === "assigned" ? t("I become the owner of a task")
     : k === "refused" ? t("A task I sent is refused")
     : k === "comment" ? t("A comment on a task I wrote or own")
+    : k === "mention" ? t("Someone mentions me (no e-mail while I am in the app)")
     : t("My due dates");
   const modeLabel = (m: NotificationMode) => (m === "immediate" ? t("At once") : m === "digest" ? t("Daily digest") : t("Off"));
   const hourLabel = (h: number) => t("at {hour}", { hour: `${h}:00` });

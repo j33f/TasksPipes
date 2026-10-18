@@ -562,6 +562,16 @@ CREATE INDEX IF NOT EXISTS task_recurrences_due_idx ON task_recurrences(next_on)
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurrence_id uuid REFERENCES task_recurrences(id) ON DELETE SET NULL;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS occurrence_on date;
 CREATE UNIQUE INDEX IF NOT EXISTS tasks_occurrence_idx ON tasks(recurrence_id, occurrence_on) WHERE recurrence_id IS NOT NULL;
+
+-- @mentions (mentions.ts) are notified too.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'notifications_kind_check'
+                 AND pg_get_constraintdef(oid) LIKE '%mention%') THEN
+    ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_kind_check;
+    ALTER TABLE notifications ADD CONSTRAINT notifications_kind_check
+      CHECK (kind IN ('received', 'assigned', 'refused', 'comment', 'mention', 'overdue'));
+  END IF;
+END $$;
 `;
 
 /**

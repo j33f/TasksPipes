@@ -19,6 +19,7 @@
   import DevLinks from "./DevLinks.svelte";
   import TaskTiming from "./TaskTiming.svelte";
   import RepeatSection from "./RepeatSection.svelte";
+  import { mentionableOn } from "../lib/mentions";
   import { t, tn } from "../lib/i18n.svelte";
 
   let { id, onclose }: { id: string; onclose: () => void } = $props();
@@ -201,7 +202,7 @@
           onkeydown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()} aria-label={t("Title")} />
 
         {#if editingDescription}
-          <MarkdownEditor bind:value={descriptionDraft} rows={10} autofocus />
+          <MarkdownEditor bind:value={descriptionDraft} rows={10} autofocus mentions={mentionableOn(task.id)} />
           <div class="row" style="margin-top:8px; justify-content:flex-end">
             <button class="btn neutral small" onclick={() => (editingDescription = false)}>{t("Cancel")}</button>
             <button class="btn small" disabled={busy} onclick={saveDescription}>{t("Save")}</button>
@@ -274,7 +275,7 @@
           {#if perms?.comment}
             <form class="comment-form" onsubmit={postComment}>
               {#key commentKey}
-                <MarkdownEditor bind:value={comment} rows={3} placeholder={t("Add a comment (Markdown)…")} />
+                <MarkdownEditor bind:value={comment} rows={3} placeholder={t("Add a comment (Markdown)…")} mentions={mentionableOn(task.id)} />
               {/key}
               <div class="row" style="justify-content:flex-end; margin-top:8px">
                 <button class="btn small" disabled={busy || !comment.trim()}>{t("Comment")}</button>
