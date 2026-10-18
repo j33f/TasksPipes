@@ -23,7 +23,7 @@ export const DELETE_LINK_MINUTES = 30;
 const SESSION_COOKIE = "tp_session";
 
 /** Seam for the tests, which have no SMTP: how the confirmation link is sent. */
-export const deletionMail = { enabled: () => mailEnabled, send: sendLinkMail };
+export const deletionMail = { enabled: () => mailEnabled(), send: sendLinkMail };
 
 // ---------------------------------------------------------------------------
 // Export

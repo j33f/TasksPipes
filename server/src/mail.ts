@@ -1,17 +1,32 @@
 import nodemailer from "nodemailer";
+
+type Transporter = ReturnType<typeof nodemailer.createTransport>;
 import { config } from "./config.js";
 import { tr, type Locale } from "./i18n.js";
 
-export const mailEnabled = Boolean(config.smtp.host && config.smtp.from);
+/** Whether e-mails can be sent: a server and a sender are set (they can change in the administration). */
+export const mailEnabled = () => Boolean(config.smtp.host && config.smtp.from);
 
-const transport = mailEnabled
-  ? nodemailer.createTransport({
-      host: config.smtp.host,
-      port: config.smtp.port,
-      secure: config.smtp.secure,
-      auth: config.smtp.user ? { user: config.smtp.user, pass: config.smtp.pass } : undefined,
-    })
-  : null;
+let current: { key: string; transport: Transporter } | null = null;
+
+/** The SMTP connection of the current settings, made again when they change; null without e-mail. */
+function transporter(): Transporter | null {
+  if (!mailEnabled()) return null;
+  const { host, port, secure, user, pass } = config.smtp;
+  const key = JSON.stringify([host, port, secure, user, pass]);
+  if (current?.key !== key) {
+    current?.transport.close();
+    current = { key, transport: nodemailer.createTransport({ host, port, secure, auth: user ? { user, pass } : undefined }) };
+  }
+  return current.transport;
+}
+
+/** Checks the connection to the SMTP server (login included); throws its error. */
+export async function verifyMail(): Promise<void> {
+  const t = transporter();
+  if (!t) throw new Error("E-mail is not set up");
+  await t.verify();
+}
 
 /**
  * A plausible e-mail address (one @, a dotted domain, no spaces), at most 254 characters. The domain is matched label
@@ -45,6 +60,7 @@ export function htmlToText(html: string): string {
 }
 
 export async function sendHtmlMail(lang: Locale, to: string, subject: string, html: string, headers: Record<string, string> = {}) {
+  const transport = transporter();
   if (!transport) return false;
   const text = `${htmlToText(html)}\n\n— TasksPipes`;
   await transport.sendMail({ from: config.smtp.from, to, subject, html, text, headers: { "Content-Language": lang, ...headers } });
@@ -53,6 +69,7 @@ export async function sendHtmlMail(lang: Locale, to: string, subject: string, ht
 
 /** Sends a short e-mail with one call-to-action link. Returns false when e-mail is not configured. */
 export async function sendLinkMail(lang: Locale, to: string, subject: string, paragraphs: string[], action: { label: string; url: string }) {
+  const transport = transporter();
   if (!transport) return false;
   const text = `${paragraphs.join("\n\n")}\n\n${action.label}: ${action.url}\n\n— TasksPipes`;
   const html = `<div lang="${lang}" style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.5;color:#111319;max-width:520px">

@@ -17,6 +17,8 @@ class AppState {
   /** Account invited by e-mail: no Outline access, may enable TOTP. */
   /** An account without Outline (invited by e-mail, or signing in with the company's provider): no Outline features. */
   isGuest = $derived(this.me?.user.kind === "email" || this.me?.user.kind === "oidc");
+  /** No Outline documents for this person: an account without Outline, or Outline turned off on the instance. */
+  noOutline = $derived(this.isGuest || this.me?.features.outline === false);
   /** Dialog opened from the user menu (or the dashboard, notifications…, the search with Ctrl/⌘ + K). */
   dialog = $state<"settings" | "calendar" | "about" | "invite" | "search" | null>(null);
   /** Tasks waiting in my incoming and in my teams' ones. */

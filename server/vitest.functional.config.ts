@@ -22,7 +22,7 @@ export default defineConfig({
       OUTLINE_ALLOW_PRIVATE: "true",
       MOCK_OUTLINE_PORT: String(port),
       DEFAULT_LOCALE: "en",
-      ADMIN_EMAILS: "alice@example.com, admin-by-mail@example.com",
+      ADMIN_EMAILS: "alice@example.com, admin-by-mail@example.com, settings-admin@example.com",
       // The tests' webhook receiver listens on localhost.
       WEBHOOK_ALLOW_PRIVATE: "true",
       LOG_LEVEL: "silent",
