@@ -121,6 +121,27 @@ those types keep working. This is a personal choice: others still see every type
 
 The report hour (18:00 by default) and time zone are set by the instance (`REPORT_HOUR`, `TIMEZONE`).
 
+## Export and import
+
+**Export and import** on a pipe's page:
+
+- **Export** — every task of the pipe as **CSV** (key, title, description, column, owner, due date, task type,
+  sub-tasks, one column per field of its task types, author, dates; semicolons in French for spreadsheets) or as
+  **JSON** (the fields' values as stored, with their labels). Anyone who sees the pipe can export it. A cell that a
+  spreadsheet would run as a formula (`=`, `+`, `-`, `@`) is written as text.
+- **Import** (members of the space, pipes not archived) — a **CSV** file, its separator guessed (comma, semicolon or
+  tab): each column of the file is matched to a task property or a field, suggested from its header (in English or
+  French, and the usual words of other tools: *Name*, *List*, *Due*, *Checklist*…), or ignored. Values that match no
+  column of the pipe (a state from another tool) are placed by hand. Owners are found by name or e-mail among the
+  space's members, dates are read as `2026-03-09` or `09/03/2026`, choices without minding case or accents,
+  sub-tasks one per line (`[x]` for done ones). An exported file imports back as is.
+- **Trello** — a board exported as JSON (*Menu › Print, export and share › Export as JSON*): open cards of open
+  lists, with their description, due date, checklists as sub-tasks and comments (written under your name, with their
+  author and date). Lists are placed in columns like the values above.
+- A **preview** shows how columns map, the first tasks and every line to correct. Nothing is imported while a line is
+  wrong; then all lines are created at once, in one transaction (up to 2,000), recorded in their history, without
+  e-mail notifications.
+
 ## Incoming buckets
 
 Every person and team has an incoming bucket that receives tasks sent by others. A member **accepts** a task into a
@@ -272,6 +293,8 @@ of Outline accounts; links you click (Outline documents, France Compétences pag
 | See a private pipe, a space's incoming | members of the space |
 | See an open pipe, add a task to it, comment | everyone who can see its space |
 | Find a task with the search | whoever may see it |
+| Export a pipe's tasks | everyone who can see the pipe |
+| Import tasks into a pipe | members of the space holding the pipe |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
 | Edit title, description and fields | members, or the author of a task in an open pipe |
 | Refuse | members of the space whose incoming holds the task (unless they sent it themselves) |

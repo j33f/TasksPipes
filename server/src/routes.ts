@@ -25,6 +25,7 @@ import { accountRoutes } from "./account.js";
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
+import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
 import { SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, type TaskPermissions } from "./access.js";
 
 export const STATUSES = ["backlog", "ready", "started", "ongoing", "blocked", "abandoned", "done"] as const;
@@ -231,7 +232,9 @@ async function recordEvent(
   before: Snapshot | null,
   after: Snapshot,
   comment: string | null = null,
-  details: object | null = null
+  details: object | null = null,
+  /** Off for imports: a whole file of tasks would otherwise e-mail everyone named in it. */
+  notify = true
 ) {
   const { rows } = await db.query(
     `INSERT INTO task_events (task_id, actor_id, type, comment,
@@ -253,7 +256,7 @@ async function recordEvent(
     ]
   );
   // E-mail notifications it causes, in the same transaction.
-  await queueNotifications(db, Number(rows[0].id));
+  if (notify) await queueNotifications(db, Number(rows[0].id));
 }
 
 async function nextPosition(db: Queryable, spaceId: string, pipeId: string | null, stage: string | null): Promise<number> {
@@ -1196,6 +1199,138 @@ export async function apiRoutes(app: FastifyInstance) {
       canAddTasks: !p.archived_at && (Boolean(role) || p.visibility === "open"),
       tasks: tasks.rows.map(presentTask),
     };
+  });
+
+  // ----- Export and import of a pipe's tasks --------------------------------
+
+  // Anyone who sees the pipe may export it, as CSV (one column per field) or JSON.
+  app.get("/pipes/:id/export", rateLimited(LIMITS.pipeExport), async (req: Req, reply) => {
+    const uid = me(req);
+    const lang = localeOf(req);
+    const { p } = await loadPipeFor(req.params.id, uid);
+    const { rows } = await query(
+      `SELECT t.number, t.title, t.description, t.status, t.stage, t.task_type, t.fields, t.due_date, t.created_at, t.updated_at,
+              au.name AS author_name, ow.name AS owner_name,
+              COALESCE((SELECT json_agg(json_build_object('text', i.text, 'done', i.done) ORDER BY i.position, i.created_at)
+                        FROM task_items i WHERE i.task_id = t.id), '[]') AS items
+       FROM tasks t JOIN spaces s ON s.id = t.space_id JOIN users au ON au.id = t.author_id
+       LEFT JOIN users ow ON ow.id = COALESCE(s.user_id, t.assignee_id)
+       WHERE t.pipe_id = $1 ORDER BY t.position, t.created_at`,
+      [p.id]
+    );
+    // People named in fields, by name — only those one may see, as in the app.
+    const ids = [...new Set(rows.flatMap((t) => Object.values(t.fields as Row).filter((v): v is string => typeof v === "string" && UUID.test(v))))];
+    const named = ids.length ? await query(`SELECT id, name FROM users WHERE id = ANY($1) AND user_visible($2, id)`, [ids, uid]) : { rows: [] };
+    const names = new Map(named.rows.map((u) => [u.id as string, u.name as string]));
+    const key = (n: number) => `${TASK_KEY_PREFIX}-${n}`;
+    const file = (p.name.normalize("NFD").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "") || "pipe").slice(0, 60);
+    const json = req.query.format === "json";
+    reply.header("content-disposition", `attachment; filename="${file}.${json ? "json" : "csv"}"`);
+    reply.header("cache-control", "no-store");
+    if (json) return reply.type("application/json; charset=utf-8").send(JSON.stringify(exportJson({ name: p.name, kind: p.kind }, rows as ExportedTask[], lang, names, key), null, 2));
+    // Spreadsheets in French expect semicolons.
+    const sep = req.query.sep === ";" || (req.query.sep === undefined && lang === "fr") ? ";" : ",";
+    return reply.type("text/csv; charset=utf-8").send(exportCsv(p.kind, rows as ExportedTask[], lang, names, key, sep));
+  });
+
+  /** An import checked against the pipe, for its members: a CSV file and how its columns map, or a Trello board. */
+  async function importPlan(req: Req) {
+    const uid = me(req);
+    const lang = localeOf(req);
+    const { p, role } = await loadPipeFor(req.params.id, uid);
+    if (!role) throw forbidden("Only the space's members can import tasks");
+    if (p.archived_at) throw bad("This pipe is archived");
+    const b = req.body || {};
+    const content = typeof b.content === "string" ? b.content : "";
+    if (!content.trim()) throw bad("Choose a file");
+    const trello = b.source === "trello";
+    let rows: string[][];
+    if (trello) {
+      let board: unknown;
+      try {
+        board = JSON.parse(content);
+      } catch {
+        throw bad("This is not a Trello board exported as JSON");
+      }
+      rows = trelloRows(board, lang);
+    } else rows = csvRows(content);
+    const allowed = new Set(targetsFor(p.kind, lang).map((t) => t.id as string).concat("comments"));
+    const mapping: Record<string, Target> = trello ? TRELLO_MAPPING : {};
+    if (!trello && b.mapping && typeof b.mapping === "object") {
+      for (const [i, t] of Object.entries(b.mapping as Record<string, unknown>)) if (typeof t === "string" && allowed.has(t) && t !== "comments") mapping[i] = t as Target;
+    }
+    const columnValues: Record<string, string> = {};
+    for (const [v, c] of Object.entries((b.columnValues ?? {}) as Record<string, unknown>)) if (typeof c === "string") columnValues[v] = c;
+    const space = await one(`SELECT kind, user_id FROM spaces WHERE id = $1`, [p.space_id]);
+    // Possible owners: the members who could be given a task (signed in once, not disabled).
+    const people = await query(
+      `SELECT u.id, u.name, u.email FROM space_members m JOIN users u ON u.id = m.user_id
+       WHERE m.space_id = $1 AND u.disabled_at IS NULL AND (u.auth_kind <> 'outline' OR u.last_login_at IS NOT NULL)`,
+      [p.space_id]
+    );
+    const plan = planImport(p.kind, lang, { rows, mapping, taskType: typeof b.taskType === "string" ? b.taskType : undefined, columnValues },
+      people.rows as Person[], space?.kind === "user" ? space.user_id : null);
+    return { p, plan, lang, source: trello ? "trello" : "csv", people: people.rows };
+  }
+
+  const IMPORT_BODY = { bodyLimit: 12 * 1024 * 1024 };
+
+  // What an import would do: the columns and their targets, the first tasks, every error.
+  app.post("/pipes/:id/import/preview", { ...IMPORT_BODY, ...rateLimited(LIMITS.pipeImportPreview) }, async (req: Req) => {
+    const { p, plan, lang, people } = await importPlan(req);
+    const names = new Map(people.map((u) => [u.id as string, u.name as string]));
+    return {
+      headers: plan.headers,
+      mapping: plan.mapping,
+      targets: targetsFor(p.kind, lang),
+      taskTypes: taskTypesOf(p.kind).map((t) => ({ id: t.id, label: localize(lang, t.label) })),
+      columns: columnsFor(p.kind, lang),
+      columnValues: plan.columnValues,
+      count: plan.tasks.length,
+      tasks: plan.tasks.slice(0, 20).map((t) => ({ ...t, owner: t.assigneeId ? names.get(t.assigneeId) ?? null : null })),
+      errors: plan.errors.slice(0, 200),
+      errorCount: plan.errors.length,
+    };
+  });
+
+  // The import itself: all lines or none, in one transaction, without e-mail notifications.
+  app.post("/pipes/:id/import", { ...IMPORT_BODY, ...rateLimited(LIMITS.pipeImport) }, async (req: Req, reply) => {
+    const uid = me(req);
+    const { p, plan, lang, source } = await importPlan(req);
+    if (plan.errors.length) {
+      return reply.code(400).send({
+        error: tr(lang, "{n} lines cannot be imported: nothing was imported", { n: plan.errors.length }),
+        errors: plan.errors.slice(0, 200),
+      });
+    }
+    if (!plan.tasks.length) throw bad("The file holds no task");
+    const created = await tx(async (client) => {
+      const positions = new Map<string, number>();
+      for (const t of plan.tasks) {
+        const position = (positions.get(t.stage) ?? (await nextPosition(client, p.space_id, p.id, t.stage)) - 1) + 1;
+        positions.set(t.stage, position);
+        const row = await one(
+          `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date, author_id, task_type, fields)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) RETURNING id`,
+          [t.title, t.description, p.space_id, p.id, t.status, t.stage, position, t.assigneeId, t.dueDate, uid, t.taskType, JSON.stringify(t.fields)],
+          client
+        ).then((r) => getTaskRow(r!.id, client));
+        for (const [i, item] of t.items.entries()) {
+          await client.query(
+            `INSERT INTO task_items (task_id, text, done, position, done_by, done_at)
+             VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN $5::uuid END, CASE WHEN $3 THEN now() END)`,
+            [row!.id, item.text, item.done, i + 1, uid]
+          );
+        }
+        const s = snapshot(row!);
+        await recordEvent(client, row!.id, uid, "created", null, s, null, { imported: source }, false);
+        for (const c of t.comments) await recordEvent(client, row!.id, uid, "comment", s, s, c, null, false);
+      }
+      return plan.tasks.length;
+    });
+    req.log.info({ pipeId: p.id, created, source }, "Tasks imported");
+    notifySpace(p.space_id, { type: "task.updated" }, uid);
+    return { created };
   });
 
   app.patch("/pipes/:id", async (req: Req) => {

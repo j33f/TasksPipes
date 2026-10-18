@@ -386,3 +386,19 @@ export interface AdminUser {
   disabled: { at: string; reason: "admin" | "unused_invitation"; by: string | null } | null;
   admin: boolean;
 }
+
+/** What an import of tasks would do (POST /api/pipes/:id/import/preview). */
+export interface ImportPreview {
+  headers: string[];
+  /** Target of each column of the file ("title", "field:financement", "ignore"…). */
+  mapping: string[];
+  targets: { id: string; label: string }[];
+  taskTypes: { id: string; label: string }[];
+  columns: { id: string; label: string }[];
+  /** Values of the file's column cells matching no column of the pipe, and where each goes ("" until chosen). */
+  columnValues: { value: string; column: string }[];
+  count: number;
+  tasks: { line: number; title: string; stage: string; owner: string | null; dueDate: string | null }[];
+  errors: { line: number; message: string }[];
+  errorCount: number;
+}
