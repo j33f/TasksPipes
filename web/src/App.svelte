@@ -22,6 +22,8 @@
   import MyTasks from "./pages/MyTasks.svelte";
   import Next from "./pages/Next.svelte";
   import Designer from "./pages/Designer.svelte";
+  import Admin from "./pages/Admin.svelte";
+  import AccountDelete from "./pages/AccountDelete.svelte";
 
   let navOpen = $state(false);
 
@@ -94,6 +96,7 @@
     if (p === "/tasks") return { name: "tasks" } as const;
     if (p === "/next") return { name: "next" } as const;
     if (p === "/designer") return { name: "designer" } as const;
+    if (p === "/admin" && app.me?.admin) return { name: "admin" } as const;
     if ((m = p.match(/^\/spaces\/([^/]+)$/))) return { name: "space", id: m[1] } as const;
     if ((m = p.match(/^\/pipes\/([^/]+)$/))) return { name: "pipe", id: m[1] } as const;
     return { name: "notfound" } as const;
@@ -114,6 +117,8 @@
 
 {#if router.path === "/login/magic"}
   {#if app.me !== undefined}<MagicLogin />{/if}
+{:else if router.path === "/account/delete"}
+  {#if app.me !== undefined}<AccountDelete />{/if}
 {:else if app.me === null && router.path === "/login"}
   <Login />
 {:else if app.me}
@@ -144,6 +149,8 @@
         <Next />
       {:else if route.name === "designer"}
         <Designer />
+      {:else if route.name === "admin"}
+        <Admin />
       {:else if route.name === "space"}
         {#key route.id}<SpacePage id={route.id} />{/key}
       {:else if route.name === "pipe"}

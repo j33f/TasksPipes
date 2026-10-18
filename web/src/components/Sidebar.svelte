@@ -261,6 +261,9 @@
         <button class="menu-item" role="menuitem" onclick={() => openDialog("settings")}><Icon name="settings" size={16} />{t("Settings")}</button>
         <button class="menu-item" role="menuitem" onclick={() => openDialog("calendar")}><Icon name="calendar" size={16} />{t("Calendar")}</button>
         <button class="menu-item" role="menuitem" onclick={() => openDialog("about")}><Icon name="info" size={16} />{t("About")}</button>
+        {#if app.me?.admin}
+          <a class="menu-item" role="menuitem" href="/admin" onclick={() => { userMenu = false; onclose(); }}><Icon name="shield" size={16} />{t("Administration")}</a>
+        {/if}
         <div class="menu-sep"></div>
         <button class="menu-item" role="menuitem" onclick={() => { userMenu = false; app.logout(); }}><Icon name="logout" size={16} />{t("Sign out")}</button>
       </div>

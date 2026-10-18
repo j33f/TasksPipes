@@ -7,6 +7,7 @@ import { ensureDefaultPipes, one, pool, query, tx, type Queryable, type Row } fr
 import { absoluteOutlineUrl, normalizeOutlineUrl, outlineApi, outlineToken, OutlineError, type OutlineUser } from "./outline.js";
 import { isEmail, mailEnabled, sendLinkMail } from "./mail.js";
 import { LIMITS, rateLimited } from "./rate-limit.js";
+import { closeUserConnections } from "./realtime.js";
 import { verifyTotp } from "./totp.js";
 import { localeOf, tr, type Locale } from "./i18n.js";
 
@@ -184,6 +185,10 @@ async function establishSession(
     throw new OutlineError(403, "This account does not belong to the allowed Outline workspace.");
   }
   const userId = await tx((client) => upsertOutlineUser(client, data.user, { login: true, instance, lang: localeOf(req) }));
+  // An account disabled by an administrator of the instance stays out, even with a valid Outline account.
+  if ((await one(`SELECT disabled_reason FROM users WHERE id = $1`, [userId]))?.disabled_reason === "admin") {
+    throw new OutlineError(403, "This account is disabled on this instance.");
+  }
   await createSession(reply, userId, tokens, instance);
   req.log.info({ userId, instance }, "User logged in");
 
@@ -512,6 +517,30 @@ export async function disableUnusedInvitations(): Promise<number> {
 /** Turns an account disabled for an unused invitation back on (it is being invited again). */
 export async function reenableInvited(userId: string, db: Queryable = pool) {
   await db.query(`UPDATE users SET disabled_at = NULL, disabled_reason = NULL WHERE id = $1 AND disabled_reason = 'unused_invitation'`, [userId]);
+}
+
+/**
+ * Closes the sessions of Outline accounts whose Outline access ended (token revoked, account suspended or deleted in
+ * Outline): each session's token is checked with auth.info, refreshed first when it can be. Returns how many closed.
+ * Outline being unreachable closes nothing.
+ */
+export async function checkOutlineSessions(): Promise<number> {
+  const { rows } = await query(
+    `SELECT s.* FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE u.auth_kind = 'outline' AND s.access_token IS NOT NULL AND s.expires_at > now()`
+  );
+  let closed = 0;
+  for (const session of rows) {
+    try {
+      await outlineCallerFor(session)("auth.info", {});
+    } catch (err) {
+      if (!(err instanceof OutlineError) || (err.status !== 401 && err.status !== 403)) continue;
+      await query(`DELETE FROM sessions WHERE id = $1`, [session.id]);
+      if (!(await one(`SELECT 1 FROM sessions WHERE user_id = $1`, [session.user_id]))) closeUserConnections(session.user_id);
+      closed++;
+    }
+  }
+  return closed;
 }
 
 export async function cleanupSessions() {

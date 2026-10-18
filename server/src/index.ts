@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { migrate, pool } from "./db.js";
-import { cleanupSessions, disableUnusedInvitations } from "./auth.js";
+import { checkOutlineSessions, cleanupSessions, disableUnusedInvitations } from "./auth.js";
 import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
 import { runScheduledReports } from "./reports.js";
@@ -19,6 +19,10 @@ setInterval(() => {
   cleanupSessions().catch((err) => app.log.warn({ err }, "Session cleanup failed"));
   disableUnused();
   cleanupNotifications().catch((err) => app.log.warn({ err }, "Notification cleanup failed"));
+  // Outline accounts whose access was revoked or suspended in Outline lose their sessions.
+  checkOutlineSessions()
+    .then((n) => n && app.log.info({ closed: n }, "Sessions closed: Outline access ended"))
+    .catch((err) => app.log.warn({ err }, "Checking Outline sessions failed"));
 }, 3_600_000).unref();
 
 // Reports and notifications by e-mail: checked every minute, each one sent once.
