@@ -56,6 +56,7 @@ let only the proxy reach the port (firewall). A proxy in a container on the same
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | E-mail for accounts without Outline and invitations, see below. |
 | `ALLOW_EMAIL_SIGNUP` | `true` (default) lets anyone create an account with an e-mail address and a name (needs SMTP). |
 | `ALLOW_EMAIL_INVITATIONS` | `true` (default) lets people invite others by e-mail and send requests to connect. |
+| `ADMIN_EMAILS` | Administrators of the instance (comma-separated addresses): e-mail accounts, or Outline accounts of `OUTLINE_URL`, with these addresses. They can disable and enable accounts. |
 | `REDIS_URL` | Redis holding the rate limit counters (the bundled one: `redis://redis:6379`). Without it, they are kept in memory, per process. |
 | `RATE_LIMIT_BACKOFF_FACTOR` | A client over a limit is blocked for a minute, then this many times longer at each new offence (2 by default; 1 keeps it the same). |
 | `TIMEZONE` | Time zone of the reports (e.g. `Europe/Paris`); `UTC` by default. |
@@ -164,6 +165,9 @@ of the app, they share it. If Redis cannot be reached, requests go through and a
 | GitHub / GitLab webhooks | 600 per minute | pipe token |
 | Calendar feeds | 60 per minute | feed |
 | Search | 120 per minute | person |
+| Data export | 5 per hour | person |
+| Account deletion (asking, confirming by code) | 10 per 15 minutes | person |
+| Account deletion links | 20 per 15 minutes | address |
 | `/healthz` | 120 per minute | address |
 
 The client address comes from the reverse proxy (`X-Forwarded-For`): keep the app reachable only through it

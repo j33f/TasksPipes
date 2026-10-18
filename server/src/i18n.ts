@@ -141,6 +141,19 @@ export const FR: Record<string, string> = {
   "{name} would like to share tasks with you on TasksPipes, the task manager that works with your Outline workspace.":
     "{name} aimerait partager des tâches avec vous sur TasksPipes, le gestionnaire de tâches qui fonctionne avec votre espace Outline.",
   "Sign in with your Outline account, on the server {server}.": "Connectez-vous avec votre compte Outline, sur le serveur {server}.",
+  "User not found": "Utilisateur introuvable",
+  "You cannot disable your own account": "Vous ne pouvez pas désactiver votre propre compte",
+  "An administrator cannot be disabled: remove them from ADMIN_EMAILS first": "Un administrateur ne peut pas être désactivé : retirez-le d'abord de ADMIN_EMAILS",
+  "This account is disabled on this instance.": "Ce compte est désactivé sur cette instance.",
+  "An Outline account cannot be deleted here: it comes from your Outline workspace.": "Un compte Outline ne peut pas être supprimé ici : il vient de votre espace Outline.",
+  "Deleting an account needs e-mail or two-factor authentication on this instance.": "Supprimer un compte demande l'e-mail ou la double authentification sur cette instance.",
+  "This link is invalid or has expired.": "Ce lien n'est pas valide ou a expiré.",
+  "Deleted account": "Compte supprimé",
+  "Confirm the deletion of your TasksPipes account": "Confirmez la suppression de votre compte TasksPipes",
+  "You asked to delete your TasksPipes account. This link deletes it for good, with your personal space and its tasks; what you did in teams stays in their history, under “Deleted account”. It is valid for {minutes} minutes.":
+    "Vous avez demandé la suppression de votre compte TasksPipes. Ce lien le supprime définitivement, avec votre espace personnel et ses tâches ; ce que vous avez fait dans les équipes reste dans leur historique, sous « Compte supprimé ». Il est valable {minutes} minutes.",
+  "If you did not ask for it, ignore this e-mail: your account stays as it is.": "Si vous ne l'avez pas demandé, ignorez cet e-mail : votre compte reste tel quel.",
+  "Delete my account": "Supprimer mon compte",
   "A user is required": "Utilisateur requis",
   "The owner must be a member of the team": "Le ou la propriétaire doit être membre de l'équipe",
   "A task in a personal space belongs to its holder: send it to someone instead.":

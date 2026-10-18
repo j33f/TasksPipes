@@ -27,6 +27,9 @@ Outline through its RPC-style API.
 | `access.ts` | Who may see and do what on a task (`taskPermissions`), shared by the API and the notifications. |
 | `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |
 | `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |
+| `admin.ts` | Administrators of the instance (`ADMIN_EMAILS`), the account list, disabling and enabling accounts. |
+| `account.ts` | One's data: the zip export, and the deletion of e-mail accounts (history moved to a placeholder account). |
+| `zip.ts` | A small zip writer on `node:zlib`, for the export. |
 | `rate-limit.ts` | Rate limits ([@fastify/rate-limit](https://github.com/fastify/fastify-rate-limit), opted in per route) with a growing block, counted in Redis (or in memory without `REDIS_URL`). |
 | `pipeTypes.ts` | Built-in catalog of pipe and task types, and the custom types made with the designer. |
 | `designer.ts` | Validation of custom pipe and task types. |
@@ -58,7 +61,7 @@ follow Outline's design tokens (`web/src/app.css`).
 
 | Table | Holds |
 | --- | --- |
-| `users`, `user_avatars` | Outline accounts (keyed by Outline server and id), e-mail accounts and the "GitHub" / "GitLab" system accounts that author automatic moves; preferences; disabled accounts (`disabled_at`); uploaded pictures. |
+| `users`, `user_avatars` | Outline accounts (keyed by Outline server and id), e-mail accounts and the "GitHub" / "GitLab" system accounts that author automatic moves; the "Deleted account" placeholders (`auth_kind = 'deleted'`) that keep the history of deleted accounts; preferences; disabled accounts (`disabled_at`, `disabled_reason`, `disabled_by`); uploaded pictures. |
 | `spaces`, `space_members` | Personal spaces (one per person) and team spaces, with roles. |
 | `pipes`, `pipe_pins` | Pipes (type, visibility, archiving) and the pipes people pinned. |
 | `tasks` | Tasks: place (space, pipe or incoming), column and generic status, owner, due date, type and field values. |

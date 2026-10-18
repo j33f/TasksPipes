@@ -24,6 +24,8 @@ export interface Me {
   };
   personalSpaceId: string;
   outlineUrl: string;
+  /** Administrator of the instance (ADMIN_EMAILS): the administration page is offered. */
+  admin?: boolean;
   /** What this instance allows. */
   features: { invitations: boolean; notifications: boolean };
   /** E-mail notification choices, when e-mail is set up on the instance. */
@@ -72,6 +74,8 @@ export interface Pipe {
 
 export interface Member extends UserRef {
   role: "admin" | "member";
+  /** Disabled by an administrator of the instance. */
+  disabled?: boolean;
 }
 
 export interface SpaceDetail extends Omit<SpaceSummary, "memberCount" | "incomingCount" | "pipeCount" | "active"> {
@@ -368,4 +372,17 @@ export interface SearchResult {
   confidential: boolean;
   /** What matched besides the title, matched words between \u0002 and \u0003. */
   snippet: string | null;
+}
+
+/** An account, as the administration page lists it (GET /api/admin/users). */
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string | null;
+  kind: "outline" | "email";
+  outlineUrl: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+  disabled: { at: string; reason: "admin" | "unused_invitation"; by: string | null } | null;
+  admin: boolean;
 }

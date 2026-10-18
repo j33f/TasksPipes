@@ -11,6 +11,7 @@ import { authPlugin } from "./auth.js";
 import { apiRoutes, gitWebhooks } from "./routes.js";
 import { realtime } from "./realtime.js";
 import { calendarRoutes } from "./calendar.js";
+import { deletionLinkRoutes } from "./account.js";
 import { notificationRoutes } from "./notifications.js";
 import { rateLimited, rateLimits } from "./rate-limit.js";
 import { HttpError } from "./errors.js";
@@ -75,6 +76,7 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   await app.register(realtime);
   await app.register(calendarRoutes);
   await app.register(notificationRoutes);
+  await app.register(deletionLinkRoutes);
   await app.register(apiRoutes, { prefix: "/api" });
   await app.register(gitWebhooks);
 

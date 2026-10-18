@@ -50,6 +50,8 @@ follows Outline's look and feel.
   daily digest or not at all, as each person chooses.
 - **Search** — every task you can see, by text, field values, comments or number (`TP-123`), from the sidebar
   or with Ctrl/⌘ + K, filtered by status, owner and task type.
+- **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
+  keeps a “Deleted account”), and administrators of the instance can disable accounts.
 - **Sub-tasks, history, live updates**, English and French, light and dark themes.
 
 TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:

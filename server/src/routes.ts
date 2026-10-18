@@ -20,6 +20,8 @@ import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
 import { isEmail, sendLinkMail, sendOutlineInvite } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
 import { calendarUrl } from "./calendar.js";
+import { adminRoutes, requestIsAdmin } from "./admin.js";
+import { accountRoutes } from "./account.js";
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
@@ -121,7 +123,7 @@ function getSpace(id: string, userId: string) {
 const personalSpaceId = async (userId: string, db?: Queryable): Promise<string> =>
   (await one(`SELECT id FROM spaces WHERE user_id = $1`, [userId], db))?.id;
 
-function presentTask(t: Row) {
+export function presentTask(t: Row) {
   return {
     id: t.id,
     number: t.number,
@@ -273,7 +275,7 @@ function localizeDetails(lang: Locale, d: Row): Row {
 }
 
 /** History of a task; column, type and field names recorded with it are shown in `lang`. */
-async function getEvents(taskId: string, lang: Locale) {
+export async function getEvents(taskId: string, lang: Locale) {
   const { rows } = await query(
     `SELECT e.*, a.name AS actor_name, a.avatar_url AS actor_avatar,
             COALESCE(fsu.name, fs.name) AS from_space_name, COALESCE(tsu.name, ts.name) AS to_space_name,
@@ -423,11 +425,15 @@ export async function apiRoutes(app: FastifyInstance) {
     if (!req.user) throw new HttpError(401, "Not signed in");
   });
   const me = (req: FastifyRequest) => req.user!.id;
+  await app.register(adminRoutes);
+  await app.register(accountRoutes, { present: presentTask, events: getEvents });
 
   app.get("/me", async (req) => ({
     user: req.user,
     personalSpaceId: await personalSpaceId(me(req)),
     outlineUrl: req.outlineUrl,
+    // Administrator of the instance (ADMIN_EMAILS): the administration page is offered.
+    admin: await requestIsAdmin(req),
     features: { invitations: config.allowEmailInvitations, notifications: notificationState.enabled },
     // E-mail notifications are only offered when e-mail is set up.
     ...(notificationState.enabled
@@ -860,8 +866,9 @@ export async function apiRoutes(app: FastifyInstance) {
     const isMember = Boolean(s.my_role);
     const [members, pipes, incoming] = await Promise.all([
       query(
-        `SELECT u.id, u.name, u.avatar_url, m.role FROM space_members m JOIN users u ON u.id = m.user_id
-         WHERE m.space_id = $1 AND u.disabled_at IS NULL ORDER BY m.role, lower(u.name)`,
+        // Accounts disabled by an administrator stay listed, marked; unused invitations do not.
+        `SELECT u.id, u.name, u.avatar_url, m.role, u.disabled_at IS NOT NULL AS disabled FROM space_members m JOIN users u ON u.id = m.user_id
+         WHERE m.space_id = $1 AND (u.disabled_at IS NULL OR u.disabled_reason = 'admin') ORDER BY m.role, lower(u.name)`,
         [s.id]
       ),
       query(
@@ -884,7 +891,7 @@ export async function apiRoutes(app: FastifyInstance) {
       color: s.color,
       avatarUrl: s.avatar_url,
       myRole: s.my_role,
-      members: members.rows.map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatar_url, role: m.role })),
+      members: members.rows.map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatar_url, role: m.role, disabled: m.disabled })),
       pipes: pipes.rows.map(presentPipe),
       incoming: incoming ? incoming.rows.map(presentTask) : null,
     };

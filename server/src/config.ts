@@ -51,6 +51,11 @@ export const config = {
   allowEmailSignup: (process.env.ALLOW_EMAIL_SIGNUP ?? "true") !== "false",
   /** People can invite others by e-mail, or ask people already on the platform to connect. */
   allowEmailInvitations: (process.env.ALLOW_EMAIL_INVITATIONS ?? "true") !== "false",
+  /**
+   * Administrators of the instance, by e-mail address (lower case). Only e-mail accounts (address proven by a sign-in
+   * link) and Outline accounts of OUTLINE_URL count: another Outline server could claim any address.
+   */
+  adminEmails: (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
   /** Redis holding the rate limit counters (shared by every instance); without it, they are kept in memory. */
   redisUrl: process.env.REDIS_URL || "",
   /** Each new offence multiplies the time a client is blocked by this factor (1: always the same). */

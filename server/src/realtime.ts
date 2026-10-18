@@ -83,3 +83,9 @@ export async function notifySpace(spaceId: string, event: Omit<LiveEvent, "space
     // Live updates are a convenience: the page also reloads its data when it comes back.
   }
 }
+
+/** Closes the open pages of someone whose access ended (disabled, deleted, signed out by Outline). */
+export function closeUserConnections(userId: string) {
+  for (const s of sockets.get(userId) ?? []) s.close(4401, "unauthorized");
+  sockets.delete(userId);
+}

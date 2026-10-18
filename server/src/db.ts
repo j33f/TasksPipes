@@ -334,6 +334,15 @@ CREATE INDEX IF NOT EXISTS login_tokens_user_idx ON login_tokens(user_id, create
 -- turns it back on.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_at timestamptz;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_reason text CHECK (disabled_reason IN ('unused_invitation'));
+-- Disabled by an administrator of the instance (admin.ts), and by whom.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_by uuid REFERENCES users(id) ON DELETE SET NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_disabled_reason_check'
+                 AND pg_get_constraintdef(oid) LIKE '%admin%') THEN
+    ALTER TABLE users DROP CONSTRAINT IF EXISTS users_disabled_reason_check;
+    ALTER TABLE users ADD CONSTRAINT users_disabled_reason_check CHECK (disabled_reason IN ('unused_invitation', 'admin'));
+  END IF;
+END $$;
 -- A sign-in link sent by signing up again: using it turns an account disabled for an unused invitation back on.
 ALTER TABLE login_tokens ADD COLUMN IF NOT EXISTS reactivates boolean NOT NULL DEFAULT false;
 
@@ -473,6 +482,17 @@ CREATE OR REPLACE TRIGGER task_search_events AFTER INSERT OR UPDATE OF comment O
   FOR EACH ROW EXECUTE FUNCTION task_search_on_event();
 -- Tasks made before the search, or indexed by an older version.
 SELECT task_search_refresh(t.id) FROM tasks t LEFT JOIN task_search s ON s.task_id = t.id WHERE s.version IS DISTINCT FROM 1;
+
+-- Deleting one's account (account.ts): a link confirms it (purpose 'delete'). What the account did stays in the
+-- history under a placeholder account of its own ("Deleted account", auth_kind 'deleted'), never signed in.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'login_tokens_purpose_check'
+                 AND pg_get_constraintdef(oid) LIKE '%delete%') THEN
+    ALTER TABLE login_tokens DROP CONSTRAINT IF EXISTS login_tokens_purpose_check;
+    ALTER TABLE login_tokens ADD CONSTRAINT login_tokens_purpose_check CHECK (purpose IN ('magic', 'totp', 'delete'));
+  END IF;
+END $$;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
 `;
 
 /**

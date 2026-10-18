@@ -122,7 +122,7 @@
         {#each members as m (m.id)}
           <div class="list-item static">
             <Avatar user={m} />
-            <span class="title">{m.name}{m.id === meId ? " (vous)" : ""}</span>
+            <span class="title">{m.name}{m.id === meId ? " (vous)" : ""}{#if m.disabled} <span class="badge">{t("Disabled")}</span>{/if}</span>
             <select class="input role" value={m.role} disabled={busy}
               onchange={(e) => setRole(m, (e.currentTarget as HTMLSelectElement).value as "admin" | "member")}>
               <option value="member">{t("Member")}</option>

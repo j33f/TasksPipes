@@ -7,6 +7,7 @@
   import Avatar from "./Avatar.svelte";
   import Icon from "./Icon.svelte";
   import InviteModal from "./InviteModal.svelte";
+  import DataSection from "./DataSection.svelte";
   import { LOCALES, prefs, t, type Locale, type Theme } from "../lib/i18n.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
@@ -297,6 +298,7 @@
       </div>
     {/each}
   </div>
+  <DataSection />
 </Modal>
 
 {#if inviting}<InviteModal onclose={() => (inviting = false)} ondone={loadInvitations} />{/if}

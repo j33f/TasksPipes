@@ -231,7 +231,33 @@ Your name at the bottom of the sidebar opens a menu, like Outline's:
   dark), name and picture of e-mail accounts, two-factor authentication, invitations and requests to connect;
 - **Calendar** — your calendar subscription link;
 - **About** — the version, a link to the source code on GitHub and the license;
+- **Administration** — for the administrators of the instance (see below);
 - **Sign out**.
+
+## Your data
+
+In **Settings › Your data**:
+
+- **Download my data** gives a zip archive: `data.json` (your profile, teams, the tasks you wrote, sent or own with
+  their history and sub-tasks, and every comment you wrote) and the files of those tasks. Only tasks you can still
+  see are included; on others, only your own comments are, without the task.
+- **Delete my account** (e-mail accounts; an Outline account comes from your Outline workspace and is not deleted
+  here) is confirmed by a two-factor code, or else by a link sent by e-mail, valid 30 minutes and once. It deletes
+  your account, your personal space and its tasks (tasks others sent you included), and the teams you were alone
+  in. What you did elsewhere stays in the history under **Deleted account**, a placeholder of its own that nothing
+  links back to you; teams you alone administered get their oldest other member as admin.
+
+## Administration
+
+Administrators of the instance are named by `ADMIN_EMAILS`, never in the app. Only an e-mail account (its address
+proven by sign-in links) or an Outline account of the server set in `OUTLINE_URL` can be one: another Outline server
+could claim any address. Their **Administration** page lists every account (kind, Outline server, last sign-in,
+state) and can **disable** one — its sessions and open pages are closed at once, it can no longer sign in, its tasks
+and history stay, and teams show it as disabled — or enable it again. An administrator cannot disable themselves or
+another administrator.
+
+Every hour, the sessions of Outline accounts are checked with Outline: when Outline no longer accepts their access
+(revoked, account suspended or deleted), they are closed.
 
 ## Privacy
 
@@ -252,3 +278,5 @@ of Outline accounts; links you click (Outline documents, France Compétences pag
 | Manage a team (name, members, roles, deletion) | the team's admins |
 | Add someone to a team, send them a task | team admins / members, among the people they can see who have signed in once |
 | Invite an Outline colleague who never signed in | anyone who sees them |
+| See every account, disable or enable one | administrators of the instance (`ADMIN_EMAILS`) |
+| Export one's data; delete one's e-mail account | the person |

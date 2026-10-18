@@ -22,6 +22,7 @@ export default defineConfig({
       OUTLINE_ALLOW_PRIVATE: "true",
       MOCK_OUTLINE_PORT: String(port),
       DEFAULT_LOCALE: "en",
+      ADMIN_EMAILS: "alice@example.com, admin-by-mail@example.com",
       LOG_LEVEL: "silent",
       // Rate limits in Redis when the test stack provides one, else in memory.
       REDIS_URL: process.env.TEST_REDIS_URL || "",

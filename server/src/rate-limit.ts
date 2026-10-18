@@ -178,6 +178,8 @@ export const LIMITS = {
   catalogUsage: { name: "catalog-usage", max: 60, timeWindow: MIN, keyGenerator: perPerson },
   search: { name: "search", max: 120, timeWindow: MIN, keyGenerator: perPerson },
   outlineInvite: { name: "outline-invite", max: 20, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  dataExport: { name: "data-export", max: 5, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  accountDeletion: { name: "account-deletion", max: 10, timeWindow: 15 * MIN, keyGenerator: perPerson },
   webhook: { name: "webhook", max: 600, timeWindow: MIN, keyGenerator: perSecret("token") },
   calendar: { name: "calendar", max: 60, timeWindow: MIN, keyGenerator: perSecret("file") },
 } satisfies Record<string, Limit>;
