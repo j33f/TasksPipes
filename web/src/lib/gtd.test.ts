@@ -53,6 +53,12 @@ describe("next action", () => {
     expect(list[1].reasons).toContain("due in 2 days");
   });
 
+  it("never suggests a task still waiting for other tasks", () => {
+    const blocked = task({ title: "blocked", status: "ready", dueDate: "2026-10-01", blockers: 1 });
+    const free = task({ title: "free", status: "backlog" });
+    expect(suggestions([blocked, free]).map((s) => s.task.title)).toEqual(["free"]);
+  });
+
   it("explains a long wait and progress on sub-tasks", () => {
     const old = task({ createdAt: "2026-09-01T09:00:00Z", checklist: { total: 4, done: 1, next: { id: "i", text: "x" } } });
     const [s] = suggestions([old]);
