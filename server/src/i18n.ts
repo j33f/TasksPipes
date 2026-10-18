@@ -317,8 +317,8 @@ export const FR: Record<string, string> = {
   "Sign in": "Se connecter",
   "{name} invites you to TasksPipes": "{name} vous invite sur TasksPipes",
   "{name} invites you to share tasks with them on TasksPipes.": "{name} vous invite à partager des tâches avec lui ou elle sur TasksPipes.",
-  "This link signs you in directly; it is valid for {days} days and works only once. Afterwards, ask for a new link from the sign-in page with your e-mail address.":
-    "Ce lien vous connecte directement ; il est valable {days} jours et ne sert qu'une fois. Ensuite, demandez un nouveau lien depuis la page de connexion avec votre adresse e-mail.",
+  "This link signs you in directly; it is valid for {hours} hours and works only once. Afterwards, ask for a new link from the sign-in page with your e-mail address.":
+    "Ce lien vous connecte directement ; il est valable {hours} heures et ne sert qu'une fois. Ensuite, demandez un nouveau lien depuis la page de connexion avec votre adresse e-mail.",
   "Join TasksPipes": "Rejoindre TasksPipes",
   "Or copy this link:": "Ou copiez ce lien :",
 

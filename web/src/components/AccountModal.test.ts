@@ -16,13 +16,15 @@ const me = (notifications: boolean): Me => ({
 });
 
 let calls: { url: string; method: string; body: unknown }[];
+let invitations: unknown[] = [];
 
 beforeEach(() => {
   calls = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ url, method: init?.method ?? "GET", body });
-    const answer = url.endsWith("/me/notifications") ? { notificationPrefs: { ...me(true).notificationPrefs, ...body } } : [];
+    const answer = url.endsWith("/me/notifications") ? { notificationPrefs: { ...me(true).notificationPrefs, ...body } }
+      : url.endsWith("/invitations") ? invitations : [];
     return new Response(JSON.stringify(answer), { status: 200, headers: { "content-type": "application/json" } });
   }));
 });
@@ -30,6 +32,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   app.me = undefined;
+  invitations = [];
 });
 
 describe("e-mail notification settings", () => {
@@ -62,5 +65,15 @@ describe("e-mail notification settings", () => {
     expect(calls.at(-1)).toMatchObject({ method: "PUT", body: { due: "immediate", dueHour: 7 } });
     await userEvent.selectOptions(select, "off");
     expect(calls.at(-1)).toMatchObject({ method: "PUT", body: { due: "off" } });
+  });
+});
+
+describe("invitations", () => {
+  it("show an expired one, with a new link to send", async () => {
+    invitations = [{ id: "g", name: "Gina", email: "gina@example.com", active: false, expired: true, invitedByMe: true, avatarUrl: null, status: "accepted", createdAt: "2026-10-01T10:00:00Z" }];
+    app.me = me(false);
+    render(AccountModal, { onclose: () => {} });
+    expect(await screen.findByText(/invitation expired: send a new link to let them in/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send a new link" })).toBeTruthy();
   });
 });

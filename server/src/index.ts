@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { migrate, pool } from "./db.js";
-import { cleanupSessions } from "./auth.js";
+import { cleanupSessions, disableUnusedInvitations } from "./auth.js";
 import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
 import { runScheduledReports } from "./reports.js";
@@ -9,8 +9,15 @@ import { cleanupNotifications, runNotifications } from "./notifications.js";
 const app = await buildApp();
 
 await migrate(app.log);
+// Invitations never used are disabled once their link expired: at start, then every hour.
+const disableUnused = () =>
+  disableUnusedInvitations()
+    .then((n) => n && app.log.info({ disabled: n }, "Unused invitations disabled"))
+    .catch((err) => app.log.warn({ err }, "Disabling unused invitations failed"));
+await disableUnused();
 setInterval(() => {
   cleanupSessions().catch((err) => app.log.warn({ err }, "Session cleanup failed"));
+  disableUnused();
   cleanupNotifications().catch((err) => app.log.warn({ err }, "Notification cleanup failed"));
 }, 3_600_000).unref();
 

@@ -57,7 +57,7 @@ follow Outline's design tokens (`web/src/app.css`).
 
 | Table | Holds |
 | --- | --- |
-| `users`, `user_avatars` | Outline accounts (keyed by Outline server and id), e-mail accounts and the "GitHub" / "GitLab" system accounts that author automatic moves; preferences; uploaded pictures. |
+| `users`, `user_avatars` | Outline accounts (keyed by Outline server and id), e-mail accounts and the "GitHub" / "GitLab" system accounts that author automatic moves; preferences; disabled accounts (`disabled_at`); uploaded pictures. |
 | `spaces`, `space_members` | Personal spaces (one per person) and team spaces, with roles. |
 | `pipes`, `pipe_pins` | Pipes (type, visibility, archiving) and the pipes people pinned. |
 | `tasks` | Tasks: place (space, pipe or incoming), column and generic status, owner, due date, type and field values. |
@@ -80,7 +80,7 @@ the nearest one.
 Who sees what is decided in SQL, so lists and single reads follow the same rules:
 
 - `user_visible(viewer, target)`: oneself; Outline accounts of the same server; and people linked by an accepted
-  invitation.
+  invitation — never a disabled account.
 - `space_visible(viewer, space)`: personal spaces of visible people; teams one belongs to, or, for an Outline
   account, the teams created by an account of the same server.
 

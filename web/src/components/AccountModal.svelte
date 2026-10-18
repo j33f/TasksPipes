@@ -276,7 +276,7 @@
             {:else if i.invitedByMe && i.status === "refused"}
               {t("asked on {date}", { date: formatDate(i.createdAt) })}
             {:else if i.invitedByMe}
-              {i.email} · {t("invited on {date}", { date: formatDate(i.createdAt) })} · {i.active ? t("has signed in") : t("not signed in yet")}
+              {i.email} · {t("invited on {date}", { date: formatDate(i.createdAt) })} · {i.active ? t("has signed in") : i.expired ? t("invitation expired: send a new link to let them in") : t("not signed in yet")}
             {:else if i.status === "pending"}
               {t("wants to connect with you, to share tasks")}
             {:else}
