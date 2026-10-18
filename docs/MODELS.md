@@ -42,7 +42,7 @@ pipeTypes:                    # optional
     teamOnly: false           # reserved to a team space (optional)
     columns:                  # two or more, at least one "done"
       - { id: to_plan, label: To plan, status: backlog, color: "#66778F" }
-      - { id: visit, label: Visit planned, status: ready, color: "#2BC2FF" }
+      - { id: visit, label: Visit planned, status: ready, color: "#2BC2FF", wipLimit: 5 }   # limit (optional)
       - { id: closed, label: Closed, status: done, color: "#3ad984" }
     taskTypes: [company_visit, cours]   # task types of this file, or built-in / available ones
     templates:                # starter tasks (optional)

@@ -44,6 +44,10 @@ start, Started, In progress, Blocked, Done, Dropped* — which the dashboard, du
 - **Personal** / **Team** (private): only the person, or the team's members, see the pipe.
 - **Open** (public): everyone sees it; anyone can add tasks and comment, only the space's members move them forward.
 - Every personal space has a **Personal** pipe for general tasks, which cannot be archived or deleted.
+- **Work in progress limits**: a column of a pipe type can have a limit (in the designer); its header shows
+  `tasks / limit` and turns red once the column holds more tasks. The limit only warns, it never blocks a move.
+- **Swimlanes**: a board can show one row of columns per owner (team pipes) or per task type, remembered in the
+  browser. Dropping a task in another lane gives it that lane's owner or type.
 - **Archiving**: an archived pipe leaves the lists, pickers and "My tasks", and takes no new tasks. It can still be
   viewed and unarchived. A pipe can be archived once all its tasks are done or dropped.
 

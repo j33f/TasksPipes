@@ -253,6 +253,8 @@ export interface Column {
   label: string;
   color: string;
   status: Status;
+  /** Work in progress limit: the board warns when the column holds more tasks. */
+  wipLimit?: number;
 }
 
 export type FieldType =
