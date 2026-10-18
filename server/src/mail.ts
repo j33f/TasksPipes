@@ -15,17 +15,18 @@ const transport = mailEnabled
 
 const escape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-/** Sends an e-mail made of HTML (a report); the text version is derived from it. */
-export async function sendHtmlMail(lang: Locale, to: string, subject: string, html: string) {
+/** Sends an e-mail made of HTML (a report, a notification); the text version is derived from it. */
+export async function sendHtmlMail(lang: Locale, to: string, subject: string, html: string, headers: Record<string, string> = {}) {
   if (!transport) return false;
   const text = html
+    .replace(/<a href="([^"]+)"[^>]*>([^<]*)<\/a>/g, (_, url, label) => (label === url ? url : `${label} (${url})`))
     .replace(/<li>/g, "\n- ")
     .replace(/<\/(h2|h3|p|tr)>/g, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&#(\d+);/g, (_, c) => String.fromCharCode(Number(c)))
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  await transport.sendMail({ from: config.smtp.from, to, subject, html, text: `${text}\n\n— TasksPipes`, headers: { "Content-Language": lang } });
+  await transport.sendMail({ from: config.smtp.from, to, subject, html, text: `${text}\n\n— TasksPipes`, headers: { "Content-Language": lang, ...headers } });
   return true;
 }
 

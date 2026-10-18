@@ -24,6 +24,9 @@ Outline through its RPC-style API.
 | `auth.ts` | Sessions, Outline sign-in (OAuth and API keys), e-mail sign-up, sign-in links and TOTP. |
 | `outline.ts` | Outline API client, validation of other Outline servers (https, no internal addresses). |
 | `routes.ts` | The JSON API under `/api`: spaces, pipes, tasks, sub-tasks, files, invitations, designer… |
+| `access.ts` | Who may see and do what on a task (`taskPermissions`), shared by the API and the notifications. |
+| `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |
+| `rate-limit.ts` | Rate limits ([@fastify/rate-limit](https://github.com/fastify/fastify-rate-limit), opted in per route) with a growing block, counted in Redis (or in memory without `REDIS_URL`). |
 | `pipeTypes.ts` | Built-in catalog of pipe and task types, and the custom types made with the designer. |
 | `designer.ts` | Validation of custom pipe and task types. |
 | `models-io.ts` | Export and import of models as YAML files. |
@@ -61,7 +64,8 @@ follow Outline's design tokens (`web/src/app.css`).
 | `task_items`, `task_files` | Sub-tasks and files of tasks. |
 | `task_events` | History of every task, with the state before and after each change. |
 | `custom_types` | Pipe and task types made with the designer. |
-| `report_runs` | Scheduled report sendings already done (one per period). |
+| `report_runs` | Scheduled report and digest sendings already done (one per period). |
+| `notifications` | E-mail notifications waiting, sent or dropped; people's choices are in `users.notification_prefs`. |
 | `pipe_integrations`, `task_links` | Repositories connected to pipes (webhook token, encrypted secret), and the pull/merge requests and commits linked to tasks. |
 | `sessions`, `login_tokens`, `invitations` | Sessions, e-mail sign-in links and TOTP steps, invitations and requests to connect (pending, accepted, refused). |
 
@@ -80,5 +84,5 @@ Who sees what is decided in SQL, so lists and single reads follow the same rules
 - `space_visible(viewer, space)`: personal spaces of visible people; teams one belongs to, or, for an Outline
   account, the teams created by an account of the same server.
 
-Permissions on a task (`taskPermissions` in `routes.ts`) then depend on membership of its space and on the
+Permissions on a task (`taskPermissions` in `access.ts`) then depend on membership of its space and on the
 visibility of its pipe.

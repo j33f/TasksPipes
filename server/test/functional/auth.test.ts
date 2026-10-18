@@ -10,7 +10,7 @@ describe("signing in with Outline", () => {
     const me = await alice.get("/api/me");
     expect(me.status).toBe(200);
     expect(me.body.user).toMatchObject({ name: "Alice Martin", kind: "outline", totp: false });
-    expect(me.body.features).toEqual({ invitations: true });
+    expect(me.body.features).toEqual({ invitations: true, notifications: false });
     // The workspace is imported in the background after sign-in.
     await expect
       .poll(async () => (await alice.get("/api/users")).body.map((u: { name: string }) => u.name), { timeout: 5000 })

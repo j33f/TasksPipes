@@ -4,18 +4,26 @@ import { cleanupSessions } from "./auth.js";
 import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
 import { runScheduledReports } from "./reports.js";
+import { cleanupNotifications, runNotifications } from "./notifications.js";
 
 const app = await buildApp();
 
 await migrate(app.log);
-setInterval(() => cleanupSessions().catch((err) => app.log.warn({ err }, "Session cleanup failed")), 3_600_000).unref();
+setInterval(() => {
+  cleanupSessions().catch((err) => app.log.warn({ err }, "Session cleanup failed"));
+  cleanupNotifications().catch((err) => app.log.warn({ err }, "Notification cleanup failed"));
+}, 3_600_000).unref();
 
-// Reports by e-mail: checked every minute, each one sent once after the report hour.
+// Reports and notifications by e-mail: checked every minute, each one sent once.
 if (mailEnabled) {
   setInterval(() => {
     runScheduledReports()
       .then((n) => n && app.log.info({ sent: n }, "Reports sent"))
       .catch((err) => app.log.error({ err }, "Report sending failed"));
+    // E-mail notifications: immediate ones, the daily digest and the morning reminders of due dates.
+    runNotifications()
+      .then((n) => n && app.log.info({ sent: n }, "Notifications sent"))
+      .catch((err) => app.log.error({ err }, "Notification sending failed"));
   }, 60_000).unref();
 }
 

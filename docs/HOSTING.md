@@ -48,6 +48,8 @@ pictures of Outline accounts.
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | E-mail for accounts without Outline and invitations, see below. |
 | `ALLOW_EMAIL_SIGNUP` | `true` (default) lets anyone create an account with an e-mail address and a name (needs SMTP). |
 | `ALLOW_EMAIL_INVITATIONS` | `true` (default) lets people invite others by e-mail and send requests to connect. |
+| `REDIS_URL` | Redis holding the rate limit counters (the bundled one: `redis://redis:6379`). Without it, they are kept in memory, per process. |
+| `RATE_LIMIT_BACKOFF_FACTOR` | A client over a limit is blocked for a minute, then this many times longer at each new offence (2 by default; 1 keeps it the same). |
 | `TIMEZONE` | Time zone of the reports (e.g. `Europe/Paris`); `UTC` by default. |
 | `REPORT_HOUR` | Hour (0–23) at which daily reports, and on Fridays weekly time reports, are due: 18 by default. |
 | `DEFAULT_LOCALE` | `en` (default) or `fr`: language used when neither the profile nor the browser gives one. |
@@ -119,6 +121,23 @@ Pipes can send their daily activity report every day at `REPORT_HOUR` (local to 
 their weekly time report on Fridays. The server checks every minute and records each sending in the database, so a
 report goes out once, even across restarts; if the server was down at the report hour, it sends on start-up the same
 day. Sending needs SMTP (see above).
+
+## Notifications by e-mail
+
+With SMTP set up, people get e-mails about tasks sent to them, given to them or refused, comments and due dates (see
+[the features](FEATURES.md#e-mail-notifications)); each person chooses what they get in their settings. The server
+checks every minute: e-mails sent at once go out about two minutes after what caused them; the daily digest goes out
+once at `REPORT_HOUR`, even across restarts; due-date reminders go out in the morning at each person's hour (8:00 by
+default, in `TIMEZONE`). Unsubscribe links are signed with `APP_SECRET`: changing it makes the links of e-mails
+already sent invalid.
+
+## Rate limits
+
+Routes that accept a token from outside, such as the unsubscribe links, and `/healthz` are rate limited per client
+address: past the limit, the address is blocked for a minute, then longer at each new offence (`RATE_LIMIT_BACKOFF_FACTOR`), up to
+a day. Counters live in the Redis service of `docker-compose.yml`, which keeps nothing on disk; with several instances
+of the app, they share it. If Redis cannot be reached, requests go through and a warning is logged. The client address
+comes from the reverse proxy (`X-Forwarded-For`): keep the app reachable only through it.
 
 ## Calendar subscription
 
