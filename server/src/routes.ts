@@ -24,6 +24,7 @@ import { adminRoutes, requestIsAdmin } from "./admin.js";
 import { accountRoutes } from "./account.js";
 import { tokenRoutes } from "./api.js";
 import { queueWebhooks, webhookRoutes } from "./webhooks.js";
+import { presentRecurrence, recurrenceRoutes, type RecordCreated } from "./recurrence.js";
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
@@ -224,6 +225,12 @@ const snapshot = (t: Row): Snapshot => ({
   due_date: t.due_date,
   doc: t.outline_doc_id ? { id: t.outline_doc_id, title: t.outline_doc_title, url: t.outline_doc_url } : null,
 });
+
+/** The history entry of a task made by a recurring series (recurrence.ts), as any creation. */
+export const recordOccurrence: RecordCreated = async (db, taskId, actorId, recurrenceId) => {
+  const row = await getTaskRow(taskId, db);
+  await recordEvent(db, taskId, actorId, "created", null, snapshot(row!), null, { recurrence: recurrenceId });
+};
 
 /** Writes one entry of a task's history, with the state before and after the change, and queues its notifications. */
 async function recordEvent(
@@ -435,6 +442,7 @@ export async function apiRoutes(app: FastifyInstance) {
   await app.register(adminRoutes);
   await app.register(tokenRoutes);
   await app.register(webhookRoutes);
+  await app.register(recurrenceRoutes);
   await app.register(accountRoutes, { present: presentTask, events: getEvents });
 
   app.get("/me", async (req) => ({
@@ -1486,6 +1494,8 @@ export async function apiRoutes(app: FastifyInstance) {
     return {
       ...presentTask(t),
       permissions: perms,
+      recurrence: t.recurrence_id ? presentRecurrence(await one(`SELECT * FROM task_recurrences WHERE id = $1`, [t.recurrence_id])) : null,
+      occurrenceOn: t.occurrence_on,
       events,
       items,
       key: `${TASK_KEY_PREFIX}-${t.number}`,

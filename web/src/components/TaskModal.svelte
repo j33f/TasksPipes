@@ -18,6 +18,7 @@
   import Checklist from "./Checklist.svelte";
   import DevLinks from "./DevLinks.svelte";
   import TaskTiming from "./TaskTiming.svelte";
+  import RepeatSection from "./RepeatSection.svelte";
   import { t, tn } from "../lib/i18n.svelte";
 
   let { id, onclose }: { id: string; onclose: () => void } = $props();
@@ -382,6 +383,8 @@
             <div class="value muted">—</div>
           {/if}
         </div>
+
+        {#if task.pipe}<RepeatSection {task} onchange={load} />{/if}
 
         <div class="prop">
           <span class="label-text">{t("Time per step")}</span>

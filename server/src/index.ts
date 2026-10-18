@@ -6,6 +6,8 @@ import { mailEnabled } from "./mail.js";
 import { runScheduledReports } from "./reports.js";
 import { cleanupNotifications, runNotifications } from "./notifications.js";
 import { cleanupWebhookDeliveries, runWebhooks } from "./webhooks.js";
+import { runRecurrences } from "./recurrence.js";
+import { recordOccurrence } from "./routes.js";
 
 const app = await buildApp();
 
@@ -26,6 +28,13 @@ setInterval(() => {
     .then((n) => n && app.log.info({ closed: n }, "Sessions closed: Outline access ended"))
     .catch((err) => app.log.warn({ err }, "Checking Outline sessions failed"));
 }, 3_600_000).unref();
+
+// Recurring tasks: the occurrences due, every minute (each made once, whatever the number of instances).
+setInterval(() => {
+  runRecurrences(recordOccurrence)
+    .then((n) => n && app.log.info({ made: n }, "Recurring tasks made"))
+    .catch((err) => app.log.error({ err }, "Making recurring tasks failed"));
+}, 60_000).unref();
 
 // Outgoing webhooks: deliveries due, every 15 seconds.
 let sendingWebhooks = false;

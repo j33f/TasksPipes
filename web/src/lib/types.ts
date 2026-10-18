@@ -175,6 +175,8 @@ export interface TaskDetail extends Task {
   /** The task's pipe is connected to GitHub or GitLab. */
   gitConnected: boolean;
   timing: Timing;
+  /** Its repetition, when it belongs to a recurring series. */
+  recurrence: Recurrence | null;
 }
 
 export interface TaskFile {
@@ -432,4 +434,23 @@ export interface Webhook {
     status: number | null;
     error: string | null;
   }[];
+}
+
+/** The repetition of a task (a recurring series), see recurrence.ts. */
+export interface Recurrence {
+  id: string;
+  rule: {
+    freq: "daily" | "weekly" | "monthly" | "yearly";
+    interval: number;
+    weekdays?: number[];
+    monthly?: { kind: "day"; day: number } | { kind: "weekday"; nth: 1 | 2 | 3 | 4 | -1; weekday: number } | { kind: "lastBusinessDay" };
+  };
+  mode: "schedule" | "after_done";
+  leadDays: number;
+  startsOn: string;
+  endsOn: string | null;
+  nextOn: string | null;
+  active: boolean;
+  /** The next dates, the first being nextOn. */
+  upcoming: string[];
 }

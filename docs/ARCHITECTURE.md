@@ -29,6 +29,7 @@ Outline through its RPC-style API.
 | `api.ts` | Personal access tokens and `/api/v1`: the app's own routes, those documented answering (OpenAPI with [@fastify/swagger](https://github.com/fastify/fastify-swagger), Swagger UI). |
 | `webhooks.ts` | Outgoing webhooks of pipes: deliveries queued with the history, signed, sent and retried in the background. |
 | `net.ts` | Requests to servers people choose (Outline servers, webhooks): internal addresses refused when connecting. |
+| `recurrence.ts` | Recurring tasks: the dates of a rule, and the scheduler pass making each occurrence once. |
 | `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |
 | `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |
 | `admin.ts` | Administrators of the instance (`ADMIN_EMAILS`), the account list, disabling and enabling accounts. |
@@ -74,6 +75,7 @@ follow Outline's design tokens (`web/src/app.css`).
 | `custom_types` | Pipe and task types made with the designer. |
 | `report_runs` | Scheduled report and digest sendings already done (one per period). |
 | `task_search` | The search index: one `tsvector` per task, kept up to date by triggers on tasks, sub-tasks and history. |
+| `task_recurrences` | Recurring series (rule, mode, lead time, end, next date); tasks point to theirs (`recurrence_id`, `occurrence_on`, unique together). |
 | `api_tokens` | Access tokens of the public API (hash, scope, expiry, revocation). |
 | `pipe_webhooks`, `webhook_deliveries` | Outgoing webhooks of pipes (encrypted secret) and their deliveries, with attempts and answers. |
 | `notifications` | E-mail notifications waiting, sent or dropped; people's choices are in `users.notification_prefs`. |
