@@ -56,6 +56,7 @@ export async function exportData(userId: string, present: (t: Record<string, unk
     `SELECT task_id, created_at, comment FROM task_events WHERE actor_id = $1 AND comment IS NOT NULL ORDER BY created_at`,
     [userId]
   );
+  const time = await query(`SELECT task_id, spent_on, minutes, note, created_at FROM task_time_entries WHERE user_id = $1 ORDER BY spent_on`, [userId]);
   const files = tasks.length
     ? (await query(`SELECT id, task_id, name, mime, size, created_at FROM task_files WHERE task_id = ANY($1) ORDER BY created_at`, [[...visible.keys()]])).rows
     : [];
@@ -80,6 +81,11 @@ export async function exportData(userId: string, present: (t: Record<string, unk
     comments: comments.rows.map((c) => {
       const t = visible.get(c.task_id);
       return { at: c.created_at, text: c.comment, task: t ? { key: t.key, title: t.row.title } : null };
+    }),
+    // Time one logged, the same way.
+    timeLogged: time.rows.map((e) => {
+      const t = visible.get(e.task_id);
+      return { day: e.spent_on, minutes: e.minutes, note: e.note, at: e.created_at, task: t ? { key: t.key, title: t.row.title } : null };
     }),
   };
   return { data, files: files.map((f) => ({ id: f.id as string, path: fileName(f), at: f.created_at as Date })) };

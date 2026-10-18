@@ -118,6 +118,13 @@ those types keep working. This is a personal choice: others still see every type
   create, rename, recolor and delete them; a task gets labels of its space only, and loses them when it is sent to
   another space (noted in its history). Priority and labels are set by those who edit the task's fields, recorded in
   its history, copied to the next task of a series, exported with the pipe and sent with webhooks.
+- **Estimate and logged time**: a task's *Time* section holds its estimate (typed as `2h30`, `1.5` or `45min`) and
+  the time logged by hand — who, which day (today or one of the last 90 days), how long, an optional note — with
+  its total against the estimate (red once over), also shown on cards. Those who edit the task's fields set the
+  estimate and log their own time; an entry is changed by its author, and deleted by its author or an admin of the
+  task's team (noted in the history). Whoever sees the task sees its entries. The time computed per step stays
+  beside it. Logged time counts in the **weekly report** (per person and per task, against estimates; durations
+  only in the e-mail), the pipe export (in hours) and one's data export.
 - **Filters**: a pipe filters its tasks by text, label, priority, owner and task type; *My tasks* by label and
   priority, and groups them by priority too; the search filters by label (by name, across spaces) and priority.
 - **Dependencies**: a task can wait for other tasks (*Dependencies › Add a task it waits for*), from any space or
@@ -187,7 +194,7 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   **read and write**. It acts with exactly your rights, through the same checks as the app, and can be revoked at
   any time; a disabled account's tokens stop working.
 - **API `/api/v1`** — the documented, versioned part of the API: your account, people, spaces, pipes and their tasks,
-  your tasks, the calendar, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, and sub-tasks. Send the token as
+  your tasks, the calendar, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, logged time, and sub-tasks. Send the token as
   `Authorization: Bearer tp_…`. Its OpenAPI description is at `/api/v1/openapi.json`, browsable at **`/api/v1/docs`**
   (Swagger UI). Tokens are accepted on `/api/v1` only, and never manage tokens, account settings, data export,
   deletion or administration: those need a signed-in session.
@@ -376,6 +383,8 @@ of Outline accounts; links you click (Outline documents, France Compétences pag
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
 | Edit title, description and fields, priority and labels | members, or the author of a task in an open pipe |
 | Manage a space's labels | members of the space (whoever sees the space sees them) |
+| Set an estimate, log one's own time | as for fields: members, or the author of a task in an open pipe |
+| Change or delete a time entry | its author; an admin of the task's team may delete it too |
 | Refuse | members of the space whose incoming holds the task (unless they sent it themselves) |
 | Manage a team (name, members, roles, deletion) | the team's admins |
 | Add someone to a team, send them a task | team admins / members, among the people they can see who have signed in once |

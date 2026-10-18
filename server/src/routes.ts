@@ -30,6 +30,7 @@ import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
+import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
 import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
 import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
 import {
@@ -187,6 +188,8 @@ export function presentTask(t: Row) {
     blockers: Number(t.open_blockers ?? 0),
     priority: t.priority ?? null,
     labels: t.labels ?? [],
+    estimateMinutes: t.estimate_minutes ?? null,
+    loggedMinutes: Number(t.logged_minutes ?? 0),
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   };
@@ -1297,7 +1300,8 @@ export async function apiRoutes(app: FastifyInstance) {
     const { p } = await loadPipeFor(req.params.id, uid);
     const { rows } = await query(
       `SELECT t.number, t.title, t.description, t.status, t.stage, t.task_type, t.fields, t.due_date, t.created_at, t.updated_at,
-              au.name AS author_name, ow.name AS owner_name, t.priority,
+              au.name AS author_name, ow.name AS owner_name, t.priority, t.estimate_minutes,
+              (SELECT COALESCE(sum(te.minutes), 0) FROM task_time_entries te WHERE te.task_id = t.id) AS logged_minutes,
               COALESCE((SELECT json_agg(l.name ORDER BY l.position, lower(l.name)) FROM task_labels tl
                         JOIN space_labels l ON l.id = tl.label_id WHERE tl.task_id = t.id), '[]') AS labels,
               COALESCE((SELECT json_agg(json_build_object('text', i.text, 'done', i.done) ORDER BY i.position, i.created_at)
@@ -1492,6 +1496,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const type = taskType(b.taskType);
     const { values } = cleanFields(type, b.fields ?? {});
     const priority = cleanPriority(b.priority);
+    const estimate = cleanEstimate(b.estimateMinutes);
     if (b.items !== undefined && !Array.isArray(b.items)) throw bad("Invalid sub-tasks");
     const items = ((b.items ?? []) as unknown[])
       .map((x) => (typeof x === "object" && x ? x : { text: x }) as { text?: unknown; done?: unknown })
@@ -1532,10 +1537,11 @@ export async function apiRoutes(app: FastifyInstance) {
       const position = await nextPosition(client, spaceId, pipeId, stage);
       const row = await one(
         `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date,
-                            outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields, priority)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17) RETURNING id`,
+                            outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields, priority,
+                            estimate_minutes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18) RETURNING id`,
         [title, description, spaceId, pipeId, st, stage, position, assigneeId, dueDate,
-         doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority],
+         doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority, estimate],
         client
       ).then((r) => getTaskRow(r!.id, client));
       if (labelIds.length) await setTaskLabels(client, row!.id, labelIds);
@@ -1620,21 +1626,23 @@ export async function apiRoutes(app: FastifyInstance) {
     assertTaskTypeUsable(type, uid, t.pipe_kind, t.task_type);
     const { values, labels } = "fields" in b ? cleanFields(type, b.fields) : { values: {}, labels: [] };
     const priority = "priority" in b ? cleanPriority(b.priority) : t.priority;
+    const estimate = "estimateMinutes" in b ? cleanEstimate(b.estimateMinutes) : t.estimate_minutes;
     const labelIds = "labelIds" in b ? await cleanLabelIds(b.labelIds, t.space_id) : null;
     const details: Record<string, unknown> = {
       ...(type.id !== t.task_type ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: type.label } } : {}),
       ...(labels.length ? { fields: labels } : {}),
       ...(priority !== (t.priority ?? null) ? { priority: { from: t.priority ?? null, to: priority } } : {}),
+      ...(estimate !== (t.estimate_minutes ?? null) ? { estimate: { from: t.estimate_minutes ?? null, to: estimate } } : {}),
     };
 
     await tx(async (client) => {
       const row = await one(
         `UPDATE tasks SET title = $2, description = $3, assignee_id = $4, due_date = $5, status = $6, stage = $10,
            outline_doc_id = $7, outline_doc_title = $8, outline_doc_url = $9,
-           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, updated_at = now()
+           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, estimate_minutes = $14, updated_at = now()
          WHERE id = $1 RETURNING id`,
         [t.id, title, description, assigneeId, dueDate, st, doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, stage,
-         type.id, JSON.stringify(values), priority],
+         type.id, JSON.stringify(values), priority, estimate],
         client
       ).then(() => getTaskRow(t.id, client));
       if (labelIds) {
@@ -1800,6 +1808,67 @@ export async function apiRoutes(app: FastifyInstance) {
       await recordEvent(client, t.id, uid, "dependency", s, s, null, { dependency: "removed" });
     });
     return dependenciesOf(pool, t.id, uid);
+  });
+
+  // ----- Time logged by hand (worklog.ts) -------------------------------------------
+
+  /** Whether someone may delete everyone's entries on a task: an admin of its team. */
+  const timeAdmin = async (t: Row, uid: string) => (await memberRole(t.space_id, uid)) === "admin" && t.space_kind === "team";
+
+  app.get("/tasks/:id/time", async (req: Req) => {
+    const { t } = await loadTaskFor(req.params.id, me(req));
+    return timeEntries(t.id, me(req), await timeAdmin(t, me(req)));
+  });
+
+  // Those who edit the task log their own time on it.
+  app.post("/tasks/:id/time", rateLimited(LIMITS.timeEntries), async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    const b = req.body || {};
+    const row = await one(
+      `INSERT INTO task_time_entries (task_id, user_id, spent_on, minutes, note) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [t.id, uid, cleanDay(b.spentOn), cleanMinutes(b.minutes), cleanNote(b.note)]
+    );
+    return presentEntry({ ...row, name: req.user!.name, avatar_url: req.user!.avatarUrl ?? null }, uid, false);
+  });
+
+  /** An entry and its task, for someone who can see the task (404 otherwise). */
+  async function entryFor(id: string, uid: string) {
+    const e = await getEntry(uuid(id, "Time entry"));
+    if (!e) throw notFound("Time entry not found");
+    const { t } = await loadTaskFor(e.task_id, uid).catch(() => {
+      throw notFound("Time entry not found");
+    });
+    return { e, t };
+  }
+
+  // Only its author changes an entry.
+  app.patch("/time/:id", rateLimited(LIMITS.timeEntries), async (req: Req) => {
+    const uid = me(req);
+    const { e } = await entryFor(req.params.id, uid);
+    if (e.user_id !== uid) throw forbidden();
+    const b = req.body || {};
+    const row = await one(
+      `UPDATE task_time_entries SET spent_on = $2, minutes = $3, note = $4 WHERE id = $1 RETURNING *`,
+      [e.id, "spentOn" in b ? cleanDay(b.spentOn) : e.spent_on, "minutes" in b ? cleanMinutes(b.minutes) : e.minutes, "note" in b ? cleanNote(b.note) : e.note]
+    );
+    return presentEntry({ ...row, name: req.user!.name, avatar_url: req.user!.avatarUrl ?? null }, uid, false);
+  });
+
+  // Its author deletes an entry, or an admin of the task's team (noted in the task's history).
+  app.delete("/time/:id", rateLimited(LIMITS.timeEntries), async (req: Req) => {
+    const uid = me(req);
+    const { e, t } = await entryFor(req.params.id, uid);
+    if (e.user_id !== uid && !(await timeAdmin(t, uid))) throw forbidden();
+    await tx(async (client) => {
+      await client.query(`DELETE FROM task_time_entries WHERE id = $1`, [e.id]);
+      if (e.user_id !== uid) {
+        const s = snapshot(t);
+        const person = await one(`SELECT name FROM users WHERE id = $1`, [e.user_id], client);
+        await recordEvent(client, t.id, uid, "time", s, s, null, { timeRemoved: { minutes: e.minutes, spentOn: e.spent_on, of: person?.name ?? null } });
+      }
+    });
+    return { ok: true };
   });
 
   // ----- Reports of a pipe ------------------------------------------------------
