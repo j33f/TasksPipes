@@ -103,7 +103,9 @@ export async function runWebhooks(now = new Date()): Promise<number> {
     `UPDATE webhook_deliveries d SET next_attempt_at = $1::timestamptz + interval '10 minutes'
      FROM pipe_webhooks h
      WHERE d.id IN (SELECT x.id FROM webhook_deliveries x JOIN pipe_webhooks w ON w.id = x.webhook_id AND w.active
-                    WHERE x.delivered_at IS NULL AND x.failed_at IS NULL AND x.next_attempt_at <= $1
+                    WHERE x.delivered_at IS NULL AND x.failed_at IS NULL
+                      -- Deliveries are dated by the database: its clock counts too.
+                      AND x.next_attempt_at <= GREATEST($1::timestamptz, now())
                     ORDER BY x.id LIMIT 50 FOR UPDATE OF x SKIP LOCKED)
        AND h.id = d.webhook_id
      RETURNING d.id, d.event, d.payload, d.attempts, h.url, h.secret`,
