@@ -18,7 +18,10 @@ Other needs are covered by the [models](#models): design your own pipe and task 
 ## People
 
 Once TasksPipes is connected to Outline, everyone in the Outline workspace is there straight away, imported at the
-first sign-in: you can send them tasks, see their open pipes or build teams with them before they have signed in.
+first sign-in. Colleagues who have not signed in to TasksPipes yet show greyed out: they get no task, join no team
+and get no e-mail until they sign in once. **Invite** them from the sidebar or their page: they get an e-mail asking
+them to sign in with their Outline account (on their Outline server), or, when the instance sends no e-mail, the
+link to give them is copied.
 
 On the sign-in page, you type the address of your Outline server; it is kept in your browser for next time, and you
 can add others and switch between them. Each server keeps its own people and teams: accounts of one server do not
@@ -172,7 +175,8 @@ With e-mail set up on the instance, TasksPipes tells people by e-mail what needs
 - E-mails sent at once wait two minutes, so that what follows (a comment after sending a task…) comes in the same
   e-mail, and a task sends at most one e-mail every 15 minutes to a person; what happens meanwhile is grouped in the
   next one.
-- Nothing is sent for what you do yourself, nor to e-mail accounts that never signed in.
+- Nothing is sent for what you do yourself, nor to accounts that never signed in (an invitation not taken up, an
+  Outline colleague who never came); the same goes for reports.
 - Access is checked again when sending: someone who can no longer see a task (who left the team, for instance) gets
   nothing about it.
 - **Confidential** and **team-only** tasks are only named by their key (`TP-123`) and a link: their title, place,
@@ -246,4 +250,5 @@ of Outline accounts; links you click (Outline documents, France Compétences pag
 | Edit title, description and fields | members, or the author of a task in an open pipe |
 | Refuse | members of the space whose incoming holds the task (unless they sent it themselves) |
 | Manage a team (name, members, roles, deletion) | the team's admins |
-| Add someone to a team, send them a task | team admins / members, among the people they can see |
+| Add someone to a team, send them a task | team admins / members, among the people they can see who have signed in once |
+| Invite an Outline colleague who never signed in | anyone who sees them |

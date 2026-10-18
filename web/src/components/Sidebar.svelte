@@ -13,6 +13,7 @@
   import { api, errorMessage } from "../lib/api";
   import { navigate } from "../lib/router.svelte";
   import { openTaskCount } from "../lib/constants";
+  import { awaitingSignIn, inviteColleague } from "../lib/people";
   import type { SidebarPipe } from "../lib/types";
   import { t, tn } from "../lib/i18n.svelte";
 
@@ -218,12 +219,27 @@
         {@render foldTitle("people", t("People"), people.length, app.me?.features.invitations ? () => (showInvite = true) : undefined, t("Invite by e-mail"))}
         {#if isOpen("people")}
           {#each people as s (s.id)}
-            <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}
-              href={`/spaces/${s.id}`} title={s.active ? s.name : t("{name} (has not signed in yet)", { name: s.name })}>
-              <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
-              {#if s.guest}<span class="guest" title={t("Invited by e-mail")}><Icon name="mail" size={14} /></span>{/if}
-              {#if s.pipeCount}<span class="count neutral">{s.pipeCount}</span>{/if}
-            </a>
+            {#if awaitingSignIn(s) && s.userId}
+              {@const userId = s.userId}
+              <div class="sidebar-link has-disclosure hover-actions muted" class:active={router.path === `/spaces/${s.id}`}>
+                <span class="disclosure-space"></span>
+                <a class="row-link" href={`/spaces/${s.id}`} title={t("{name} (has not signed in yet)", { name: s.name })}>
+                  <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
+                </a>
+                <span class="actions">
+                  <button class="act" title={t("Invite {name} to TasksPipes", { name: s.name })} onclick={() => inviteColleague(userId, s.name)}>
+                    <Icon name="send" size={16} />
+                  </button>
+                </span>
+              </div>
+            {:else}
+              <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}
+                href={`/spaces/${s.id}`} title={s.active ? s.name : t("{name} (has not signed in yet)", { name: s.name })}>
+                <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
+                {#if s.guest}<span class="guest" title={t("Invited by e-mail")}><Icon name="mail" size={14} /></span>{/if}
+                {#if s.pipeCount}<span class="count neutral">{s.pipeCount}</span>{/if}
+              </a>
+            {/if}
           {/each}
         {/if}
       </div>
