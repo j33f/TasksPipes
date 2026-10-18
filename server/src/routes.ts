@@ -29,6 +29,7 @@ import { presentRecurrence, recurrenceRoutes, type RecordCreated } from "./recur
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
+import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
 import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
 import { SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, type TaskPermissions } from "./access.js";
 
@@ -156,6 +157,8 @@ export function presentTask(t: Row) {
     // State of the latest pull/merge request naming the task.
     gitState: t.git_state ?? null,
     checklist: t.checklist ?? { total: 0, done: 0, next: null },
+    // Tasks it waits for, still to finish.
+    blockers: Number(t.open_blockers ?? 0),
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   };
@@ -267,9 +270,16 @@ async function recordEvent(
   );
   // E-mail notifications it causes, in the same transaction.
   if (notify) await queueNotifications(db, Number(rows[0].id), await mentionRecipients(db, Number(rows[0].id)));
+  // Finished: the tasks that waited only for it are released.
+  if (notify && before && !isResolved(before.status) && isResolved(after.status)) await releaseWaiting(db, Number(rows[0].id));
   // Outgoing webhooks of the pipes concerned (imports too: integrations want every task).
   await queueWebhooks(db, Number(rows[0].id));
 }
+
+/** Statuses of work under way or finished: reaching one while blocked is allowed, and noted in the history. */
+const FORWARD: Status[] = ["started", "ongoing", "done"];
+const movedWhileBlocked = async (db: Queryable, t: Row, to: Status) =>
+  to !== t.status && FORWARD.includes(to) && (await openBlockers(db, t.id)) > 0;
 
 async function nextPosition(db: Queryable, spaceId: string, pipeId: string | null, stage: string | null): Promise<number> {
   const r = pipeId
@@ -1485,7 +1495,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.get("/tasks/:id", async (req: Req) => {
     const { t, perms } = await loadTaskFor(req.params.id, me(req));
-    const [events, files, items, links] = await Promise.all([
+    const [events, files, items, links, dependencies] = await Promise.all([
       getEvents(t.id, localeOf(req)),
       query(
         `SELECT f.id, f.field, f.name, f.mime, f.size, f.created_at, u.name AS uploaded_by_name
@@ -1498,10 +1508,12 @@ export async function apiRoutes(app: FastifyInstance) {
          WHERE task_id = $1 ORDER BY kind = 'commit', updated_at DESC LIMIT 100`,
         [t.id]
       ),
+      dependenciesOf(pool, t.id, me(req)),
     ]);
     return {
       ...presentTask(t),
       permissions: perms,
+      ...dependencies,
       recurrence: t.recurrence_id ? presentRecurrence(await one(`SELECT * FROM task_recurrences WHERE id = $1`, [t.recurrence_id])) : null,
       occurrenceOn: t.occurrence_on,
       events,
@@ -1562,7 +1574,8 @@ export async function apiRoutes(app: FastifyInstance) {
       const after = snapshot(row!);
       // People newly mentioned in the description are told.
       const mentioned = newMentions(t.description, description);
-      const all = { ...details, ...(mentioned.length ? { mentioned } : {}) };
+      const blocked = await movedWhileBlocked(client, t, after.status);
+      const all = { ...details, ...(mentioned.length ? { mentioned } : {}), ...(blocked ? { whileBlocked: true } : {}) };
       const d = Object.keys(all).length ? all : null;
       if (JSON.stringify(before) !== JSON.stringify(after)) {
         await recordEvent(client, t.id, uid, before.stage !== after.stage ? "status" : "updated", before, after, comment, d);
@@ -1604,7 +1617,8 @@ export async function apiRoutes(app: FastifyInstance) {
       const after = snapshot(row!);
       if (before.pipe_id !== after.pipe_id || before.stage !== after.stage || comment) {
         const type = !t.pipe_id ? "accepted" : before.pipe_id !== after.pipe_id ? "moved" : "status";
-        await recordEvent(client, t.id, uid, type, before, after, comment);
+        const blocked = await movedWhileBlocked(client, t, after.status);
+        await recordEvent(client, t.id, uid, type, before, after, comment, blocked ? { whileBlocked: true } : null);
       }
     });
     // Accepted out of an incoming: the other members' counts drop.
@@ -1671,6 +1685,35 @@ export async function apiRoutes(app: FastifyInstance) {
       await client.query(`UPDATE tasks SET updated_at = now() WHERE id = $1`, [t.id]);
     });
     return { ok: true };
+  });
+
+  // ----- Dependencies between tasks (dependencies.ts) -----------------------------
+
+  // Those who may edit a task choose what it waits for, among the tasks they can open.
+  app.post("/tasks/:id/dependencies", rateLimited(LIMITS.dependencies), async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    const { t: blocker } = await loadTaskFor(uuid(req.body?.blockerId, "Blocking task"), uid);
+    await tx(async (client) => {
+      if (!(await addDependency(client, t.id, blocker.id, uid))) return;
+      const s = snapshot(t);
+      await recordEvent(client, t.id, uid, "dependency", s, s, null, { dependency: "added" });
+    });
+    return dependenciesOf(pool, t.id, uid);
+  });
+
+  // A blocker one cannot open can still be unlinked by those who may edit the task.
+  app.delete("/tasks/:id/dependencies/:blockerId", rateLimited(LIMITS.dependencies), async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    const blockerId = uuid(req.params.blockerId, "Blocking task");
+    await tx(async (client) => {
+      const { rowCount } = await client.query(`DELETE FROM task_dependencies WHERE task_id = $1 AND blocker_id = $2`, [t.id, blockerId]);
+      if (!rowCount) return;
+      const s = snapshot(t);
+      await recordEvent(client, t.id, uid, "dependency", s, s, null, { dependency: "removed" });
+    });
+    return dependenciesOf(pool, t.id, uid);
   });
 
   // ----- Reports of a pipe ------------------------------------------------------

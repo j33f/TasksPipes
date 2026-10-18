@@ -115,6 +115,16 @@ export const V1_ROUTES: Record<string, Doc> = {
     tag: "Tasks", summary: "Comment on a task", params: idParams,
     body: { type: "object", required: ["body"], properties: { body: { type: "string" } } }, response: ok,
   },
+  "POST /tasks/:id/dependencies": {
+    tag: "Tasks", summary: "Make a task wait for another one (blockerId), until it is done or abandoned", params: idParams,
+    body: { type: "object", required: ["blockerId"], properties: { blockerId: uuid } },
+    response: object("The tasks it waits for (blockedBy) and those waiting for it (blocks)"),
+  },
+  "DELETE /tasks/:id/dependencies/:blockerId": {
+    tag: "Tasks", summary: "Stop a task waiting for another one",
+    params: { type: "object", required: ["id", "blockerId"], properties: { id: uuid, blockerId: uuid } },
+    response: object("The tasks it waits for (blockedBy) and those waiting for it (blocks)"),
+  },
   "POST /tasks/:id/items": {
     tag: "Sub-tasks", summary: "Add a sub-task", params: idParams,
     body: { type: "object", required: ["text"], properties: { text: { type: "string", maxLength: 500 } } }, response: object("The sub-task", { id: uuid }),

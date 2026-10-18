@@ -30,6 +30,7 @@ Outline through its RPC-style API.
 | `webhooks.ts` | Outgoing webhooks of pipes: deliveries queued with the history, signed, sent and retried in the background. |
 | `net.ts` | Requests to servers people choose (Outline servers, webhooks): internal addresses refused when connecting. |
 | `recurrence.ts` | Recurring tasks: the dates of a rule, and the scheduler pass making each occurrence once. |
+| `dependencies.ts` | Dependencies between tasks: what a linked task shows to whom, loops, and releasing the tasks waiting for one just finished. |
 | `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |
 | `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |
 | `admin.ts` | Administrators of the instance (`ADMIN_EMAILS`), the account list, disabling and enabling accounts. |

@@ -33,7 +33,7 @@ export interface Me {
 }
 
 export type NotificationMode = "immediate" | "digest" | "off";
-export type NotificationKind = "received" | "assigned" | "refused" | "comment" | "mention" | "due";
+export type NotificationKind = "received" | "assigned" | "refused" | "comment" | "mention" | "unblocked" | "due";
 export type NotificationPrefs = Record<NotificationKind, NotificationMode> & { dueHour: number };
 
 export interface SpaceSummary {
@@ -114,6 +114,8 @@ export interface Task {
   gitState: TaskLink["state"] | null;
   /** Sub-tasks: how many, how many checked, and the first one left. */
   checklist: { total: number; done: number; next: { id: string; text: string } | null };
+  /** Tasks it waits for, still to finish. */
+  blockers: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -139,7 +141,7 @@ export interface EventSide {
 
 export interface TaskEvent {
   id: number;
-  type: "created" | "sent" | "accepted" | "moved" | "status" | "refused" | "updated" | "edited" | "comment" | "fields" | "file" | "checklist" | "linked";
+  type: "created" | "sent" | "accepted" | "moved" | "status" | "refused" | "updated" | "edited" | "comment" | "fields" | "file" | "checklist" | "linked" | "dependency";
   comment: string | null;
   details: {
     fields?: string[];
@@ -157,6 +159,10 @@ export interface TaskEvent {
     title?: string;
     repo?: string;
     action?: string;
+    /** A task it waits for was added or removed (event "dependency"). */
+    dependency?: "added" | "removed";
+    /** Moved forward while it still waited for other tasks. */
+    whileBlocked?: boolean;
   } | null;
   createdAt: string;
   actor: UserRef;
@@ -177,6 +183,24 @@ export interface TaskDetail extends Task {
   timing: Timing;
   /** Its repetition, when it belongs to a recurring series. */
   recurrence: Recurrence | null;
+  /** Tasks it waits for, and tasks waiting for it. */
+  blockedBy: Dependency[];
+  blocks: Dependency[];
+}
+
+/**
+ * A task linked to another one. One that cannot be opened shows only its title and owner (no id, except a blocker,
+ * to unlink it); a confidential or team-only one nothing at all (masked).
+ */
+export interface Dependency {
+  id?: string;
+  number?: number;
+  title?: string;
+  status?: Status;
+  owner?: { id?: string; name: string } | null;
+  resolved: boolean;
+  visible: boolean;
+  masked?: boolean;
 }
 
 export interface TaskFile {

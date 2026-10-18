@@ -11,7 +11,7 @@ const me = (notifications: boolean): Me => ({
   outlineUrl: "https://outline.test",
   features: { invitations: true, notifications },
   ...(notifications
-    ? { notificationPrefs: { received: "immediate", assigned: "immediate", refused: "immediate", comment: "digest", mention: "immediate", due: "immediate", dueHour: 8 } }
+    ? { notificationPrefs: { received: "immediate", assigned: "immediate", refused: "immediate", comment: "digest", mention: "immediate", unblocked: "immediate", due: "immediate", dueHour: 8 } }
     : {}),
 });
 
