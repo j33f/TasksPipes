@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
+import { overrideSetting, setting } from "./settings-store.js";
 
 const trimSlash = (s?: string) => (s || "").replace(/\/+$/, "");
 
-const outlineUrl = trimSlash(process.env.OUTLINE_URL);
 const appUrl = trimSlash(process.env.APP_URL || "http://localhost:3000");
-const oauthClientId = process.env.OUTLINE_OAUTH_CLIENT_ID || "";
-const oauthClientSecret = process.env.OUTLINE_OAUTH_CLIENT_SECRET || "";
+/** A setting changed by the administrators (settings-store.ts); its environment variable, when set, locks it. */
+const s = <T>(key: string) => setting<T>(key);
 
 /** Version of the server, from its package.json (dist/ in production, src/ in development: both one level down). */
 const version: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
@@ -18,27 +18,50 @@ export const config = {
   appUrl,
   appSecret: process.env.APP_SECRET || "",
   databaseUrl: process.env.DATABASE_URL || "",
+  // The settings below can change while the server runs (Administration › Settings): read them each time.
+  /** Outline as a way to sign in and as a source of documents; off, Outline accounts can no longer sign in. */
+  get outlineEnabled() {
+    return s<boolean>("outline.enabled");
+  },
   /**
    * Optional Outline server known to the instance: OAuth sign-in works with it, and accounts made before
    * people typed their server belong to it. The login page never suggests it: people type their server.
    */
-  outlineUrl,
+  get outlineUrl() {
+    return trimSlash(s<string>("outline.url"));
+  },
   /** URL the server uses to reach the Outline API (may be an internal docker URL). */
-  outlineApiUrl: trimSlash(process.env.OUTLINE_API_URL) || outlineUrl,
-  oauthClientId,
-  oauthClientSecret,
+  get outlineApiUrl() {
+    return trimSlash(s<string>("outline.apiUrl")) || this.outlineUrl;
+  },
+  get oauthClientId() {
+    return s<string>("outline.oauthClientId");
+  },
+  get oauthClientSecret() {
+    return s<string>("outline.oauthClientSecret");
+  },
   // OAuth works with the configured Outline server only.
-  oauthEnabled: Boolean(oauthClientId && oauthClientSecret && outlineUrl),
-  allowApiKeyLogin: (process.env.ALLOW_API_KEY_LOGIN ?? "true") !== "false",
+  get oauthEnabled() {
+    return Boolean(this.outlineEnabled && this.oauthClientId && this.oauthClientSecret && this.outlineUrl);
+  },
+  get allowApiKeyLogin() {
+    return this.outlineEnabled && s<boolean>("outline.apiKeyLogin");
+  },
   /**
    * Other Outline servers people may sign in with (host names, "*.example.com" allowed).
    * Empty: any public https server.
    */
-  outlineAllowedHosts: (process.env.OUTLINE_ALLOWED_HOSTS || "").split(",").map((h) => h.trim().toLowerCase()).filter(Boolean),
+  get outlineAllowedHosts() {
+    return s<string[]>("outline.allowedHosts");
+  },
   /** Lets other Outline servers be on an internal address or in plain http (self-hosting, tests). */
-  outlineAllowPrivate: process.env.OUTLINE_ALLOW_PRIVATE === "true",
+  get outlineAllowPrivate() {
+    return s<boolean>("outline.allowPrivate");
+  },
   /** Optional: restrict login to a single Outline workspace (team id) of the configured server. */
-  outlineTeamId: process.env.OUTLINE_TEAM_ID || "",
+  get outlineTeamId() {
+    return s<string>("outline.teamId");
+  },
   sessionDays: Number(process.env.SESSION_DAYS || 30),
   secureCookies: appUrl.startsWith("https://"),
   webDir: process.env.WEB_DIR || "",
@@ -48,9 +71,17 @@ export const config = {
   /** Language when neither the page nor the browser gives one: a file of locales/ ("en", "fr"…; else "en"). */
   defaultLocale: process.env.DEFAULT_LOCALE || "en",
   /** People can create an account with just their e-mail address and a name (needs SMTP). */
-  allowEmailSignup: (process.env.ALLOW_EMAIL_SIGNUP ?? "true") !== "false",
+  get allowEmailSignup() {
+    return s<boolean>("signin.emailSignup");
+  },
   /** People can invite others by e-mail, or ask people already on the platform to connect. */
-  allowEmailInvitations: (process.env.ALLOW_EMAIL_INVITATIONS ?? "true") !== "false",
+  get allowEmailInvitations() {
+    return s<boolean>("signin.emailInvitations");
+  },
+  /** E-mail domains that may sign up or be invited (all when empty). */
+  get emailDomains() {
+    return s<string[]>("signin.emailDomains");
+  },
   /**
    * Administrators of the instance, by e-mail address (lower case). Only e-mail accounts (address proven by a sign-in
    * link), Outline accounts of OUTLINE_URL and accounts of the OIDC provider vouching for the address count: another
@@ -71,14 +102,50 @@ export const config = {
    * client registered there, the button's label and the scopes asked. OIDC_ALLOWED_DOMAINS limits sign-in to some
    * e-mail domains; OIDC_ENABLED=false turns it off even when configured.
    */
+  // (Setters are for the tests: they override the setting.)
   oidc: {
-    issuer: trimSlash(process.env.OIDC_ISSUER || ""),
-    clientId: process.env.OIDC_CLIENT_ID || "",
-    clientSecret: process.env.OIDC_CLIENT_SECRET || "",
-    name: process.env.OIDC_NAME || "SSO",
-    scopes: process.env.OIDC_SCOPES || "openid email profile",
-    allowedDomains: (process.env.OIDC_ALLOWED_DOMAINS || "").split(",").map((d) => d.trim().toLowerCase().replace(/^@/, "")).filter(Boolean),
-    enabled: Boolean(process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID) && process.env.OIDC_ENABLED !== "false",
+    get issuer() {
+      return trimSlash(s<string>("oidc.issuer"));
+    },
+    set issuer(v: string) {
+      overrideSetting("oidc.issuer", v);
+    },
+    get clientId() {
+      return s<string>("oidc.clientId");
+    },
+    set clientId(v: string) {
+      overrideSetting("oidc.clientId", v);
+    },
+    get clientSecret() {
+      return s<string>("oidc.clientSecret");
+    },
+    set clientSecret(v: string) {
+      overrideSetting("oidc.clientSecret", v);
+    },
+    get name() {
+      return s<string>("oidc.name");
+    },
+    set name(v: string) {
+      overrideSetting("oidc.name", v);
+    },
+    get scopes() {
+      return s<string>("oidc.scopes");
+    },
+    set scopes(v: string) {
+      overrideSetting("oidc.scopes", v);
+    },
+    get allowedDomains() {
+      return s<string[]>("oidc.allowedDomains");
+    },
+    set allowedDomains(v: string[]) {
+      overrideSetting("oidc.allowedDomains", v);
+    },
+    get enabled() {
+      return Boolean(s<boolean>("oidc.enabled") && this.issuer && this.clientId);
+    },
+    set enabled(v: boolean) {
+      overrideSetting("oidc.enabled", v);
+    },
   },
   /** Redis holding the rate limit counters (shared by every instance); without it, they are kept in memory. */
   redisUrl: process.env.REDIS_URL || "",
@@ -86,12 +153,24 @@ export const config = {
   rateLimitBackoffFactor: Math.max(1, Number(process.env.RATE_LIMIT_BACKOFF_FACTOR || 2) || 2),
   /** Sending e-mails (invitations, sign-in links). Without SMTP_HOST, nothing is sent. */
   smtp: {
-    host: process.env.SMTP_HOST || "",
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === "true" || process.env.SMTP_PORT === "465",
-    user: process.env.SMTP_USER || "",
-    pass: process.env.SMTP_PASS || "",
-    from: process.env.MAIL_FROM || process.env.SMTP_USER || "",
+    get host() {
+      return s<string>("smtp.host");
+    },
+    get port() {
+      return Number(s<number>("smtp.port")) || 587;
+    },
+    get secure() {
+      return s<boolean | null>("smtp.secure") ?? this.port === 465;
+    },
+    get user() {
+      return s<string>("smtp.user");
+    },
+    get pass() {
+      return s<string>("smtp.pass");
+    },
+    get from() {
+      return s<string>("smtp.from") || this.user;
+    },
   },
 };
 

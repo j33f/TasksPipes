@@ -37,8 +37,8 @@
   }
 </script>
 
-{#if app.isGuest}
-  <div class="hint">{t("Outline is not available to accounts invited by e-mail.")}</div>
+{#if app.noOutline}
+  <div class="hint">{app.isGuest ? t("Outline is not available to accounts invited by e-mail.") : t("Outline is turned off on this instance.")}</div>
 {:else}
 <div class="picker">
   <!-- svelte-ignore a11y_autofocus -->

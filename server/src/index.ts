@@ -1,5 +1,6 @@
 import { config } from "./config.js";
-import { migrate, pool } from "./db.js";
+import { loadSettings, migrate, pool } from "./db.js";
+import { SETTINGS_REFRESH_MS } from "./settings.js";
 import { checkOutlineSessions, cleanupSessions, disableUnusedInvitations } from "./auth.js";
 import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
@@ -46,6 +47,11 @@ setInterval(() => {
     .finally(() => (sendingWebhooks = false));
 }, 15_000).unref();
 
+// Settings changed in the administration on another instance.
+setInterval(() => {
+  loadSettings().catch((err) => app.log.warn({ err }, "Reloading the settings failed"));
+}, SETTINGS_REFRESH_MS).unref();
+
 // Push notifications to devices: every 15 seconds, each one pushed once.
 let pushing = false;
 setInterval(() => {
@@ -56,18 +62,18 @@ setInterval(() => {
     .finally(() => (pushing = false));
 }, 15_000).unref();
 
-// Reports and notifications by e-mail: checked every minute, each one sent once.
-if (mailEnabled) {
-  setInterval(() => {
-    runScheduledReports()
-      .then((n) => n && app.log.info({ sent: n }, "Reports sent"))
-      .catch((err) => app.log.error({ err }, "Report sending failed"));
-    // E-mail notifications: immediate ones, the daily digest and the morning reminders of due dates.
-    runNotifications()
-      .then((n) => n && app.log.info({ sent: n }, "Notifications sent"))
-      .catch((err) => app.log.error({ err }, "Notification sending failed"));
-  }, 60_000).unref();
-}
+// Reports and notifications by e-mail: checked every minute, each one sent once. E-mail can be set up while the
+// server runs (Administration › Settings): each pass checks it.
+setInterval(() => {
+  if (!mailEnabled()) return;
+  runScheduledReports()
+    .then((n) => n && app.log.info({ sent: n }, "Reports sent"))
+    .catch((err) => app.log.error({ err }, "Report sending failed"));
+  // E-mail notifications: immediate ones, the daily digest and the morning reminders of due dates.
+  runNotifications()
+    .then((n) => n && app.log.info({ sent: n }, "Notifications sent"))
+    .catch((err) => app.log.error({ err }, "Notification sending failed"));
+}, 60_000).unref();
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, async () => {

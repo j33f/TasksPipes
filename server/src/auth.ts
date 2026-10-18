@@ -10,6 +10,10 @@ import { LIMITS, rateLimited } from "./rate-limit.js";
 import { closeUserConnections } from "./realtime.js";
 import { V1, tokenUser } from "./api.js";
 import { verifyTotp } from "./totp.js";
+import { decrypt, encrypt } from "./crypto-box.js";
+import { emailDomainAllowed } from "./settings.js";
+
+export { decrypt, encrypt };
 import { localeOf, tr, type Locale } from "./i18n.js";
 
 const SESSION_COOKIE = "tp_session";
@@ -20,15 +24,14 @@ const TOTP_COOKIE = "tp_2fa";
 export const INVITE_LINK_HOURS = 48;
 const LOGIN_LINK_MINUTES = 20;
 const SIGNUP_LINK_HOURS = 24;
-const key = crypto.createHash("sha256").update(config.appSecret).digest();
 
 export interface SessionUser {
   id: string;
   name: string;
   email: string | null;
   avatarUrl: string | null;
-  /** "outline": signs in with Outline; "email": invited by e-mail, signs in with e-mailed links. */
-  kind: "outline" | "email";
+  /** "outline": signs in with Outline; "email": invited by e-mail, signs in with e-mailed links; "oidc": company sign-in. */
+  kind: "outline" | "email" | "oidc";
   /** Second factor enabled (e-mail accounts). */
   totp: boolean;
   /** Chosen language and theme; null follows the browser / the system. */
@@ -48,22 +51,6 @@ declare module "fastify" {
 }
 
 export const hash = (v: string) => crypto.createHash("sha256").update(v).digest("hex");
-
-export function encrypt(text: string | null | undefined): string | null {
-  if (!text) return null;
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const ct = Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
-  return Buffer.concat([iv, cipher.getAuthTag(), ct]).toString("base64");
-}
-
-export function decrypt(blob: string | null | undefined): string | null {
-  if (!blob) return null;
-  const buf = Buffer.from(blob, "base64");
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, buf.subarray(0, 12));
-  decipher.setAuthTag(buf.subarray(12, 28));
-  return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]).toString("utf8");
-}
 
 export const cookieOptions = (maxAgeSeconds: number): CookieSerializeOptions => ({
   httpOnly: true,
@@ -200,6 +187,7 @@ async function establishSession(
   tokens: { accessToken: string; refreshToken?: string | null; expiresIn?: number | null },
   instance = config.outlineUrl
 ) {
+  if (!config.outlineEnabled) throw new OutlineError(403, "Sign-in with Outline is turned off on this instance.");
   const { data } = await outlineApi<{ user: OutlineUser; team: { id: string } }>(tokens.accessToken, "auth.info", {}, instance);
   if (!data?.user?.id) throw new OutlineError(502, "Unexpected answer: is this really an Outline server?");
   if (instance === config.outlineUrl && config.outlineTeamId && data.team?.id !== config.outlineTeamId) {
@@ -304,8 +292,8 @@ async function auth(app: FastifyInstance) {
     apiKey: config.allowApiKeyLogin,
     // Only to match the OAuth button with the server typed on the login page: no server is suggested.
     outlineUrl: config.oauthEnabled ? config.outlineUrl : null,
-    mail: mailEnabled,
-    signup: config.allowEmailSignup && mailEnabled,
+    mail: mailEnabled(),
+    signup: config.allowEmailSignup && mailEnabled(),
     // Company sign-in (OpenID Connect): the button's label.
     oidc: config.oidc.enabled ? { name: config.oidc.name } : null,
   }));
@@ -315,11 +303,12 @@ async function auth(app: FastifyInstance) {
   // A few sign-ups per address per hour, so the form cannot be used to flood mailboxes.
   app.post<{ Body: { email?: string; name?: string } }>("/api/auth/signup", rateLimited(LIMITS.signup), async (req, reply) => {
     const lang = localeOf(req);
-    if (!config.allowEmailSignup || !mailEnabled) return reply.code(403).send({ error: tr(lang, "Sign-up is turned off on this instance") });
+    if (!config.allowEmailSignup || !mailEnabled()) return reply.code(403).send({ error: tr(lang, "Sign-up is turned off on this instance") });
     const email = String(req.body?.email || "").trim().toLowerCase();
     const name = String(req.body?.name || "").trim().slice(0, 120);
     if (!isEmail(email)) return reply.code(400).send({ error: tr(lang, "Invalid e-mail address") });
     if (!name) return reply.code(400).send({ error: tr(lang, "{label} is required", { label: "Name" }) });
+    if (!emailDomainAllowed(email)) return reply.code(403).send({ error: tr(lang, "Addresses of this domain cannot sign up here") });
 
     // The answer is the same whatever happens, so the form does not tell who has an account.
     const existing = await one(
@@ -383,7 +372,7 @@ async function auth(app: FastifyInstance) {
 
   app.post<{ Body: { email?: string } }>("/api/auth/email", rateLimited(LIMITS.signInLink), async (req, reply) => {
     const lang = localeOf(req);
-    if (!mailEnabled) {
+    if (!mailEnabled()) {
       return reply.code(503).send({ error: tr(lang, "E-mail sending is not set up: ask the person who invited you for a link.") });
     }
     const email = String(req.body?.email || "").trim().toLowerCase();

@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { one, query, type Row } from "./db.js";
 import { bad, notFound } from "./errors.js";
 import { closeUserConnections } from "./realtime.js";
+import { settingsRoutes } from "./settings.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -41,6 +42,8 @@ export async function adminRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (req) => {
     if (!(await requestIsAdmin(req))) throw notFound("Not found");
   });
+
+  await app.register(settingsRoutes);
 
   app.get("/admin/users", async () => {
     const { rows } = await query(

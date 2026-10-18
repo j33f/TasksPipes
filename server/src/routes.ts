@@ -30,6 +30,7 @@ import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
 import { hasDevices, pushRoutes } from "./push.js";
+import { emailDomainAllowed } from "./settings.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
 import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
 import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
@@ -496,7 +497,7 @@ export async function apiRoutes(app: FastifyInstance) {
     outlineUrl: req.outlineUrl,
     // Administrator of the instance (ADMIN_EMAILS): the administration page is offered.
     admin: await requestIsAdmin(req),
-    features: { invitations: config.allowEmailInvitations, notifications: notificationState.enabled },
+    features: { invitations: config.allowEmailInvitations, notifications: notificationState.enabled, outline: config.outlineEnabled },
     // Choices of notifications: by e-mail when it is set up, and for push notifications.
     notificationPrefs: prefsOf((await one(`SELECT notification_prefs FROM users WHERE id = $1`, [me(req)]))?.notification_prefs),
   }));
@@ -693,6 +694,8 @@ export async function apiRoutes(app: FastifyInstance) {
     }
 
     if (!existing) {
+      // A new account only for an address of the domains allowed (Administration › Settings).
+      if (!emailDomainAllowed(email)) throw bad("Addresses of this domain cannot be invited here");
       const invitee = await tx(async (client) => {
         const u = await one(
           `INSERT INTO users (id, name, email, auth_kind) VALUES (gen_uuidv7(), $1, $2, 'email') RETURNING id, name, email, locale`,

@@ -10,6 +10,7 @@ import { GROUPS } from "./gtd";
 import { GIT_STATE_LABEL } from "./git";
 import { GIT_ACTIONS } from "./events";
 import { PRIORITIES } from "./labels";
+import { LABELS, SECTIONS } from "./admin-settings";
 
 const FR = LOCALE_FILES.fr.web ?? {};
 
@@ -45,6 +46,8 @@ const used = new Set<string>([
   ...Object.values(GIT_STATE_LABEL),
   ...Object.values(GIT_ACTIONS),
   ...PRIORITIES.map((p) => p.label),
+  ...Object.values(LABELS).flatMap(([label, hint]) => (hint ? [label, hint] : [label])),
+  ...SECTIONS.flatMap((s) => [s.title, s.intro]),
   // Theme choices (AccountModal: t(label) over a literal list).
   "Automatic", "Light", "Dark",
 ]);

@@ -175,6 +175,8 @@ export const LIMITS = {
   apiKey: { name: "api-key", max: 20, timeWindow: 15 * MIN },
   oauth: { name: "oauth", max: 30, timeWindow: 15 * MIN },
   oidc: { name: "oidc", max: 30, timeWindow: 15 * MIN },
+  adminSettings: { name: "admin-settings", max: 60, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  adminTestMail: { name: "admin-test-mail", max: 10, timeWindow: 60 * MIN, keyGenerator: perPerson },
   totpSettings: { name: "totp-settings", max: 10, timeWindow: 15 * MIN, keyGenerator: perPerson },
   catalogUsage: { name: "catalog-usage", max: 60, timeWindow: MIN, keyGenerator: perPerson },
   search: { name: "search", max: 120, timeWindow: MIN, keyGenerator: perPerson },

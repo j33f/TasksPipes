@@ -383,6 +383,22 @@ state) and can **disable** one — its sessions and open pages are closed at onc
 and history stay, and teams show it as disabled — or enable it again. An administrator cannot disable themselves or
 another administrator.
 
+Its **Settings** tab manages the instance while it runs, without a restart:
+
+- **E-mail (SMTP)**: server, port, TLS, user, password, sender, and a *Send me a test e-mail* button;
+- **Outline**: turn it on or off (off, Outline accounts are signed out and can no longer sign in, their tasks stay, and
+  the Outline documents of tasks are hidden), main server, its API address, other servers allowed, internal
+  addresses, a single workspace, sign-in with an API key;
+- **Outline OAuth**: client id and secret, with the redirect URL to copy;
+- **accounts without Outline**: sign-up with an e-mail address, invitations by e-mail, and the **e-mail domains**
+  allowed to sign up or be invited;
+- **company sign-in (OpenID Connect)**: on or off, issuer, client, secret, button label, scopes, domains.
+
+A setting given by the server's environment (`.env`) wins and shows locked. Secrets are kept encrypted with
+`APP_SECRET` and never shown again: they can only be replaced or removed. A change that would leave the administrator
+making it, or every administrator, unable to sign in is refused. Every change is listed in **History of changes**
+(who, when, before and after; never a secret).
+
 Every hour, the sessions of Outline accounts are checked with Outline: when Outline no longer accepts their access
 (revoked, account suspended or deleted), they are closed.
 

@@ -417,7 +417,7 @@
                 <button class="btn ghost icon small" title={t("Unlink")} onclick={() => linkDoc(null)}><Icon name="unlink" size={16} /></button>
               {/if}
             </div>
-          {:else if perms?.manage && !app.isGuest}
+          {:else if perms?.manage && !app.noOutline}
             {#if pickingDoc}
               <DocPicker onselect={linkDoc} autofocus />
               <button class="btn ghost small" onclick={() => (pickingDoc = false)}>{t("Cancel")}</button>

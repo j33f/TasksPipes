@@ -27,7 +27,7 @@ export interface Me {
   /** Administrator of the instance (ADMIN_EMAILS): the administration page is offered. */
   admin?: boolean;
   /** What this instance allows. */
-  features: { invitations: boolean; notifications: boolean };
+  features: { invitations: boolean; notifications: boolean; outline?: boolean };
   /** E-mail notification choices, when e-mail is set up on the instance. */
   notificationPrefs?: NotificationPrefs;
 }
@@ -446,7 +446,7 @@ export interface AdminUser {
   id: string;
   name: string;
   email: string | null;
-  kind: "outline" | "email";
+  kind: "outline" | "email" | "oidc";
   outlineUrl: string | null;
   lastLoginAt: string | null;
   createdAt: string;
