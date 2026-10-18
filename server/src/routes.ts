@@ -32,11 +32,16 @@ import { searchTasks } from "./search.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
 import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
 import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
-import { SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, type TaskPermissions } from "./access.js";
+import {
+  SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, taskVisibleSql, teamOnlyKinds, type TaskPermissions,
+} from "./access.js";
 
 export const STATUSES = ["backlog", "ready", "started", "ongoing", "blocked", "abandoned", "done"] as const;
 type Status = (typeof STATUSES)[number];
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
+/** The calendar shows at most this many days, and tasks. */
+const CALENDAR_DAYS = 62;
+const CALENDAR_LIMIT = 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -833,6 +838,31 @@ export async function apiRoutes(app: FastifyInstance) {
       [uid]
     );
     return rows.map(presentTask);
+  });
+
+  // Calendar: tasks due in a period (at most CALENDAR_DAYS), in the pipes one sees, archived ones left out; one's
+  // own (scope=mine, the default) or all those one sees. canMove: one may change the due date (a member).
+  app.get("/calendar", rateLimited(LIMITS.search), async (req: Req) => {
+    const uid = me(req);
+    const q = req.query;
+    const day = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null);
+    const from = day(q.from);
+    const to = day(q.to);
+    if (!from || !to || to < from || (Date.parse(to) - Date.parse(from)) / 86_400_000 > CALENDAR_DAYS) throw bad("Invalid period");
+    const { rows } = await query(
+      `${TASK_SELECT.replace("SELECT t.*,", `SELECT t.*, EXISTS (SELECT 1 FROM space_members cm WHERE cm.space_id = t.space_id AND cm.user_id = $1) AS can_move,`)}
+       WHERE t.due_date BETWEEN $2 AND $3 AND t.pipe_id IS NOT NULL AND p.archived_at IS NULL
+         AND ${taskVisibleSql("$1", "$4")}
+         AND ($5 OR COALESCE(s.user_id, t.assignee_id) = $1)
+         AND ($6::uuid IS NULL OR t.space_id = $6)
+         AND ($7 OR t.status NOT IN ('done', 'abandoned'))
+       ORDER BY t.due_date, t.priority NULLS LAST, t.position, t.created_at LIMIT ${CALENDAR_LIMIT + 1}`,
+      [uid, from, to, teamOnlyKinds(), q.scope === "all", optUuid(q.space, "Space"), q.done === "1"]
+    );
+    return {
+      tasks: rows.slice(0, CALENDAR_LIMIT).map((t) => ({ ...presentTask(t), canMove: t.can_move })),
+      truncated: rows.length > CALENDAR_LIMIT,
+    };
   });
 
   // People one may @mention on a task (who can open it, among those one sees).

@@ -10,7 +10,7 @@ TasksPipes was designed for an adult training centre, but fits other uses just a
   and QA pipes, with user stories, bugs, experiments, mock-ups, translation batches, releases and test campaigns, and the
   [GitHub / GitLab integration](GIT-INTEGRATION.md).
 - **Personal organisation** — a Personal pipe in every space, *My tasks* across all pipes, a GTD *Next action* view,
-  sub-tasks and a calendar subscription with reminders, and [personal life](#pipe-types) pipes for the household,
+  a calendar view, sub-tasks and a calendar subscription with reminders, and [personal life](#pipe-types) pipes for the household,
   moving house, shared custody, home improvement, parties, job and house hunting, health care, paperwork and trips.
 
 Other needs are covered by the [models](#models): design your own pipe and task types.
@@ -183,7 +183,7 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   **read and write**. It acts with exactly your rights, through the same checks as the app, and can be revoked at
   any time; a disabled account's tokens stop working.
 - **API `/api/v1`** — the documented, versioned part of the API: your account, people, spaces, pipes and their tasks,
-  your tasks, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, and sub-tasks. Send the token as
+  your tasks, the calendar, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, and sub-tasks. Send the token as
   `Authorization: Bearer tp_…`. Its OpenAPI description is at `/api/v1/openapi.json`, browsable at **`/api/v1/docs`**
   (Swagger UI). Tokens are accepted on `/api/v1` only, and never manage tokens, account settings, data export,
   deletion or administration: those need a signed-in session.
@@ -270,7 +270,13 @@ With e-mail set up on the instance, TasksPipes tells people by e-mail what needs
 
 ## Calendar
 
-**Calendar**, in the account menu, gives a personal link to subscribe to your tasks with a due date in Google Calendar, Apple Calendar or
+The **Calendar** page (menu) shows the tasks with a due date, by **month** or **week** (weeks start on Monday): your
+own tasks, or everything you see, in the pipes you can see (archived pipes and incoming buckets left out), filtered
+by space, finished tasks on demand. A task shows its priority and title, and opens on a click; overdue tasks are
+marked. **Dragging a task to another day changes its due date**, for those who may change it (members of its space).
+It shows up to 62 days and 1,000 tasks at a time.
+
+**Calendar**, in the account menu, also gives a personal link to subscribe to your tasks with a due date in Google Calendar, Apple Calendar or
 any calendar app. Each task is an all-day event with a link back to it, and open tasks carry reminders at 9:00 five
 days before, the day before and on the due date. The link can be renewed if it leaks.
 

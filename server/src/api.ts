@@ -98,6 +98,15 @@ export const V1_ROUTES: Record<string, Doc> = {
     response: object("The label"),
   },
   "DELETE /labels/:id": { tag: "Labels", summary: "Delete a label (it is taken off its tasks)", params: idParams, response: ok },
+  "GET /calendar": {
+    tag: "Tasks", summary: "Tasks due in a period (62 days at most), in the pipes one sees",
+    querystring: { type: "object", required: ["from", "to"], properties: {
+      from: { type: "string", format: "date" }, to: { type: "string", format: "date" },
+      scope: { type: "string", enum: ["mine", "all"], description: "One's own tasks (default), or all those one sees" },
+      space: uuid, done: { type: "string", enum: ["0", "1"], description: "1 to include finished tasks" },
+    } },
+    response: object("Tasks, with canMove when one may change their due date", { truncated: { type: "boolean" } }),
+  },
   "GET /me/tasks": { tag: "Tasks", summary: "Tasks one owns, still to do", response: list("Tasks") },
   "GET /search": {
     tag: "Tasks", summary: "Search the tasks one can see",

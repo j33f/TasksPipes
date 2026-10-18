@@ -808,4 +808,18 @@ export const FR: Record<string, string> = {
   "High": "Haute",
   "Medium": "Moyenne",
   "Low": "Basse",
+  // Calendar view
+  "Tasks by due date, in the pipes you see. Drag a task to another day to change its due date.": "Les tâches par échéance, dans les pipes que vous voyez. Glissez une tâche sur un autre jour pour changer son échéance.",
+  "Previous period": "Période précédente",
+  "Next period": "Période suivante",
+  "Today": "Aujourd'hui",
+  "Month": "Mois",
+  "Week": "Semaine",
+  "Everything I see": "Tout ce que je vois",
+  "Space": "Espace",
+  "All spaces": "Tous les espaces",
+  "Show finished tasks": "Afficher les terminées",
+  "Too many tasks in this period: only the first ones are shown. Narrow the filters.": "Trop de tâches sur cette période : seules les premières sont affichées. Resserrez les filtres.",
+  "+{n} more": "+{n} autres",
+  "Due date moved": "Échéance déplacée",
 };
