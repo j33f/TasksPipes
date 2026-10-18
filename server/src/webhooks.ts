@@ -58,7 +58,8 @@ function payload(event: WebhookEvent | "ping", e: Row | null, t: Row | null, hoo
     ...(t && e ? {
       task: {
         id: t.id, key: `${TASK_KEY_PREFIX}-${t.number}`, title: t.title, status: t.status,
-        column: stageLabel(t.pipe_kind, t.stage), owner, dueDate: t.due_date,
+        column: stageLabel(t.pipe_kind, t.stage), owner, dueDate: t.due_date, priority: t.priority ?? null,
+        labels: ((t.labels ?? []) as { name: string }[]).map((l) => l.name),
         url: t.pipe_id ? `${config.appUrl}/pipes/${t.pipe_id}?task=${t.id}` : `${config.appUrl}/spaces/${t.space_id}?task=${t.id}`,
       },
       actor: { id: e.actor_id, name: e.actor_name },

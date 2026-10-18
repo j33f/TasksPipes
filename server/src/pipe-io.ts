@@ -71,7 +71,13 @@ export interface ExportedTask {
   created_at: Date | string;
   updated_at: Date | string;
   items: { text: string; done: boolean }[];
+  priority?: number | null;
+  labels?: string[];
 }
+
+/** Priority names, from 1 (urgent) to 4 (low). */
+export const PRIORITY_NAMES = ["Urgent", "High", "Medium", "Low"];
+const priorityText = (lang: Locale, p: number | null | undefined) => (p ? tr(lang, PRIORITY_NAMES[p - 1]) : "");
 
 /** A field value as text: choices joined, people by name, a training by code and title. */
 export function fieldText(field: Field, v: unknown, names: Map<string, string>): string {
@@ -109,6 +115,8 @@ const headers = (lang: Locale) => ({
   dueDate: tr(lang, "Due date"),
   taskType: tr(lang, "Task type"),
   items: tr(lang, "Sub-tasks"),
+  priority: tr(lang, "Priority"),
+  labels: tr(lang, "Labels"),
   author: tr(lang, "Author"),
   created: tr(lang, "Created"),
   updated: tr(lang, "Updated"),
@@ -123,7 +131,7 @@ export function exportCsv(kind: string, tasks: ExportedTask[], lang: Locale, nam
   const label = (s: string) => localize(lang, s);
   const rows: unknown[][] = [[
     h.key, h.title, h.description, h.column, h.owner, h.dueDate, h.taskType, h.items,
-    ...fields.map((f) => label(f.label)), h.author, h.created, h.updated,
+    ...fields.map((f) => label(f.label)), h.priority, h.labels, h.author, h.created, h.updated,
   ]];
   for (const t of tasks) {
     const type = taskTypeById(t.task_type);
@@ -131,7 +139,7 @@ export function exportCsv(kind: string, tasks: ExportedTask[], lang: Locale, nam
       key(t.number), t.title, t.description, label(resolveStage(kind, t.stage, t.status).label), t.owner_name ?? "", t.due_date ?? "",
       type ? label(type.label) : t.task_type, itemsText(t.items),
       ...fields.map((f) => (type?.fields.some((x) => x.id === f.id) ? fieldText(f, t.fields[f.id], names) : "")),
-      t.author_name, iso(t.created_at), iso(t.updated_at),
+      priorityText(lang, t.priority), (t.labels ?? []).join("; "), t.author_name, iso(t.created_at), iso(t.updated_at),
     ]);
   }
   return toCsv(rows, sep);
@@ -153,6 +161,8 @@ export function exportJson(pipe: { name: string; kind: string }, tasks: Exported
         owner: t.owner_name,
         dueDate: t.due_date,
         taskType: { id: t.task_type, label: type ? label(type.label) : t.task_type },
+        priority: t.priority ?? null,
+        labels: t.labels ?? [],
         // Field values as stored, with their labels.
         fields: (type?.fields ?? []).filter((f) => t.fields[f.id] !== undefined).map((f) => ({
           id: f.id, label: label(f.label), type: f.type, value: t.fields[f.id], text: fieldText(f, t.fields[f.id], names),

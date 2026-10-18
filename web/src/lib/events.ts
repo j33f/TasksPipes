@@ -2,6 +2,7 @@ import { STATUS_BY_ID, formatDate } from "./constants";
 import type { EventSide, TaskEvent } from "./types";
 import { t } from "./i18n.svelte";
 import { gitKindLabel } from "./git";
+import { priorityName } from "./labels";
 
 /** "#12 “Title”" for a pull/merge request, "“Title”" for a commit. */
 const gitRef = (e: TaskEvent) => {
@@ -95,6 +96,9 @@ export function eventChanges(e: TaskEvent): string[] {
     }));
   }
   if (e.details?.whileBlocked) out.push(t("While it still waited for other tasks"));
+  if (e.details?.priority) out.push(t("Priority: {from} → {to}", { from: priorityName(e.details.priority.from), to: priorityName(e.details.priority.to) }));
+  if (e.details?.labels?.added.length) out.push(t("Labels added: {names}", { names: e.details.labels.added.join(", ") }));
+  if (e.details?.labels?.removed.length) out.push(t("Labels removed: {names}", { names: e.details.labels.removed.join(", ") }));
   if (e.details?.taskType) out.push(t("Type: {from} → {to}", { from: e.details.taskType.from, to: e.details.taskType.to }));
   if (e.details?.fields?.length) out.push(t("Details: {fields}", { fields: e.details.fields.join(", ") }));
   return out;

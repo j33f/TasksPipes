@@ -18,7 +18,7 @@ let n = 0;
 const task = (over: Partial<Task>): Task => ({
   id: `t${++n}`, number: n, title: `Task ${n}`, description: "", status: "backlog", stage: "backlog", taskType: "task", fields: {},
   position: n, dueDate: null, space: { id: "s", name: "Me", kind: "user" }, pipe: { id: "p", name: "Personal", visibility: "private", kind: "general" },
-  inIncoming: false, author: { id: "u", name: "Me", avatarUrl: null }, assignee: null, sender: null, outlineDoc: null, commentCount: 0, blockers: 0,
+  inIncoming: false, author: { id: "u", name: "Me", avatarUrl: null }, assignee: null, sender: null, outlineDoc: null, commentCount: 0, blockers: 0, priority: null, labels: [],
   checklist: { total: 0, done: 0, next: null }, gitState: null, createdAt: "2026-10-15T09:00:00Z", updatedAt: "2026-10-15T09:00:00Z",
   ...over,
 });

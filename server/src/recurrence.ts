@@ -162,15 +162,16 @@ async function createOccurrence(db: Queryable, s: Row, day: string, record: Reco
   const position = (await one(`SELECT COALESCE(min(position), 1) - 1 AS p FROM tasks WHERE pipe_id = $1 AND stage = $2`, [pipe.id, first.id], db))!.p;
   const row = await one(
     `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date, outline_doc_id,
-                        outline_doc_title, outline_doc_url, author_id, task_type, fields, recurrence_id, occurrence_on)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$9)
+                        outline_doc_title, outline_doc_url, author_id, task_type, fields, recurrence_id, occurrence_on, priority)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$9,$17)
      ON CONFLICT (recurrence_id, occurrence_on) WHERE recurrence_id IS NOT NULL DO NOTHING RETURNING id`,
     [last.title, last.description, last.space_id, pipe.id, first.status, first.id, position, last.assignee_id, day,
      last.outline_doc_id, last.outline_doc_title, last.outline_doc_url, s.created_by ?? last.author_id, last.task_type,
-     JSON.stringify(last.fields), s.id],
+     JSON.stringify(last.fields), s.id, last.priority],
     db
   );
   if (!row) return null;
+  await db.query(`INSERT INTO task_labels (task_id, label_id) SELECT $1, label_id FROM task_labels WHERE task_id = $2`, [row.id, last.id]);
   await db.query(
     `INSERT INTO task_items (task_id, text, done, position) SELECT $1, text, false, position FROM task_items WHERE task_id = $2`,
     [row.id, last.id]

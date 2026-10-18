@@ -8,6 +8,7 @@ import { FIELD_TYPE_LABELS, STATUSES } from "../constants";
 import { GROUPS } from "../gtd";
 import { GIT_STATE_LABEL } from "../git";
 import { GIT_ACTIONS } from "../events";
+import { PRIORITIES } from "../labels";
 
 // Every source file of the app, as text (tests and the dictionaries left out).
 const sources = import.meta.glob<string>(["../../**/*.{ts,svelte}", "!../../**/*.test.ts", "!../locales/**"], {
@@ -35,6 +36,7 @@ const used = new Set<string>([
   ...GROUPS.flatMap((g) => [g.label, g.hint]),
   ...Object.values(GIT_STATE_LABEL),
   ...Object.values(GIT_ACTIONS),
+  ...PRIORITIES.map((p) => p.label),
   // Theme choices (AccountModal: t(label) over a literal list).
   "Automatic", "Light", "Dark",
 ]);
