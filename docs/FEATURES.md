@@ -123,6 +123,22 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
 Every person and team has an incoming bucket that receives tasks sent by others. A member **accepts** a task into a
 pipe and column, or **refuses** it with a reason: it then goes back to the sender's incoming.
 
+## Search
+
+**Search** at the top of the sidebar, or **Ctrl + K** (**⌘ + K** on a Mac) anywhere, finds tasks in every pipe and
+incoming bucket you can see:
+
+- by **title**, **description**, **sub-tasks**, **field values**, the title of the **linked Outline document** and
+  **comments** (refusal reasons included), or by **number** (`TP-123`, `tp123` or `123`);
+- results come as you type: each word is the start of a word to find, all of them must match, accents do not
+  matter, and words are matched in your language (*inscription* also finds *inscriptions*);
+- each result shows its key, title, owner and path (space › pipe › column, or the incoming bucket), and an excerpt
+  of what matched, the words found highlighted; tasks of archived pipes are marked as such;
+- filters: status (or *not finished*), owner and task type; ↑ ↓ and Enter open a task from the keyboard.
+
+A search only finds what you could open in the app, checked in the database query itself. **Confidential** and
+**team-only** tasks are found only by those who see them, and show no excerpt: their content stays on their page.
+
 ## My tasks and Next action
 
 - **My tasks** lists everything assigned to you and still to do, across all pipes, grouped by state or by pipe.
@@ -225,6 +241,7 @@ of Outline accounts; links you click (Outline documents, France Compétences pag
 | --- | --- |
 | See a private pipe, a space's incoming | members of the space |
 | See an open pipe, add a task to it, comment | everyone who can see its space |
+| Find a task with the search | whoever may see it |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
 | Edit title, description and fields | members, or the author of a task in an open pipe |
 | Refuse | members of the space whose incoming holds the task (unless they sent it themselves) |

@@ -25,6 +25,8 @@
   const isActive = (href: string) => router.path + router.search === href || router.path === href;
   const matches = (name: string) => name.toLowerCase().includes(filter.trim().toLowerCase());
   const personalId = $derived(app.me?.personalSpaceId);
+  // The search shortcut as written on this computer.
+  const shortcut = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘K" : "Ctrl K";
   const myIncoming = $derived(app.personalSpace?.incomingCount ?? 0);
 
   // Foldable entries ("My pipes", each team, "People"…), like Outline collections; remembered per browser.
@@ -122,6 +124,9 @@
   <div class="sidebar-scroll">
     <div class="sidebar-section first">
       <div class="sidebar-section-title"><span>{t("Me")}</span></div>
+      <button class="sidebar-link" onclick={() => { app.dialog = "search"; onclose(); }}>
+        <Icon name="search" /><span class="label">{t("Search")}</span><kbd class="shortcut">{shortcut}</kbd>
+      </button>
       <a class="sidebar-link" class:active={router.path === "/"} href="/">
         <Icon name="home" /><span class="label">{t("My dashboard")}</span>
       </a>
@@ -370,6 +375,7 @@
   }
   .sidebar-link:hover { background: var(--sidebar-hover); text-decoration: none; color: var(--text); }
   .sidebar-link.active { background: var(--sidebar-active); color: var(--text); }
+  .shortcut { margin-left: auto; font: inherit; font-size: 12px; color: var(--text-tertiary); }
   .has-disclosure { padding-left: 0; gap: 0; }
   .has-disclosure .row-link { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: inherit; text-decoration: none; padding: 0 0 0 2px; }
   .disclosure {

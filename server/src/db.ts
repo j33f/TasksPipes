@@ -394,6 +394,85 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS notifications_pending_idx ON notifications(user_id, task_id) WHERE sent_at IS NULL AND dropped_at IS NULL;
 CREATE INDEX IF NOT EXISTS notifications_sent_idx ON notifications(user_id, task_id, sent_at) WHERE channel = 'immediate';
 CREATE UNIQUE INDEX IF NOT EXISTS notifications_overdue_idx ON notifications(user_id, task_id, due_date) WHERE kind = 'overdue';
+
+-- Global search (search.ts). Text is indexed in French and in English, accents ignored; a search uses the
+-- language of the person searching. Each task has one row, kept up to date by triggers.
+CREATE EXTENSION IF NOT EXISTS unaccent;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_ts_config WHERE cfgname = 'tp_fr') THEN
+    CREATE TEXT SEARCH CONFIGURATION tp_fr (COPY = french);
+    ALTER TEXT SEARCH CONFIGURATION tp_fr ALTER MAPPING FOR hword, hword_part, word WITH unaccent, french_stem;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_ts_config WHERE cfgname = 'tp_en') THEN
+    CREATE TEXT SEARCH CONFIGURATION tp_en (COPY = english);
+    ALTER TEXT SEARCH CONFIGURATION tp_en ALTER MAPPING FOR hword, hword_part, word WITH unaccent, english_stem;
+  END IF;
+END $$;
+
+-- The searchable text of a task, by weight: title; field values (people's ids left out) and linked document;
+-- description and sub-tasks; comments (history entries with a comment, refusal reasons included).
+CREATE OR REPLACE FUNCTION task_search_parts(tid uuid, OUT a text, OUT b text, OUT c text, OUT d text)
+LANGUAGE sql STABLE AS $$
+  SELECT t.title,
+    left(concat_ws(' ',
+      (SELECT string_agg(v #>> '{}', ' ') FROM jsonb_path_query(t.fields, 'strict $.**') v
+       WHERE jsonb_typeof(v) = 'string' AND (v #>> '{}') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
+      t.outline_doc_title), 100000),
+    left(concat_ws(' ', t.description,
+      (SELECT string_agg(i.text, ' ' ORDER BY i.position) FROM task_items i WHERE i.task_id = t.id)), 100000),
+    left((SELECT string_agg(e.comment, ' ' ORDER BY e.id) FROM task_events e WHERE e.task_id = t.id AND e.comment IS NOT NULL), 100000)
+  FROM tasks t WHERE t.id = tid
+$$;
+
+CREATE TABLE IF NOT EXISTS task_search (
+  task_id uuid PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+  doc tsvector NOT NULL,
+  -- Version of the indexed text (task_search_refresh): rows of an older one are rebuilt at start.
+  version smallint NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_search_doc_idx ON task_search USING gin(doc);
+
+CREATE OR REPLACE FUNCTION task_search_refresh(tid uuid) RETURNS void LANGUAGE sql AS $$
+  INSERT INTO task_search (task_id, doc, version)
+  SELECT tid,
+    setweight(to_tsvector('tp_fr', coalesce(p.a, '')), 'A') || setweight(to_tsvector('tp_en', coalesce(p.a, '')), 'A') ||
+    setweight(to_tsvector('tp_fr', coalesce(p.b, '')), 'B') || setweight(to_tsvector('tp_en', coalesce(p.b, '')), 'B') ||
+    setweight(to_tsvector('tp_fr', coalesce(p.c, '')), 'C') || setweight(to_tsvector('tp_en', coalesce(p.c, '')), 'C') ||
+    setweight(to_tsvector('tp_fr', coalesce(p.d, '')), 'D') || setweight(to_tsvector('tp_en', coalesce(p.d, '')), 'D'),
+    1
+  FROM task_search_parts(tid) p WHERE p.a IS NOT NULL
+  ON CONFLICT (task_id) DO UPDATE SET doc = EXCLUDED.doc, version = EXCLUDED.version
+$$;
+
+CREATE OR REPLACE FUNCTION task_search_on_task() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM task_search_refresh(NEW.id);
+  RETURN NULL;
+END $$;
+-- Sub-tasks and history entries. A task being deleted is no longer found, so nothing is written for it.
+CREATE OR REPLACE FUNCTION task_search_on_item() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM task_search_refresh(CASE WHEN TG_OP = 'DELETE' THEN OLD.task_id ELSE NEW.task_id END);
+  RETURN NULL;
+END $$;
+-- History entries only matter when they hold a comment.
+CREATE OR REPLACE FUNCTION task_search_on_event() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.comment IS NOT NULL THEN PERFORM task_search_refresh(OLD.task_id); END IF;
+  ELSIF NEW.comment IS NOT NULL OR (TG_OP = 'UPDATE' AND OLD.comment IS NOT NULL) THEN
+    PERFORM task_search_refresh(NEW.task_id);
+  END IF;
+  RETURN NULL;
+END $$;
+CREATE OR REPLACE TRIGGER task_search_tasks AFTER INSERT OR UPDATE OF title, description, fields, outline_doc_title ON tasks
+  FOR EACH ROW EXECUTE FUNCTION task_search_on_task();
+CREATE OR REPLACE TRIGGER task_search_items AFTER INSERT OR UPDATE OF text OR DELETE ON task_items
+  FOR EACH ROW EXECUTE FUNCTION task_search_on_item();
+CREATE OR REPLACE TRIGGER task_search_events AFTER INSERT OR UPDATE OF comment OR DELETE ON task_events
+  FOR EACH ROW EXECUTE FUNCTION task_search_on_event();
+-- Tasks made before the search, or indexed by an older version.
+SELECT task_search_refresh(t.id) FROM tasks t LEFT JOIN task_search s ON s.task_id = t.id WHERE s.version IS DISTINCT FROM 1;
 `;
 
 /**

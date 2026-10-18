@@ -22,6 +22,7 @@ import { notifySpace, notifyUser } from "./realtime.js";
 import { calendarUrl } from "./calendar.js";
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
+import { searchTasks } from "./search.js";
 import { SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, type TaskPermissions } from "./access.js";
 
 export const STATUSES = ["backlog", "ready", "started", "ongoing", "blocked", "abandoned", "done"] as const;
@@ -744,6 +745,18 @@ export async function apiRoutes(app: FastifyInstance) {
       [uid]
     );
     return rows.map(presentTask);
+  });
+
+  // ----- Search -------------------------------------------------------------
+
+  // Tasks one can see anywhere, by text or number; filters by status ("open" too), owner and task type.
+  app.get("/search", rateLimited(LIMITS.search), async (req: Req) => {
+    const q = req.query;
+    return searchTasks(me(req), localeOf(req), String(q.q ?? "").slice(0, 200), {
+      status: q.status === "open" ? "open" : q.status ? status(q.status) : null,
+      owner: optUuid(q.owner, "Owner"),
+      type: q.type ? String(q.type).slice(0, 100) : null,
+    });
   });
 
   // ----- Spaces -------------------------------------------------------------

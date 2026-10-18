@@ -15,8 +15,8 @@ class AppState {
 
   /** Account invited by e-mail: no Outline access, may enable TOTP. */
   isGuest = $derived(this.me?.user.kind === "email");
-  /** Dialog opened from the user menu (or the dashboard, notifications…). */
-  dialog = $state<"settings" | "calendar" | "about" | "invite" | null>(null);
+  /** Dialog opened from the user menu (or the dashboard, notifications…, the search with Ctrl/⌘ + K). */
+  dialog = $state<"settings" | "calendar" | "about" | "invite" | "search" | null>(null);
   /** Tasks waiting in my incoming and in my teams' ones. */
   pendingCount = $derived(
     this.spaces.filter((s) => s.myRole && (s.id === this.me?.personalSpaceId || s.kind === "team"))

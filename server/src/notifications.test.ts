@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_PREFS, cleanPrefs, describe as describeLine, dueEmail, immediateEmail, isConfidential, prefsOf, unsubscribeUrl, verifyUnsubscribe,
+  DEFAULT_PREFS, cleanPrefs, describe as describeLine, dueEmail, immediateEmail, prefsOf, unsubscribeUrl, verifyUnsubscribe,
   type NotificationLine,
 } from "./notifications.js";
+import { isConfidential } from "./access.js";
 
 const task = (over: Record<string, unknown> = {}) => ({
   id: "0190a0b0-0000-7000-8000-000000000001", number: 42, title: "Call the client", pipe_id: "p", pipe_kind: "general",

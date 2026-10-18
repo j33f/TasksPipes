@@ -25,6 +25,7 @@ Outline through its RPC-style API.
 | `outline.ts` | Outline API client, validation of other Outline servers (https, no internal addresses). |
 | `routes.ts` | The JSON API under `/api`: spaces, pipes, tasks, sub-tasks, files, invitations, designer… |
 | `access.ts` | Who may see and do what on a task (`taskPermissions`), shared by the API and the notifications. |
+| `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |
 | `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |
 | `rate-limit.ts` | Rate limits ([@fastify/rate-limit](https://github.com/fastify/fastify-rate-limit), opted in per route) with a growing block, counted in Redis (or in memory without `REDIS_URL`). |
 | `pipeTypes.ts` | Built-in catalog of pipe and task types, and the custom types made with the designer. |
@@ -65,6 +66,7 @@ follow Outline's design tokens (`web/src/app.css`).
 | `task_events` | History of every task, with the state before and after each change. |
 | `custom_types` | Pipe and task types made with the designer. |
 | `report_runs` | Scheduled report and digest sendings already done (one per period). |
+| `task_search` | The search index: one `tsvector` per task, kept up to date by triggers on tasks, sub-tasks and history. |
 | `notifications` | E-mail notifications waiting, sent or dropped; people's choices are in `users.notification_prefs`. |
 | `pipe_integrations`, `task_links` | Repositories connected to pipes (webhook token, encrypted secret), and the pull/merge requests and commits linked to tasks. |
 | `sessions`, `login_tokens`, `invitations` | Sessions, e-mail sign-in links and TOTP steps, invitations and requests to connect (pending, accepted, refused). |
@@ -85,4 +87,17 @@ Who sees what is decided in SQL, so lists and single reads follow the same rules
   account, the teams created by an account of the same server.
 
 Permissions on a task (`taskPermissions` in `access.ts`) then depend on membership of its space and on the
-visibility of its pipe.
+visibility of its pipe. The search applies the same view rule in its SQL (`taskVisibleSql`); a functional test
+checks that both agree.
+
+## Search
+
+`task_search` holds one `tsvector` per task: title, then field values and linked document, then description and
+sub-tasks, then comments, by decreasing weight. Each text is indexed twice, with `tp_fr` and `tp_en`: copies of
+PostgreSQL's French and English configurations that drop accents first (`unaccent`). A search uses the configuration
+of the person's language, as a prefix query (`'plan':* & 'stag':*`) built from letters and digits only, so the
+same index serves both languages.
+
+Triggers on `tasks`, `task_items` and `task_events` (entries with a comment) rebuild a task's row when its text
+changes. At start, tasks missing from the index, or indexed by an older `version` of `task_search_refresh`, are
+indexed: changing what is indexed means changing that function and its version number.

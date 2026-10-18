@@ -45,7 +45,7 @@ let only the proxy reach the port (firewall). A proxy in a container on the same
 | `APP_PORT` | Port published on the host, 3000 by default. |
 | `APP_BIND` | Address that port is published on: `127.0.0.1` by default (only the proxy on this machine). |
 | `APP_SECRET` | At least 32 characters. Encrypts Outline tokens, TOTP secrets and calendar links in the database. |
-| `POSTGRES_PASSWORD` | Password of the bundled database (`DATABASE_URL` when running the server yourself). |
+| `POSTGRES_PASSWORD` | Password of the bundled database (`DATABASE_URL` when running the server yourself). With a database of your own, the account must be allowed to create the `pgcrypto` and `unaccent` extensions (both ship with PostgreSQL). |
 | `OUTLINE_URL` | Optional Outline server known to the instance: needed for OAuth sign-in. It is never suggested on the sign-in page. |
 | `OUTLINE_API_URL` | Optional internal URL the server uses to reach Outline (e.g. `http://outline:3000`). |
 | `OUTLINE_OAUTH_CLIENT_ID`, `OUTLINE_OAUTH_CLIENT_SECRET` | OAuth sign-in, see below. |
@@ -162,6 +162,7 @@ of the app, they share it. If Redis cannot be reached, requests go through and a
 | Invitations, new invitation links | 30 and 10 per hour | person |
 | GitHub / GitLab webhooks | 600 per minute | pipe token |
 | Calendar feeds | 60 per minute | feed |
+| Search | 120 per minute | person |
 | `/healthz` | 120 per minute | address |
 
 The client address comes from the reverse proxy (`X-Forwarded-For`): keep the app reachable only through it
