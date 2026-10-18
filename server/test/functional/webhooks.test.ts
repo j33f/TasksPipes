@@ -88,7 +88,8 @@ describe("outgoing webhooks", () => {
     await alice.post(`/api/tasks/${id}/comments`, { body: "Ship it" });
     expect(await runWebhooks()).toBe(3);
     const [created, card, commented] = received;
-    expect(created.json.text).toMatch(new RegExp(`^Alice Martin created <.+\\?task=${id}\|TP-\\d+ Chat task> in Board$`));
+    // Slack's link: <url|label>.
+    expect(created.json.text).toMatch(new RegExp(`^Alice Martin created <[^|>]+\\?task=${id}\\|TP-\\d+ Chat task> in Board$`));
     expect(card.json.attachments[0].content.body[0].text).toMatch(/^Alice Martin a créé \[TP-\d+ Chat task\]\(.+\) dans Board$/);
     expect(commented.json.blocks[1].text.text).toBe("> Ship it");
     // Still signed.
