@@ -174,6 +174,7 @@ export const LIMITS = {
   totp: { name: "totp", max: 20, timeWindow: 15 * MIN },
   apiKey: { name: "api-key", max: 20, timeWindow: 15 * MIN },
   oauth: { name: "oauth", max: 30, timeWindow: 15 * MIN },
+  oidc: { name: "oidc", max: 30, timeWindow: 15 * MIN },
   totpSettings: { name: "totp-settings", max: 10, timeWindow: 15 * MIN, keyGenerator: perPerson },
   catalogUsage: { name: "catalog-usage", max: 60, timeWindow: MIN, keyGenerator: perPerson },
   search: { name: "search", max: 120, timeWindow: MIN, keyGenerator: perPerson },

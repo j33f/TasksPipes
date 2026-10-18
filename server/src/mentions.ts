@@ -20,7 +20,7 @@ export const newMentions = (before: string | null | undefined, after: string | n
 };
 
 /** People who may be told of a task: active accounts, signed in once, who can open it. `u` is users, `t` the task. */
-const REACHABLE = (teamOnly: string) => `u.disabled_at IS NULL AND u.auth_kind IN ('outline', 'email')
+const REACHABLE = (teamOnly: string) => `u.disabled_at IS NULL AND u.auth_kind IN ('outline', 'email', 'oidc')
   AND (u.auth_kind <> 'outline' OR u.last_login_at IS NOT NULL)
   AND ${taskVisibleSql("u.id", teamOnly)}`;
 

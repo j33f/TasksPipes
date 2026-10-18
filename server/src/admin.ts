@@ -17,13 +17,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function isInstanceAdmin(u: Row | null | undefined): boolean {
   if (!u?.email || !config.adminEmails.includes(String(u.email).toLowerCase())) return false;
   if (u.auth_kind === "email") return true;
+  // Vouched for by the configured OpenID Connect provider.
+  if (u.auth_kind === "oidc") return Boolean(u.oidc_email_verified) && u.oidc_issuer === config.oidc.issuer;
   return u.auth_kind === "outline" && Boolean(config.outlineUrl) && (u.outline_url ?? config.outlineUrl) === config.outlineUrl;
 }
 
 /** Whether the person signed in is an administrator (read again from the database, not from the session). */
 export async function requestIsAdmin(req: FastifyRequest) {
   if (!req.user) return false;
-  return isInstanceAdmin(await one(`SELECT email, auth_kind, outline_url FROM users WHERE id = $1`, [req.user.id]));
+  return isInstanceAdmin(await one(`SELECT email, auth_kind, outline_url, oidc_issuer, oidc_email_verified FROM users WHERE id = $1`, [req.user.id]));
 }
 
 /** Disables an account: it can no longer sign in, its sessions and open pages are closed. */
@@ -45,7 +47,7 @@ export async function adminRoutes(app: FastifyInstance) {
       `SELECT u.id, u.name, u.email, u.auth_kind, u.outline_url, u.last_login_at, u.created_at, u.disabled_at, u.disabled_reason,
               d.name AS disabled_by_name
        FROM users u LEFT JOIN users d ON d.id = u.disabled_by
-       WHERE u.auth_kind IN ('outline', 'email') ORDER BY lower(u.name), u.created_at`
+       WHERE u.auth_kind IN ('outline', 'email', 'oidc') ORDER BY lower(u.name), u.created_at`
     );
     return rows.map((u) => ({
       id: u.id,
@@ -62,7 +64,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   const target = async (req: FastifyRequest<{ Params: { id: string } }>) => {
     if (!UUID.test(req.params.id)) throw notFound("User not found");
-    const u = await one(`SELECT id, email, auth_kind, outline_url, disabled_reason FROM users WHERE id = $1 AND auth_kind IN ('outline', 'email')`, [req.params.id]);
+    const u = await one(`SELECT id, email, auth_kind, outline_url, disabled_reason FROM users WHERE id = $1 AND auth_kind IN ('outline', 'email', 'oidc')`, [req.params.id]);
     if (!u) throw notFound("User not found");
     return u;
   };

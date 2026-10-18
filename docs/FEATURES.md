@@ -30,6 +30,14 @@ see those of another.
 You can also use TasksPipes [without Outline](#e-mail-accounts), and [invite people by e-mail](#invitations-and-connections):
 once connected, you see each other in the app and can send each other tasks.
 
+**Company sign-in (OpenID Connect)** — with a provider set up on the instance (Keycloak, Okta, Entra ID, Google
+Workspace, Authentik…), the sign-in page offers *Continue with …*: authorization code with PKCE, the ID token checked
+against the provider's keys. The first sign-in creates the account (no Outline features, like an e-mail account),
+unless an e-mail account has the address and the provider vouches for it (`email_verified`): that account is then
+linked and kept, with its tasks and teams. `OIDC_ALLOWED_DOMAINS` can limit the addresses. An account with a second
+factor still asks for it. People signing in this way see others once connected (invitations), as e-mail accounts do.
+Such an account is disabled by an administrator, not deleted from the app.
+
 ## Spaces
 
 Everyone has a **personal space**; the personal spaces of the people you can see are visible too. **Team spaces** are
@@ -364,8 +372,8 @@ In **Settings › Your data**:
 ## Administration
 
 Administrators of the instance are named by `ADMIN_EMAILS`, never in the app. Only an e-mail account (its address
-proven by sign-in links) or an Outline account of the server set in `OUTLINE_URL` can be one: another Outline server
-could claim any address. Their **Administration** page lists every account (kind, Outline server, last sign-in,
+proven by sign-in links), an Outline account of the server set in `OUTLINE_URL`, or a company sign-in account whose
+address the provider vouches for can be one: another Outline server could claim any address. Their **Administration** page lists every account (kind, Outline server, last sign-in,
 state) and can **disable** one — its sessions and open pages are closed at once, it can no longer sign in, its tasks
 and history stay, and teams show it as disabled — or enable it again. An administrator cannot disable themselves or
 another administrator.

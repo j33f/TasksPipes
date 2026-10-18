@@ -115,7 +115,7 @@ export async function releaseWaiting(db: Queryable, eventId: number): Promise<{ 
      JOIN spaces s ON s.id = t.space_id
      JOIN users u ON u.id IN (t.author_id, COALESCE(s.user_id, t.assignee_id))
      WHERE e.id = $1 AND t.status NOT IN ('done', 'abandoned') AND ${OPEN_BLOCKERS} = 0
-       AND u.id <> e.actor_id AND u.disabled_at IS NULL AND u.auth_kind IN ('outline', 'email')
+       AND u.id <> e.actor_id AND u.disabled_at IS NULL AND u.auth_kind IN ('outline', 'email', 'oidc')
        AND (u.auth_kind <> 'outline' OR u.last_login_at IS NOT NULL)
        AND ${taskVisibleSql("u.id", "$2")}`,
     [eventId, teamOnlyKinds()]

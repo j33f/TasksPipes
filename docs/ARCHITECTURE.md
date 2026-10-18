@@ -30,6 +30,7 @@ Outline through its RPC-style API.
 | `webhooks.ts` | Outgoing webhooks of pipes: deliveries queued with the history, signed, sent and retried in the background. |
 | `net.ts` | Requests to servers people choose (Outline servers, webhooks): internal addresses refused when connecting. |
 | `recurrence.ts` | Recurring tasks: the dates of a rule, and the scheduler pass making each occurrence once. |
+| `oidc.ts` | Company sign-in with OpenID Connect: discovery, PKCE, ID token checked against the provider's keys, accounts. |
 | `push.ts` | Web Push: encryption for a device (RFC 8291), VAPID signature, subscriptions kept encrypted. |
 | `worklog.ts` | Estimates and time logged by hand: checks, who may change what, the time of a weekly report. |
 | `labels.ts` | Labels of a space and priority of tasks: who manages them, checks of a task's labels, labels lost on leaving a space. |

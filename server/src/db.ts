@@ -644,6 +644,14 @@ CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(use
 -- When a notification was pushed to devices, or found needing no push.
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pushed_at timestamptz;
 
+-- Accounts signing in with the company's OpenID Connect provider (oidc.ts): auth_kind 'oidc', or an e-mail account
+-- linked to it. The provider and the person's id there name the account; whether it vouched for the address counts
+-- for ADMIN_EMAILS.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_issuer text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_sub text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_email_verified boolean NOT NULL DEFAULT false;
+CREATE UNIQUE INDEX IF NOT EXISTS users_oidc_idx ON users(oidc_issuer, oidc_sub) WHERE oidc_sub IS NOT NULL;
+
 -- Changes of data made once (their name is kept when done).
 CREATE TABLE IF NOT EXISTS schema_steps (name text PRIMARY KEY, done_at timestamptz NOT NULL DEFAULT now());
 -- The "Priorité" field of user stories became the priority of every task: its values are copied once (they stay

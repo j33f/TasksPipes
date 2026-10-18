@@ -53,7 +53,8 @@ export const config = {
   allowEmailInvitations: (process.env.ALLOW_EMAIL_INVITATIONS ?? "true") !== "false",
   /**
    * Administrators of the instance, by e-mail address (lower case). Only e-mail accounts (address proven by a sign-in
-   * link) and Outline accounts of OUTLINE_URL count: another Outline server could claim any address.
+   * link), Outline accounts of OUTLINE_URL and accounts of the OIDC provider vouching for the address count: another
+   * Outline server could claim any address.
    */
   adminEmails: (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
   /** Lets outgoing webhooks reach internal addresses and plain http (a receiver on the same network, tests). */
@@ -65,6 +66,20 @@ export const config = {
   vapidPublicKey: process.env.VAPID_PUBLIC_KEY || "",
   vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || "",
   vapidSubject: process.env.VAPID_SUBJECT || (appUrl.startsWith("https:") ? appUrl : "mailto:admin@localhost"),
+  /**
+   * Company sign-in with OpenID Connect, for accounts without Outline (oidc.ts): the provider (issuer URL), the
+   * client registered there, the button's label and the scopes asked. OIDC_ALLOWED_DOMAINS limits sign-in to some
+   * e-mail domains; OIDC_ENABLED=false turns it off even when configured.
+   */
+  oidc: {
+    issuer: trimSlash(process.env.OIDC_ISSUER || ""),
+    clientId: process.env.OIDC_CLIENT_ID || "",
+    clientSecret: process.env.OIDC_CLIENT_SECRET || "",
+    name: process.env.OIDC_NAME || "SSO",
+    scopes: process.env.OIDC_SCOPES || "openid email profile",
+    allowedDomains: (process.env.OIDC_ALLOWED_DOMAINS || "").split(",").map((d) => d.trim().toLowerCase().replace(/^@/, "")).filter(Boolean),
+    enabled: Boolean(process.env.OIDC_ISSUER && process.env.OIDC_CLIENT_ID) && process.env.OIDC_ENABLED !== "false",
+  },
   /** Redis holding the rate limit counters (shared by every instance); without it, they are kept in memory. */
   redisUrl: process.env.REDIS_URL || "",
   /** Each new offence multiplies the time a client is blocked by this factor (1: always the same). */

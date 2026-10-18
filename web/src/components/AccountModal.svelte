@@ -183,7 +183,7 @@
       {:else}
         <strong>{user.name}</strong>
       {/if}
-      <div class="small muted">{user.email ?? ""} · {app.isGuest ? t("e-mail account") : t("Outline account")}</div>
+      <div class="small muted">{user.email ?? ""} · {user.kind === "oidc" ? t("company account (single sign-on)") : app.isGuest ? t("e-mail account") : t("Outline account")}</div>
       {#if app.isGuest && user.avatarUrl}
         <button class="btn ghost small remove-pic" onclick={() => run(() => api.del("/me/avatar"), t("Picture removed"))}>{t("Remove the picture")}</button>
       {/if}

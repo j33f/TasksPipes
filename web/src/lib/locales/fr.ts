@@ -858,4 +858,8 @@ export const FR: Record<string, string> = {
   "Notifications are blocked for this site in the browser.": "Les notifications sont bloquées pour ce site dans le navigateur.",
   "What you get at once is pushed to your devices. Nothing is sent for what you do yourself.": "Ce que vous recevez tout de suite est envoyé sur vos appareils. Rien n'est envoyé pour ce que vous faites vous-même.",
   "Notifications": "Notifications",
+  // Company sign-in (OpenID Connect)
+  "Continue with {provider}": "Continuer avec {provider}",
+  "company account (single sign-on)": "compte d'entreprise (authentification unique)",
+  "Your account comes from your company's sign-in: ask an administrator to disable it.": "Votre compte vient de la connexion de votre entreprise : demandez à un administrateur de le désactiver.",
 };

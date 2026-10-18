@@ -6,7 +6,7 @@ import { app } from "../lib/app.svelte";
 import { router } from "../lib/router.svelte";
 import type { Me } from "../lib/types";
 
-const me = (kind: "outline" | "email"): Me => ({
+const me = (kind: "outline" | "email" | "oidc"): Me => ({
   user: { id: "u", name: "Gina", avatarUrl: null, email: "gina@example.com", kind, totp: kind === "email", locale: null, theme: null },
   personalSpaceId: "s",
   outlineUrl: "https://outline.test",
@@ -30,6 +30,13 @@ afterEach(() => {
 });
 
 describe("your data", () => {
+  it("of a company account (single sign-on) are not deleted here either", () => {
+    app.me = me("oidc");
+    render(DataSection, {});
+    expect(screen.getByText("Your account comes from your company's sign-in: ask an administrator to disable it.")).toBeTruthy();
+    expect(screen.queryByText("Delete my account…")).toBeNull();
+  });
+
   it("can be downloaded by everyone; Outline accounts are not deleted here", () => {
     app.me = me("outline");
     render(DataSection, {});
