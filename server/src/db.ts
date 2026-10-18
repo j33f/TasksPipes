@@ -3,6 +3,8 @@ import type { FastifyBaseLogger } from "fastify";
 import { config } from "./config.js";
 import { tr, type Locale } from "./i18n.js";
 import { STATUSES, allPipeTypes, resolveStage, setCustomTypes, type PipeType, type TaskType } from "./pipeTypes.js";
+import { decrypt } from "./crypto-box.js";
+import { setStoredSettings, settingDef } from "./settings-store.js";
 
 // Return DATE columns as plain "YYYY-MM-DD" strings and bigint counts as numbers.
 pg.types.setTypeParser(1082, (v: string) => v);
@@ -657,6 +659,24 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_sub text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_email_verified boolean NOT NULL DEFAULT false;
 CREATE UNIQUE INDEX IF NOT EXISTS users_oidc_idx ON users(oidc_issuer, oidc_sub) WHERE oidc_sub IS NOT NULL;
 
+-- Settings of the instance changed by its administrators (settings.ts): e-mail, Outline, sign-in. An environment
+-- variable, when set, wins over them. Secrets are kept encrypted with APP_SECRET.
+CREATE TABLE IF NOT EXISTS instance_settings (
+  key text PRIMARY KEY,
+  value jsonb NOT NULL,
+  updated_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+-- Who changed which setting, when; the values of secrets are never kept here.
+CREATE TABLE IF NOT EXISTS instance_settings_history (
+  id bigserial PRIMARY KEY,
+  key text NOT NULL,
+  old_value jsonb,
+  new_value jsonb,
+  changed_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  changed_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Changes of data made once (their name is kept when done).
 CREATE TABLE IF NOT EXISTS schema_steps (name text PRIMARY KEY, done_at timestamptz NOT NULL DEFAULT now());
 -- The "Priorité" field of user stories became the priority of every task: its values are copied once (they stay
@@ -728,10 +748,27 @@ export async function syncStages(kind?: string) {
   }
 }
 
+/** Loads the settings changed in the administration (secrets decrypted) into settings-store.ts. */
+export async function loadSettings(db: Queryable = pool) {
+  const { rows } = await db.query(`SELECT key, value FROM instance_settings`);
+  const values = new Map<string, unknown>();
+  for (const r of rows) {
+    const def = settingDef(r.key);
+    if (!def) continue;
+    try {
+      values.set(r.key, def.kind === "secret" ? decrypt(r.value?.enc) ?? "" : r.value);
+    } catch {
+      // Encrypted with another APP_SECRET: set it again in the administration.
+    }
+  }
+  setStoredSettings(values);
+}
+
 export async function migrate(log: FastifyBaseLogger) {
   for (let attempt = 1; ; attempt++) {
     try {
       await pool.query(SCHEMA);
+      await loadSettings();
       // Accounts made before several Outline servers were possible come from the configured one.
       if (config.outlineUrl) {
         await pool.query(

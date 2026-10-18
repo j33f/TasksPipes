@@ -206,7 +206,7 @@
       {/if}
     </div>
 
-    {#if !app.isGuest}
+    {#if !app.noOutline}
     <div class="field">
       <span class="label-text">{t("Linked Outline document")}</span>
       {#if outlineDoc}

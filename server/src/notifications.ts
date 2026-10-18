@@ -48,7 +48,16 @@ export const GROUP_DELAY_MS = 2 * 60_000;
 export const TASK_GAP_MS = 15 * 60_000;
 
 /** Whether notifications are e-mailed: with e-mail set up (tests turn them on without SMTP). */
-export const notificationState = { enabled: mailEnabled };
+export const notificationState = {
+  /** Set by the tests; otherwise e-mail as set up now. */
+  forced: null as boolean | null,
+  get enabled(): boolean {
+    return this.forced ?? mailEnabled();
+  },
+  set enabled(v: boolean) {
+    this.forced = v;
+  },
+};
 
 /**
  * Who a notification is written for: those who may get e-mails (with e-mail on the instance), or who turned push

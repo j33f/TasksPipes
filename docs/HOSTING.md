@@ -39,6 +39,12 @@ let only the proxy reach the port (firewall). A proxy in a container on the same
 
 ## Configuration
 
+The e-mail, Outline and sign-in settings below can also be managed in the app, by an administrator
+(*Administration › Settings*). A variable set here (and not empty) wins and shows locked there; leave it out to manage
+the setting in the app. Those settings are: `SMTP_*`, `MAIL_FROM`, `OUTLINE_ENABLED`, `OUTLINE_URL`, `OUTLINE_API_URL`,
+`OUTLINE_ALLOWED_HOSTS`, `OUTLINE_ALLOW_PRIVATE`, `OUTLINE_TEAM_ID`, `ALLOW_API_KEY_LOGIN`, `OUTLINE_OAUTH_*`,
+`ALLOW_EMAIL_SIGNUP`, `ALLOW_EMAIL_INVITATIONS`, `EMAIL_DOMAINS` and `OIDC_*`.
+
 | Variable | Purpose |
 | --- | --- |
 | `APP_URL` | Public URL of TasksPipes (OAuth callback, links in e-mails and calendars). |
@@ -46,6 +52,7 @@ let only the proxy reach the port (firewall). A proxy in a container on the same
 | `APP_BIND` | Address that port is published on: `127.0.0.1` by default (only the proxy on this machine). |
 | `APP_SECRET` | At least 32 characters. Encrypts Outline tokens, TOTP secrets and calendar links in the database. |
 | `POSTGRES_PASSWORD` | Password of the bundled database (`DATABASE_URL` when running the server yourself). With a database of your own, the account must be allowed to create the `pgcrypto` and `unaccent` extensions (both ship with PostgreSQL). |
+| `OUTLINE_ENABLED` | `false` turns Outline off: no sign-in with Outline, no Outline documents. `true` by default. |
 | `OUTLINE_URL` | Optional Outline server known to the instance: needed for OAuth sign-in. It is never suggested on the sign-in page. |
 | `OUTLINE_API_URL` | Optional internal URL the server uses to reach Outline (e.g. `http://outline:3000`). |
 | `OUTLINE_OAUTH_CLIENT_ID`, `OUTLINE_OAUTH_CLIENT_SECRET` | OAuth sign-in, see below. |
@@ -63,6 +70,7 @@ let only the proxy reach the port (firewall). A proxy in a container on the same
 | `WEBHOOK_ALLOW_PRIVATE` | `true` lets outgoing webhooks (and push messages) reach http addresses and internal networks (a receiver on the same network, tests). Off by default: https and public addresses only, checked when connecting. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | E-mail for accounts without Outline and invitations, see below. |
 | `ALLOW_EMAIL_SIGNUP` | `true` (default) lets anyone create an account with an e-mail address and a name (needs SMTP). |
+| `EMAIL_DOMAINS` | E-mail domains allowed to sign up or be invited, comma-separated (all by default). |
 | `ALLOW_EMAIL_INVITATIONS` | `true` (default) lets people invite others by e-mail and send requests to connect. |
 | `ADMIN_EMAILS` | Administrators of the instance (comma-separated addresses): e-mail accounts, Outline accounts of `OUTLINE_URL`, or company sign-in accounts whose address the provider vouches for (`email_verified`), with these addresses. They can disable and enable accounts. |
 | `REDIS_URL` | Redis holding the rate limit counters (the bundled one: `redis://redis:6379`). Without it, they are kept in memory, per process. |
