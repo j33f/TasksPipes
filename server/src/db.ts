@@ -572,6 +572,27 @@ DO $$ BEGIN
       CHECK (kind IN ('received', 'assigned', 'refused', 'comment', 'mention', 'overdue'));
   END IF;
 END $$;
+
+-- Dependencies between tasks (dependencies.ts): task_id waits for blocker_id to be done or abandoned.
+CREATE TABLE IF NOT EXISTS task_dependencies (
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  blocker_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (task_id, blocker_id),
+  CHECK (task_id <> blocker_id)
+);
+CREATE INDEX IF NOT EXISTS task_dependencies_blocker_idx ON task_dependencies(blocker_id);
+
+-- A task no longer blocked is notified too.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'notifications_kind_check'
+                 AND pg_get_constraintdef(oid) LIKE '%unblocked%') THEN
+    ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_kind_check;
+    ALTER TABLE notifications ADD CONSTRAINT notifications_kind_check
+      CHECK (kind IN ('received', 'assigned', 'refused', 'comment', 'mention', 'unblocked', 'overdue'));
+  END IF;
+END $$;
 `;
 
 /**

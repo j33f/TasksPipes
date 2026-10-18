@@ -4,7 +4,7 @@
   import type { Task } from "../lib/types";
   import Avatar from "./Avatar.svelte";
   import Icon, { iconOf } from "./Icon.svelte";
-  import { t } from "../lib/i18n.svelte";
+  import { t, tn } from "../lib/i18n.svelte";
   import { GIT_STATE_COLOR, GIT_STATE_LABEL } from "../lib/git";
 
   let { task, draggable = false, dragging = false, ondragstart, ondragend }: {
@@ -39,6 +39,11 @@
         <Icon name={task.gitState === "merged" ? "merge" : "branch"} size={13} />{t(GIT_STATE_LABEL[task.gitState])}
       </span>
     {/if}
+    {#if task.blockers}
+      <span class="row blocked" style="gap:3px" title={tn(task.blockers, "Waits for a task still to finish", "Waits for {n} tasks still to finish")}>
+        <Icon name="link" size={13} />{t("Blocked")}
+      </span>
+    {/if}
     {#if task.commentCount}<span class="row" style="gap:3px"><Icon name="comment" size={13} />{task.commentCount}</span>{/if}
     <span class="spacer"></span>
     {#if task.author.id !== task.assignee?.id && task.author.id !== app.me?.user.id}
@@ -58,5 +63,6 @@
   .t-type { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-tertiary); margin-bottom: 3px; }
   .t-title { font-weight: 500; line-height: 1.35; word-break: break-word; }
   .complete { color: #2a9d63; }
+  .blocked { color: #ed2651; }
   .t-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--text-tertiary); font-size: 12px; flex-wrap: wrap; }
 </style>
