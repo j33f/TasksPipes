@@ -614,6 +614,21 @@ CREATE INDEX IF NOT EXISTS task_labels_label_idx ON task_labels(label_id);
 -- Priority of any task: 1 urgent, 2 high, 3 medium, 4 low; none when null.
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority smallint CHECK (priority BETWEEN 1 AND 4);
 
+-- Estimates and time logged by hand (worklog.ts), beside the time computed from the history.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimate_minutes integer CHECK (estimate_minutes BETWEEN 1 AND 60000);
+CREATE TABLE IF NOT EXISTS task_time_entries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  -- Kept when the account is deleted: moved to its placeholder, as comments are.
+  user_id uuid NOT NULL REFERENCES users(id),
+  spent_on date NOT NULL,
+  minutes integer NOT NULL CHECK (minutes BETWEEN 1 AND 1440),
+  note text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS task_time_entries_task_idx ON task_time_entries(task_id, spent_on);
+CREATE INDEX IF NOT EXISTS task_time_entries_user_idx ON task_time_entries(user_id, spent_on);
+
 -- Changes of data made once (their name is kept when done).
 CREATE TABLE IF NOT EXISTS schema_steps (name text PRIMARY KEY, done_at timestamptz NOT NULL DEFAULT now());
 -- The "Priorité" field of user stories became the priority of every task: its values are copied once (they stay

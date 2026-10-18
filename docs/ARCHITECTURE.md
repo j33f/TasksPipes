@@ -30,6 +30,7 @@ Outline through its RPC-style API.
 | `webhooks.ts` | Outgoing webhooks of pipes: deliveries queued with the history, signed, sent and retried in the background. |
 | `net.ts` | Requests to servers people choose (Outline servers, webhooks): internal addresses refused when connecting. |
 | `recurrence.ts` | Recurring tasks: the dates of a rule, and the scheduler pass making each occurrence once. |
+| `worklog.ts` | Estimates and time logged by hand: checks, who may change what, the time of a weekly report. |
 | `labels.ts` | Labels of a space and priority of tasks: who manages them, checks of a task's labels, labels lost on leaving a space. |
 | `dependencies.ts` | Dependencies between tasks: what a linked task shows to whom, loops, and releasing the tasks waiting for one just finished. |
 | `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |

@@ -4,6 +4,7 @@
  */
 import { one, type Queryable, type Row } from "./db.js";
 import { allPipeTypes, pipeTypeById } from "./pipeTypes.js";
+import { LOGGED_MINUTES } from "./worklog.js";
 
 export const SPACE_NAME = `COALESCE(su.name, s.name)`;
 
@@ -33,7 +34,8 @@ export const TASK_SELECT = `
                             FILTER (WHERE NOT i.done))[1])
           FROM task_items i WHERE i.task_id = t.id) AS checklist,
          ${OPEN_BLOCKERS} AS open_blockers,
-         ${TASK_LABELS}
+         ${TASK_LABELS},
+         ${LOGGED_MINUTES}
   FROM tasks t
   JOIN spaces s ON s.id = t.space_id
   LEFT JOIN users su ON su.id = s.user_id

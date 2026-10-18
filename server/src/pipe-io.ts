@@ -73,7 +73,12 @@ export interface ExportedTask {
   items: { text: string; done: boolean }[];
   priority?: number | null;
   labels?: string[];
+  estimate_minutes?: number | null;
+  logged_minutes?: number | string;
 }
+
+/** Minutes as hours, "1.5" (spreadsheets add them up). */
+const hours = (m: number | string | null | undefined) => (m ? String(Math.round((Number(m) / 60) * 100) / 100) : "");
 
 /** Priority names, from 1 (urgent) to 4 (low). */
 export const PRIORITY_NAMES = ["Urgent", "High", "Medium", "Low"];
@@ -117,6 +122,8 @@ const headers = (lang: Locale) => ({
   items: tr(lang, "Sub-tasks"),
   priority: tr(lang, "Priority"),
   labels: tr(lang, "Labels"),
+  estimate: tr(lang, "Estimate (hours)"),
+  logged: tr(lang, "Logged time (hours)"),
   author: tr(lang, "Author"),
   created: tr(lang, "Created"),
   updated: tr(lang, "Updated"),
@@ -131,7 +138,7 @@ export function exportCsv(kind: string, tasks: ExportedTask[], lang: Locale, nam
   const label = (s: string) => localize(lang, s);
   const rows: unknown[][] = [[
     h.key, h.title, h.description, h.column, h.owner, h.dueDate, h.taskType, h.items,
-    ...fields.map((f) => label(f.label)), h.priority, h.labels, h.author, h.created, h.updated,
+    ...fields.map((f) => label(f.label)), h.priority, h.labels, h.estimate, h.logged, h.author, h.created, h.updated,
   ]];
   for (const t of tasks) {
     const type = taskTypeById(t.task_type);
@@ -139,7 +146,7 @@ export function exportCsv(kind: string, tasks: ExportedTask[], lang: Locale, nam
       key(t.number), t.title, t.description, label(resolveStage(kind, t.stage, t.status).label), t.owner_name ?? "", t.due_date ?? "",
       type ? label(type.label) : t.task_type, itemsText(t.items),
       ...fields.map((f) => (type?.fields.some((x) => x.id === f.id) ? fieldText(f, t.fields[f.id], names) : "")),
-      priorityText(lang, t.priority), (t.labels ?? []).join("; "), t.author_name, iso(t.created_at), iso(t.updated_at),
+      priorityText(lang, t.priority), (t.labels ?? []).join("; "), hours(t.estimate_minutes), hours(t.logged_minutes), t.author_name, iso(t.created_at), iso(t.updated_at),
     ]);
   }
   return toCsv(rows, sep);
@@ -163,6 +170,8 @@ export function exportJson(pipe: { name: string; kind: string }, tasks: Exported
         taskType: { id: t.task_type, label: type ? label(type.label) : t.task_type },
         priority: t.priority ?? null,
         labels: t.labels ?? [],
+        estimateMinutes: t.estimate_minutes ?? null,
+        loggedMinutes: Number(t.logged_minutes ?? 0),
         // Field values as stored, with their labels.
         fields: (type?.fields ?? []).filter((f) => t.fields[f.id] !== undefined).map((f) => ({
           id: f.id, label: label(f.label), type: f.type, value: t.fields[f.id], text: fieldText(f, t.fields[f.id], names),

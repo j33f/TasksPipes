@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { formatWork } from "../lib/worklog";
   import { untrack } from "svelte";
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
@@ -117,6 +118,18 @@
       </div>
     {:else}
       <div class="empty">{t("No time recorded this week.")}</div>
+    {/if}
+    {#if weekly.logged?.totalMinutes}
+      <div class="section">
+        <div class="section-title">{t("Time logged: {total}", { total: formatWork(weekly.logged.totalMinutes) })}</div>
+        <p class="small">{weekly.logged.byPerson.map((p) => `${p.name} ${formatWork(p.minutes)}`).join(" · ")}</p>
+        <ul>
+          {#each weekly.logged.tasks as task (task.id)}
+            {@render taskLink(task, formatWork(task.minutes) + (task.estimateMinutes
+              ? ` · ${t("{logged} of {estimate} estimated", { logged: formatWork(task.totalMinutes), estimate: formatWork(task.estimateMinutes) })}` : ""))}
+          {/each}
+        </ul>
+      </div>
     {/if}
   {/if}
 

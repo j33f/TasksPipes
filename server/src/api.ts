@@ -69,6 +69,7 @@ const taskBody = {
   fields: { type: "object", additionalProperties: true, description: "Values by field id of the task type" },
   priority: { type: "integer", minimum: 1, maximum: 4, nullable: true, description: "1 urgent, 2 high, 3 medium, 4 low; null for none" },
   labelIds: { type: "array", items: uuid, description: "Labels of the task's space (all of them: the others are taken off)" },
+  estimateMinutes: { type: "integer", minimum: 1, maximum: 60000, nullable: true, description: "Estimate, in minutes; null for none" },
 } as const;
 
 interface Doc {
@@ -151,6 +152,22 @@ export const V1_ROUTES: Record<string, Doc> = {
     params: { type: "object", required: ["id", "blockerId"], properties: { id: uuid, blockerId: uuid } },
     response: object("The tasks it waits for (blockedBy) and those waiting for it (blocks)"),
   },
+  "GET /tasks/:id/time": { tag: "Time", summary: "Time logged on a task", params: idParams, response: object("Entries and total", { totalMinutes: { type: "integer" } }) },
+  "POST /tasks/:id/time": {
+    tag: "Time", summary: "Log one's own time on a task (today, or a day of the last 90 days)", params: idParams,
+    body: { type: "object", required: ["minutes"], properties: {
+      minutes: { type: "integer", minimum: 1, maximum: 1440 }, spentOn: { type: "string", format: "date" }, note: { type: "string", maxLength: 500 },
+    } },
+    response: object("The entry", { id: uuid }),
+  },
+  "PATCH /time/:id": {
+    tag: "Time", summary: "Change one's own time entry", params: idParams,
+    body: { type: "object", properties: {
+      minutes: { type: "integer", minimum: 1, maximum: 1440 }, spentOn: { type: "string", format: "date" }, note: { type: "string", maxLength: 500 },
+    } },
+    response: object("The entry"),
+  },
+  "DELETE /time/:id": { tag: "Time", summary: "Delete a time entry (one's own, or any as an admin of the task's team)", params: idParams, response: ok },
   "POST /tasks/:id/items": {
     tag: "Sub-tasks", summary: "Add a sub-task", params: idParams,
     body: { type: "object", required: ["text"], properties: { text: { type: "string", maxLength: 500 } } }, response: object("The sub-task", { id: uuid }),

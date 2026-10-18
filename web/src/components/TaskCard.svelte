@@ -4,6 +4,7 @@
   import type { Task } from "../lib/types";
   import Avatar from "./Avatar.svelte";
   import TaskBadges from "./TaskBadges.svelte";
+  import { formatWork } from "../lib/worklog";
   import Icon, { iconOf } from "./Icon.svelte";
   import { t, tn } from "../lib/i18n.svelte";
   import { GIT_STATE_COLOR, GIT_STATE_LABEL } from "../lib/git";
@@ -46,6 +47,10 @@
       <span class="row blocked" style="gap:3px" title={tn(task.blockers, "Waits for a task still to finish", "Waits for {n} tasks still to finish")}>
         <Icon name="link" size={13} />{t("Blocked")}
       </span>
+    {/if}
+    {#if task.estimateMinutes || task.loggedMinutes}
+      <span class="row" class:blocked={Boolean(task.estimateMinutes && task.loggedMinutes > task.estimateMinutes)} style="gap:3px"
+        title={t("Logged / estimate")}><Icon name="history" size={13} />{formatWork(task.loggedMinutes)}{task.estimateMinutes ? ` / ${formatWork(task.estimateMinutes)}` : ""}</span>
     {/if}
     {#if task.commentCount}<span class="row" style="gap:3px"><Icon name="comment" size={13} />{task.commentCount}</span>{/if}
     <span class="spacer"></span>

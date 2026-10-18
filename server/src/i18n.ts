@@ -444,6 +444,18 @@ export const FR: Record<string, string> = {
 
   "Column {n}: the limit is a number from 1 to 999": "Colonne {n} : la limite est un nombre de 1 à 999",
 
+  // Estimates and logged time
+  "Invalid estimate": "Estimation invalide",
+  "Logged time is from 1 minute to 24 hours": "Le temps saisi va de 1 minute à 24 heures",
+  "Log time for a day of the last {n} days": "Saisissez le temps d'un jour des {n} derniers jours",
+  "Note": "Note",
+  "Time entry": "Saisie de temps",
+  "Time entry not found": "Saisie de temps introuvable",
+  "Estimate (hours)": "Estimation (heures)",
+  "Logged time (hours)": "Temps saisi (heures)",
+  "Time logged: {total}": "Temps saisi : {total}",
+  "{logged} of {estimate} estimated": "{logged} sur {estimate} estimées",
+
   // Data created for the user
   Personal: "Perso",
   "TasksPipes task #{n}": "Tâche TasksPipes #{n}",

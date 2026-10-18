@@ -23,6 +23,7 @@
   import LabelsModal from "./LabelsModal.svelte";
   import { PRIORITIES } from "../lib/labels";
   import DependenciesSection from "./DependenciesSection.svelte";
+  import TimeSection from "./TimeSection.svelte";
   import { confirmWhileBlocked } from "../lib/dependencies";
   import { mentionableOn } from "../lib/mentions";
   import { t, tn } from "../lib/i18n.svelte";
@@ -252,6 +253,7 @@
         {/if}
 
         <DependenciesSection {task} onchange={load} />
+        <TimeSection {task} onchange={load} />
 
         {#if task.gitConnected || task.links.length}
           <div class="infos">

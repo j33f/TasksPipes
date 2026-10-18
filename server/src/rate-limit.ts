@@ -180,6 +180,7 @@ export const LIMITS = {
   outlineInvite: { name: "outline-invite", max: 20, timeWindow: 60 * MIN, keyGenerator: perPerson },
   pipeExport: { name: "pipe-export", max: 60, timeWindow: 60 * MIN, keyGenerator: perPerson },
   pipeImportPreview: { name: "pipe-import-preview", max: 300, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  timeEntries: { name: "time-entries", max: 120, timeWindow: MIN, keyGenerator: perPerson },
   dependencies: { name: "dependencies", max: 120, timeWindow: MIN, keyGenerator: perPerson },
   pipeImport: { name: "pipe-import", max: 20, timeWindow: 60 * MIN, keyGenerator: perPerson },
   dataExport: { name: "data-export", max: 5, timeWindow: 60 * MIN, keyGenerator: perPerson },

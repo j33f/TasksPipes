@@ -141,8 +141,9 @@ describe("filters and export", () => {
   it("are exported with the pipe", async () => {
     const csv = (await app.inject({ method: "GET", url: `/api/pipes/${board}/export?sep=,`, headers: { cookie: alice.cookie } })).body;
     const [head, ...lines] = csv.replace(/^﻿/, "").split("\r\n");
-    expect(head).toContain("Priority,Labels,Author");
-    expect(lines.find((l) => l.includes("Zanzibar visit"))).toContain("Urgent,Client,Alice Martin");
+    expect(head).toContain("Priority,Labels,");
+    // Then its estimate and logged time, none here.
+    expect(lines.find((l) => l.includes("Zanzibar visit"))).toContain("Urgent,Client,,,Alice Martin");
   });
 });
 

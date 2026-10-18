@@ -120,6 +120,9 @@ export interface Task {
   priority: Priority | null;
   /** Labels of its space. */
   labels: Label[];
+  /** Estimate and time logged by hand, in minutes. */
+  estimateMinutes: number | null;
+  loggedMinutes: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -154,7 +157,7 @@ export interface EventSide {
 
 export interface TaskEvent {
   id: number;
-  type: "created" | "sent" | "accepted" | "moved" | "status" | "refused" | "updated" | "edited" | "comment" | "fields" | "file" | "checklist" | "linked" | "dependency";
+  type: "created" | "sent" | "accepted" | "moved" | "status" | "refused" | "updated" | "edited" | "comment" | "fields" | "file" | "checklist" | "linked" | "dependency" | "time";
   comment: string | null;
   details: {
     fields?: string[];
@@ -178,6 +181,9 @@ export interface TaskEvent {
     whileBlocked?: boolean;
     priority?: { from: Priority | null; to: Priority | null };
     labels?: { added: string[]; removed: string[] };
+    estimate?: { from: number | null; to: number | null };
+    /** A team admin deleted someone else's time entry (event "time"). */
+    timeRemoved?: { minutes: number; spentOn: string; of: string | null };
   } | null;
   createdAt: string;
   actor: UserRef;
@@ -392,7 +398,23 @@ export interface DailyReport extends ReportPeriod {
   stillBlocked: ReportTask[];
 }
 
+export interface TimeEntry {
+  id: string;
+  user: UserRef;
+  spentOn: string;
+  minutes: number;
+  note: string;
+  createdAt: string;
+  mine: boolean;
+  canDelete: boolean;
+}
+
 export interface WeeklyReport extends ReportPeriod {
+  logged?: {
+    totalMinutes: number;
+    byPerson: { name: string; minutes: number }[];
+    tasks: (ReportTask & { minutes: number; estimateMinutes: number | null; totalMinutes: number })[];
+  };
   byType: { taskType: string; activeMs: number; blockedMs: number; tasks: number; done: number }[];
   tasks: (ReportTask & { activeMs: number; blockedMs: number; done: boolean })[];
   totalActiveMs: number;
