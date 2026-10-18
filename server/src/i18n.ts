@@ -456,6 +456,8 @@ export const FR: Record<string, string> = {
   "Time logged: {total}": "Temps saisi : {total}",
   "{logged} of {estimate} estimated": "{logged} sur {estimate} estimées",
 
+  "Invalid push subscription": "Abonnement aux notifications invalide",
+
   // Data created for the user
   Personal: "Perso",
   "TasksPipes task #{n}": "Tâche TasksPipes #{n}",

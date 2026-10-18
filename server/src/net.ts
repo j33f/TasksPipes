@@ -42,7 +42,7 @@ const MAX_RESPONSE = 20 * 1024 * 1024;
 
 /** POSTs a body through `lookup`, without following redirects; the answer is capped. */
 export function postJson(
-  url: string, headers: Record<string, string>, body: string, lookup: LookupFunction, { timeoutMs = 15_000, maxResponse = MAX_RESPONSE } = {}
+  url: string, headers: Record<string, string>, body: string | Buffer, lookup: LookupFunction, { timeoutMs = 15_000, maxResponse = MAX_RESPONSE } = {}
 ): Promise<{ status: number; text: string }> {
   return new Promise((resolve, reject) => {
     const u = new URL(url);

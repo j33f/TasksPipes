@@ -29,6 +29,7 @@ import { presentRecurrence, recurrenceRoutes, type RecordCreated } from "./recur
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
+import { hasDevices, pushRoutes } from "./push.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
 import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
 import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
@@ -486,6 +487,7 @@ export async function apiRoutes(app: FastifyInstance) {
   await app.register(webhookRoutes);
   await app.register(recurrenceRoutes);
   await app.register(labelRoutes);
+  await app.register(pushRoutes);
   await app.register(accountRoutes, { present: presentTask, events: getEvents });
 
   app.get("/me", async (req) => ({
@@ -495,14 +497,13 @@ export async function apiRoutes(app: FastifyInstance) {
     // Administrator of the instance (ADMIN_EMAILS): the administration page is offered.
     admin: await requestIsAdmin(req),
     features: { invitations: config.allowEmailInvitations, notifications: notificationState.enabled },
-    // E-mail notifications are only offered when e-mail is set up.
-    ...(notificationState.enabled
-      ? { notificationPrefs: prefsOf((await one(`SELECT notification_prefs FROM users WHERE id = $1`, [me(req)]))?.notification_prefs) }
-      : {}),
+    // Choices of notifications: by e-mail when it is set up, and for push notifications.
+    notificationPrefs: prefsOf((await one(`SELECT notification_prefs FROM users WHERE id = $1`, [me(req)]))?.notification_prefs),
   }));
 
   app.put("/me/notifications", async (req: Req) => {
-    if (!notificationState.enabled) throw notFound("Not found");
+    // Without e-mail, the choices still apply to push notifications, for those who turned them on.
+    if (!notificationState.enabled && !(await hasDevices(me(req)))) throw notFound("Not found");
     return { notificationPrefs: await savePrefs(me(req), cleanPrefs(req.body)) };
   });
 

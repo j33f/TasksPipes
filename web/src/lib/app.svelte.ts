@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { disablePush } from "./push";
 import { setParams } from "./router.svelte";
 import type { Column, Me, PipeType, SidebarData, SpaceSummary, Task, TaskType, User, UserRef } from "./types";
 
@@ -149,6 +150,8 @@ class AppState {
   }
 
   async logout() {
+    // A shared device gets nothing more of this person.
+    await disablePush().catch(() => {});
     await api.post("/auth/logout").catch(() => {});
     this.me = null;
   }

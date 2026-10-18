@@ -232,12 +232,12 @@ describe("unsubscribing", () => {
 });
 
 describe("without e-mail", () => {
-  it("are neither offered nor queued", async () => {
+  it("are neither offered nor queued (without a push device)", async () => {
     notificationState.enabled = false;
     try {
       const me = (await bob.get("/api/me")).body;
       expect(me.features.notifications).toBe(false);
-      expect(me.notificationPrefs).toBeUndefined();
+      // The choices stay readable (they apply to push notifications), but are not offered for change.
       expect((await bob.put("/api/me/notifications", { comment: "off" })).status).toBe(404);
       const id = (await alice.post("/api/tasks", { title: "No SMTP", spaceId: spaces.bob })).body.id;
       expect((await pool.query(`SELECT 1 FROM notifications WHERE task_id = $1`, [id])).rowCount).toBe(0);

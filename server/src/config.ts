@@ -58,6 +58,13 @@ export const config = {
   adminEmails: (process.env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
   /** Lets outgoing webhooks reach internal addresses and plain http (a receiver on the same network, tests). */
   webhookAllowPrivate: process.env.WEBHOOK_ALLOW_PRIVATE === "true",
+  /**
+   * Web Push: the server's VAPID key pair (base64url, as `npx web-push generate-vapid-keys` prints them). Without
+   * them, a key is derived from APP_SECRET. The subject is a contact for push services (mailto: or https:).
+   */
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY || "",
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || "",
+  vapidSubject: process.env.VAPID_SUBJECT || (appUrl.startsWith("https:") ? appUrl : "mailto:admin@localhost"),
   /** Redis holding the rate limit counters (shared by every instance); without it, they are kept in memory. */
   redisUrl: process.env.REDIS_URL || "",
   /** Each new offence multiplies the time a client is blocked by this factor (1: always the same). */

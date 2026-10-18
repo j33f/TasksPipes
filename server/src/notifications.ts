@@ -21,6 +21,7 @@ import { stageLabel } from "./pipeTypes.js";
 import { TASK_KEY_PREFIX } from "./git.js";
 import { dailyPeriod, addDays, localDay, zonedInstant } from "./time.js";
 import { rateLimited, type Limit } from "./rate-limit.js";
+import { pushTo } from "./push.js";
 
 export const KINDS = ["received", "assigned", "refused", "comment", "mention", "unblocked", "due"] as const;
 export type Kind = (typeof KINDS)[number];
@@ -46,8 +47,14 @@ export const GROUP_DELAY_MS = 2 * 60_000;
 /** At most one immediate e-mail per task and person in this time. */
 export const TASK_GAP_MS = 15 * 60_000;
 
-/** Whether notifications are on: with e-mail set up (tests turn them on without SMTP). */
+/** Whether notifications are e-mailed: with e-mail set up (tests turn them on without SMTP). */
 export const notificationState = { enabled: mailEnabled };
+
+/**
+ * Who a notification is written for: those who may get e-mails (with e-mail on the instance), or who turned push
+ * on for a device. `u` is the users table, `$mail` the placeholder of notificationState.enabled.
+ */
+const RECIPIENT = (mail: string) => `${ELIGIBLE} AND (${mail} OR EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.user_id = u.id))`;
 
 const MODES: Mode[] = ["immediate", "digest", "off"];
 
@@ -100,7 +107,6 @@ const prefKind = (k: RowKind): Kind => (k === "overdue" ? "due" : k);
 /** Writes the notifications caused by a history entry (call it in the transaction that wrote it). */
 /** `mentioned`: the people the entry mentions who can open the task (mentions.ts). */
 export async function queueNotifications(db: Queryable, eventId: number, mentioned: string[] = []) {
-  if (!notificationState.enabled) return;
   const e = await one(
     `SELECT e.*, t.author_id, COALESCE(s.user_id, t.assignee_id) AS owner_id
      FROM task_events e JOIN tasks t ON t.id = e.task_id JOIN spaces s ON s.id = t.space_id WHERE e.id = $1`,
@@ -127,19 +133,19 @@ export async function queueNotifications(db: Queryable, eventId: number, mention
   await db.query(
     `INSERT INTO notifications (user_id, task_id, kind, event_id)
      SELECT u.id, $3, x.kind, $4 FROM unnest($1::uuid[], $2::text[]) AS x(user_id, kind) JOIN users u ON u.id = x.user_id
-     WHERE ${ELIGIBLE}`,
-    [[...to.keys()], [...to.values()], e.task_id, eventId]
+     WHERE ${RECIPIENT("$5")}`,
+    [[...to.keys()], [...to.values()], e.task_id, eventId, notificationState.enabled]
   );
 }
 
 /** Tasks no longer blocked since the history entry `eventId` finished their last blocker (dependencies.ts). */
 export async function queueUnblocked(db: Queryable, eventId: number, told: { userId: string; taskId: string }[]) {
-  if (!notificationState.enabled || !told.length) return;
+  if (!told.length) return;
   await db.query(
     `INSERT INTO notifications (user_id, task_id, kind, event_id)
      SELECT u.id, x.task_id, 'unblocked', $3 FROM unnest($1::uuid[], $2::uuid[]) AS x(user_id, task_id) JOIN users u ON u.id = x.user_id
-     WHERE ${ELIGIBLE}`,
-    [told.map((t) => t.userId), told.map((t) => t.taskId), eventId]
+     WHERE ${RECIPIENT("$4")}`,
+    [told.map((t) => t.userId), told.map((t) => t.taskId), eventId, notificationState.enabled]
   );
 }
 
@@ -529,6 +535,43 @@ export async function runNotifications(now = new Date(), send: Send = defaultSen
   }
   sent += await sendDueReminders(now, send);
   return sent;
+}
+
+/**
+ * Push notifications (push.ts): each new notification of a kind one gets "at once", to the devices one turned push
+ * on for, while one is not in the app; at most an hour late. Claimed first, so that none goes twice. Without e-mail
+ * on the instance, the notification is then done. Returns how many were pushed.
+ */
+export async function runPush(now = new Date()): Promise<number> {
+  const { rows: claimed } = await query(
+    `UPDATE notifications SET pushed_at = $1 WHERE id IN (
+       SELECT id FROM notifications WHERE pushed_at IS NULL AND kind <> 'overdue' AND created_at > $1::timestamptz - interval '1 hour'
+       ORDER BY id LIMIT 200 FOR UPDATE SKIP LOCKED)
+     RETURNING id`,
+    [now]
+  );
+  if (!claimed.length) return 0;
+  const ids = claimed.map((r) => Number(r.id));
+  const { rows } = await query(`${LINE_SELECT} WHERE n.id = ANY($1) ORDER BY n.id`, [ids]);
+  const users = await recipientsOf([...new Set(rows.map((r) => r.user_id as string))]);
+  let pushed = 0;
+  for (const r of rows) {
+    const u = users.get(r.user_id);
+    if (!u || u.prefs[prefKind(r.kind)] !== "immediate" || isOnline(u.id)) continue;
+    const t = await visibleTask(r.task_id, u.id);
+    if (!t) continue;
+    const masked = isConfidential(t);
+    const line = toLine(r);
+    const message = {
+      title: tr(u.lang, SUBJECTS[line.kind], { task: taskName(t, masked) }),
+      body: describe(u.lang, line, masked),
+      url: taskUrl(t),
+      tag: `task-${t.id}`,
+    };
+    if (await pushTo(u.id, message)) pushed++;
+  }
+  if (!notificationState.enabled) await settle(ids, "push", true);
+  return pushed;
 }
 
 /** Forgets notifications gone out more than 30 days ago (overdue ones are kept while they apply). */
