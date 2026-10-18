@@ -19,6 +19,8 @@
   import DevLinks from "./DevLinks.svelte";
   import TaskTiming from "./TaskTiming.svelte";
   import RepeatSection from "./RepeatSection.svelte";
+  import DependenciesSection from "./DependenciesSection.svelte";
+  import { confirmWhileBlocked } from "../lib/dependencies";
   import { mentionableOn } from "../lib/mentions";
   import { t, tn } from "../lib/i18n.svelte";
 
@@ -77,7 +79,12 @@
   }
 
   const patch = (body: Record<string, unknown>, success?: string) => run(() => api.patch(`/tasks/${id}`, body), success);
-  const move = (pipeId: string, stage?: string) => run(() => api.post(`/tasks/${id}/move`, { pipeId, stage }));
+  function move(pipeId: string, stage?: string) {
+    const to = stage ? app.columnsFor(task?.pipe?.kind).find((c) => c.id === stage)?.status : undefined;
+    // Still waiting for other tasks: asked first (the select goes back if not).
+    if (task && !confirmWhileBlocked(task, to)) return load();
+    return run(() => api.post(`/tasks/${id}/move`, { pipeId, stage }));
+  }
 
   // Sub-tasks: changed in place first so the list reacts at once.
   const items = {
@@ -232,6 +239,8 @@
               onadd={items.add} ontoggle={items.toggle} onrename={items.rename} ondelete={items.remove} onmove={items.move} />
           </div>
         {/if}
+
+        <DependenciesSection {task} onchange={load} />
 
         {#if task.gitConnected || task.links.length}
           <div class="infos">

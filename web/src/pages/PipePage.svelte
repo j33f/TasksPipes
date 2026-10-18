@@ -14,6 +14,7 @@
   import NewTaskModal from "../components/NewTaskModal.svelte";
   import TransferModal from "../components/TransferModal.svelte";
   import WebhooksModal from "../components/WebhooksModal.svelte";
+  import { confirmWhileBlocked } from "../lib/dependencies";
 
   let { id }: { id: string } = $props();
 
@@ -118,6 +119,7 @@
     draggedId = null;
     drop = null;
     if (task.stage === stage && task.position === position) return;
+    if (!confirmWhileBlocked(task, app.columnsFor(pipe.kind).find((c) => c.id === stage)?.status)) return;
     // Optimistic update, then reconcile with the server.
     pipe.tasks = pipe.tasks.map((x) => (x.id === task.id ? { ...x, stage, position } : x)).sort((a, b) => a.position - b.position);
     try {

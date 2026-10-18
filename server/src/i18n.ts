@@ -408,6 +408,9 @@ export const FR: Record<string, string> = {
   "Tasks you now own": "Tâches qui vous sont confiées",
   "Tasks refused": "Tâches refusées",
   "Mentions": "Mentions",
+  "Tasks no longer blocked": "Tâches débloquées",
+  "The tasks it waited for are finished": "Les tâches qu'elle attendait sont terminées",
+  "No longer blocked: {task}": "Débloquée : {task}",
   "Comments": "Commentaires",
   "Due date reminders": "Rappels d'échéance",
   "Invalid link": "Lien invalide",
@@ -416,6 +419,11 @@ export const FR: Record<string, string> = {
   "Unsubscribed": "Désabonnement effectué",
   "You will no longer get e-mails about: {what}. You can turn them back on in the settings of TasksPipes.": "Vous ne recevrez plus d'e-mails pour : {what}. Vous pouvez les réactiver dans les réglages de TasksPipes.",
 
+  // Dependencies between tasks
+  "A task cannot wait for itself": "Une tâche ne peut pas s'attendre elle-même",
+  "This task already waits for this one": "Cette tâche attend déjà celle-ci",
+  "A task waits for {n} tasks at most": "Une tâche attend {n} tâches au plus",
+  "Blocking task": "Tâche bloquante",
   "This task type fits none of the recipient's pipes": "Ce type de tâche ne correspond à aucun pipe du destinataire",
 
   // Data created for the user

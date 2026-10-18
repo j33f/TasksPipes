@@ -7,7 +7,7 @@ const IDLE_MS = 5 * 60_000;
 const HIDDEN_MS = 60_000;
 
 interface LiveEvent {
-  type: "task.sent" | "task.refused" | "incoming.changed" | "connection.request" | "connection.accepted" | "mention" | "hello";
+  type: "task.sent" | "task.refused" | "incoming.changed" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello";
   /** "hello": version of the server. */
   version?: string;
   spaceId?: string;
@@ -126,6 +126,10 @@ class Live {
     if (e.type === "mention" && e.task) {
       const task = e.task;
       return app.toast(t("{name} mentioned you in “{title}”", { name: e.by ?? "", title: task.title }), "info", { label: t("View"), run: () => app.openTask(task.id) });
+    }
+    if (e.type === "unblocked" && e.task) {
+      const task = e.task;
+      return app.toast(t("“{title}” is no longer blocked", { title: task.title }), "info", { label: t("View"), run: () => app.openTask(task.id) });
     }
     if (e.type === "incoming.changed" || !e.task) return;
     this.arrivals++;

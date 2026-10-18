@@ -14,7 +14,7 @@ const alive = new WeakSet<WebSocket>();
 
 export interface LiveEvent {
   /** task.sent: a task arrived in an incoming bucket; task.refused: one came back; incoming.changed: one left. */
-  type: "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "connection.request" | "connection.accepted" | "mention" | "hello";
+  type: "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello";
   spaceId?: string;
   task?: { id: string; number: number; title: string };
   by?: string;
