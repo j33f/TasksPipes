@@ -31,11 +31,19 @@ The web app loads its styles, scripts and font from the instance itself: the Int
 Font License, `web/src/assets/fonts/OFL.txt`). Browsers only reach the Outline server besides, for the profile
 pictures of Outline accounts.
 
+The port is published on `127.0.0.1` only (`APP_BIND`), so the app is reached through the proxy alone. This
+matters: the app trusts the client address the proxy sends in `X-Forwarded-For`, for logs and rate limits, and a
+client reaching the port directly could forge it. If the proxy runs on another machine, set `APP_BIND=0.0.0.0` and
+let only the proxy reach the port (firewall). A proxy in a container on the same Docker network reaches the app at
+`app:3000` and needs neither.
+
 ## Configuration
 
 | Variable | Purpose |
 | --- | --- |
 | `APP_URL` | Public URL of TasksPipes (OAuth callback, links in e-mails and calendars). |
+| `APP_PORT` | Port published on the host, 3000 by default. |
+| `APP_BIND` | Address that port is published on: `127.0.0.1` by default (only the proxy on this machine). |
 | `APP_SECRET` | At least 32 characters. Encrypts Outline tokens, TOTP secrets and calendar links in the database. |
 | `POSTGRES_PASSWORD` | Password of the bundled database (`DATABASE_URL` when running the server yourself). |
 | `OUTLINE_URL` | Optional Outline server known to the instance: needed for OAuth sign-in. It is never suggested on the sign-in page. |
@@ -155,8 +163,9 @@ of the app, they share it. If Redis cannot be reached, requests go through and a
 | GitHub / GitLab webhooks | 600 per minute | pipe token |
 | Calendar feeds | 60 per minute | feed |
 | `/healthz` | 120 per minute | address |
- The client address
-comes from the reverse proxy (`X-Forwarded-For`): keep the app reachable only through it.
+
+The client address comes from the reverse proxy (`X-Forwarded-For`): keep the app reachable only through it
+(`APP_BIND`, see above).
 
 ## Calendar subscription
 
