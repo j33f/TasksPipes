@@ -1,5 +1,7 @@
 # Translation
 
+> This guide is also online at [doc.taskspipes.com](https://doc.taskspipes.com) (and the project at [taskspipes.com](https://taskspipes.com)).
+
 TasksPipes is available in English, French and Spanish. The language follows the browser, unless chosen in
 **Settings** (account menu).
 

@@ -1,5 +1,7 @@
 # Hosting TasksPipes
 
+> This guide is also online at [doc.taskspipes.com](https://doc.taskspipes.com) (and the project at [taskspipes.com](https://taskspipes.com)).
+
 TasksPipes is a single Node.js container serving both the API and the web app, with a PostgreSQL database. The
 `docker-compose.yml` at the root of the repository runs both.
 

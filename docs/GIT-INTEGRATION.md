@@ -1,5 +1,7 @@
 # GitHub and GitLab integration
 
+> This guide is also online at [doc.taskspipes.com](https://doc.taskspipes.com) (and the project at [taskspipes.com](https://taskspipes.com)).
+
 A pipe can be connected to GitHub and GitLab repositories, like Jira: pull requests, merge requests and commits that
 name a task are linked to it, and the task moves along with its pull or merge request.
 
