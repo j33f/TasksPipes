@@ -15,6 +15,7 @@
   <a href="https://fastify.dev" rel="nofollow"><img src="https://img.shields.io/badge/Fastify-5-%23202020.svg" alt="Fastify 5"></a>
   <a href="docs/TRANSLATION.md"><img src="https://img.shields.io/badge/i18n-English%20%7C%20French%20%7C%20Spanish-%233ad984.svg" alt="English, French and Spanish"></a>
   <a href="https://github.com/j33f/TasksPipes/actions/workflows/ci.yml"><img src="https://github.com/j33f/TasksPipes/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://doc.taskspipes.com"><img src="https://img.shields.io/badge/docs-doc.taskspipes.com-%23111319.svg" alt="Documentation"></a>
   <a href="https://codecov.io/gh/j33f/TasksPipes"><img src="https://codecov.io/gh/j33f/TasksPipes/graph/badge.svg" alt="Coverage"></a>
 </p>
 
@@ -66,6 +67,9 @@ sales, prospecting, communication and admin pipes fit any business, the software
 personal life pipes and the Next action view make it a good household and personal to-do list, and the designer lets you create the
 pipe and task types you need.
 See [the feature guide](docs/FEATURES.md) for the details.
+
+The documentation is also online: [taskspipes.com](https://taskspipes.com) presents the project, and
+[doc.taskspipes.com](https://doc.taskspipes.com) hosts the guides of the `docs/` folder.
 
 # Installation
 

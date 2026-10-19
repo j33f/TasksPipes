@@ -1,5 +1,7 @@
 # Features
 
+> This guide is also online at [doc.taskspipes.com](https://doc.taskspipes.com) (and the project at [taskspipes.com](https://taskspipes.com)).
+
 TasksPipes was designed for an adult training centre, but fits other uses just as well:
 
 - **Training centres** — the built-in types cover course design, admissions, session starts, exams, learner and

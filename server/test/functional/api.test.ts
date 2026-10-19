@@ -112,5 +112,9 @@ describe("API documentation", () => {
     const ui = await app.inject({ method: "GET", url: "/api/v1/docs/" });
     expect(ui.statusCode).toBe(200);
     expect(ui.headers["content-type"]).toContain("text/html");
+    expect(ui.body).toContain("<title>TasksPipes API</title>");
+    const init = await app.inject({ method: "GET", url: "/api/v1/docs/static/swagger-initializer.js" });
+    const logo = Buffer.from(init.body.match(/data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)/)![1], "base64").toString();
+    expect(logo).toContain(">TasksPipes</text>");
   });
 });

@@ -1,5 +1,7 @@
 # Architecture
 
+> This guide is also online at [doc.taskspipes.com](https://doc.taskspipes.com) (and the project at [taskspipes.com](https://taskspipes.com)).
+
 TasksPipes is a TypeScript application in two parts, built into a single Docker image:
 
 ```

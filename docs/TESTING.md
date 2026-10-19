@@ -1,5 +1,7 @@
 # Testing
 
+> This guide is also online at [doc.taskspipes.com](https://doc.taskspipes.com) (and the project at [taskspipes.com](https://taskspipes.com)).
+
 TasksPipes is tested with [Vitest](https://vitest.dev) on both sides, at three levels:
 
 | Suite | Where | What it covers | Needs |
