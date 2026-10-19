@@ -43,7 +43,7 @@ export function sentence(lang: Locale, d: Delivery, task: string): string {
 // (and Discord hides text between || as a spoiler).
 const slackText = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const markdownText = (s: string) => s.replace(/([\\[\]*_`~])/g, "\\$1");
-const discordText = (s: string) => markdownText(s).replace(/[\\|]/g, "\\$&");
+const discordText = (s: string) => s.replace(/([\\[\]*_`~|])/g, "\\$1");
 
 /** The body posted to the channel, for a format other than "json". */
 export function chatBody(format: Exclude<Format, "json">, lang: Locale, d: Delivery): object {
