@@ -854,7 +854,7 @@
     "What you get at once is pushed to your devices. Nothing is sent for what you do yourself.": "Lo que recibes al momento se envía a tus dispositivos. No se envía nada por lo que haces tú.",
     "Notifications": "Notificaciones",
     "Signed JSON": "JSON firmado",
-    "They can also be posted to a Slack, Mattermost or Microsoft Teams channel: paste the channel's incoming webhook address and choose its format.": "También pueden publicarse en un canal de Slack, Mattermost o Microsoft Teams: pega la dirección del webhook entrante del canal y elige su formato.",
+    "They can also be posted to a Slack, Mattermost, Microsoft Teams or Discord channel: paste the channel's incoming webhook address and choose its format.": "También pueden publicarse en un canal de Slack, Mattermost, Microsoft Teams o Discord: pega la dirección del webhook entrante del canal y elige su formato.",
     "Language of the messages": "Idioma de los mensajes",
     "Format": "Formato",
     "Continue with {provider}": "Continuar con {provider}",
