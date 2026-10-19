@@ -183,6 +183,10 @@ const hidden: RouteOptions["handler"] = async () => {
   throw notFound("Not found");
 };
 
+/** The TasksPipes mark on the docs' dark top bar (docs/logo-dark.svg) and as their favicon (web/public/favicon.svg). */
+const DOCS_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" width="196" height="32" viewBox="0 0 196 32"><rect width="32" height="32" rx="8" fill="#fff"/><rect x="7" y="8" width="5" height="16" rx="2" fill="#111319"/><rect x="14" y="8" width="5" height="11" rx="2" fill="#111319" opacity=".75"/><rect x="21" y="8" width="5" height="7" rx="2" fill="#111319" opacity=".5"/><text x="42" y="23" font-family="Inter, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="22" font-weight="600" fill="#fff">TasksPipes</text></svg>`;
+const DOCS_FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#111319"/><rect x="7" y="8" width="5" height="16" rx="2" fill="#fff"/><rect x="14" y="8" width="5" height="11" rx="2" fill="#fff" opacity=".75"/><rect x="21" y="8" width="5" height="7" rx="2" fill="#fff" opacity=".5"/></svg>`;
+
 /** Swagger first (it records the routes registered after it), then /api/v1, built from the app's own routes. */
 export async function publicApi(app: FastifyInstance, apiRoutes: (app: FastifyInstance) => Promise<void>) {
   await app.register(swagger, {
@@ -198,7 +202,14 @@ export async function publicApi(app: FastifyInstance, apiRoutes: (app: FastifyIn
     },
     hideUntagged: true,
   });
-  await app.register(swaggerUi, { routePrefix: `${V1}/docs` });
+  await app.register(swaggerUi, {
+    routePrefix: `${V1}/docs`,
+    logo: { type: "image/svg+xml", content: DOCS_LOGO, href: config.appUrl, target: "_self" },
+    theme: {
+      title: "TasksPipes API",
+      favicon: [{ filename: "favicon.svg", rel: "icon", type: "image/svg+xml", sizes: "any", content: DOCS_FAVICON }],
+    },
+  });
   app.get(`${V1}/openapi.json`, { schema: { hide: true } }, async () => app.swagger());
 
   await app.register(async (v1) => {
