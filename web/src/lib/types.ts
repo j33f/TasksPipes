@@ -489,7 +489,7 @@ export interface Webhook {
   events: string[];
   active: boolean;
   /** Signed JSON, or a message for a chat channel. */
-  format: "json" | "slack" | "mattermost" | "teams";
+  format: "json" | "slack" | "mattermost" | "teams" | "discord";
   locale: string;
   secret: string;
   createdAt: string;
