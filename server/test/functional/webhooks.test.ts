@@ -82,7 +82,7 @@ describe("outgoing webhooks", () => {
     expect(slack).toMatchObject({ format: "slack", locale: "en" });
     const teams = (await alice.post(`/api/pipes/${pipe}/webhooks`, { url, events: ["task.created"], format: "teams", locale: "fr" })).body;
     expect(teams.locale).toBe("fr");
-    expect((await alice.post(`/api/pipes/${pipe}/webhooks`, { url, events: ["task.created"], format: "discord" })).body.error).toBe("Invalid format");
+    expect((await alice.post(`/api/pipes/${pipe}/webhooks`, { url, events: ["task.created"], format: "irc" })).body.error).toBe("Invalid format");
     expect((await alice.patch(`/api/webhooks/${slack.id}`, { locale: "de" })).body.error).toBe("Invalid language");
     const id = (await alice.post("/api/tasks", { title: "Chat task", pipeId: pipe })).body.id;
     await alice.post(`/api/tasks/${id}/comments`, { body: "Ship it" });
@@ -96,6 +96,7 @@ describe("outgoing webhooks", () => {
     expect(created.headers["x-taskspipes-signature"]).toBe(signature(slack.secret, Number(created.headers["x-taskspipes-timestamp"]), created.body));
     // A format can be changed.
     expect((await alice.patch(`/api/webhooks/${slack.id}`, { format: "mattermost" })).body.format).toBe("mattermost");
+    expect((await alice.patch(`/api/webhooks/${slack.id}`, { format: "discord" })).body.format).toBe("discord");
   });
 
   it("are retried with growing delays, then given up", async () => {

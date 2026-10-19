@@ -21,6 +21,7 @@
     { id: "slack", label: () => "Slack", placeholder: "https://hooks.slack.com/services/…" },
     { id: "mattermost", label: () => "Mattermost", placeholder: "https://mattermost.example.com/hooks/…" },
     { id: "teams", label: () => "Microsoft Teams", placeholder: "https://….logic.azure.com/workflows/…" },
+    { id: "discord", label: () => "Discord", placeholder: "https://discord.com/api/webhooks/…" },
   ];
   const LANGUAGES = LOCALES;
   const formatLabel = (f: Webhook["format"]) => FORMATS.find((x) => x.id === f)!.label();
@@ -61,7 +62,7 @@
 
 <Modal title={t("Webhooks")} {onclose} large>
   <p class="small">{t("Task events of this pipe are sent as JSON to an https address, signed with the webhook's secret (HMAC-SHA256 of “timestamp.body”, header X-TasksPipes-Signature), and retried for about 15 hours.")}</p>
-  <p class="small">{t("They can also be posted to a Slack, Mattermost or Microsoft Teams channel: paste the channel's incoming webhook address and choose its format.")}</p>
+  <p class="small">{t("They can also be posted to a Slack, Mattermost, Microsoft Teams or Discord channel: paste the channel's incoming webhook address and choose its format.")}</p>
   {#each hooks as h (h.id)}
     <div class="hook">
       <div class="row">

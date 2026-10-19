@@ -1,10 +1,11 @@
 /**
- * Webhooks posting to a chat channel (Slack, Mattermost, Microsoft Teams) through its incoming webhook: the delivery
- * of a pipe's webhook (webhooks.ts) is written as a short message, in the webhook's language, with a link to the task.
+ * Webhooks posting to a chat channel (Slack, Mattermost, Microsoft Teams, Discord) through its incoming webhook: the
+ * delivery of a pipe's webhook (webhooks.ts) is written as a short message, in the webhook's language, with a link to
+ * the task.
  */
 import { localize, tr, type Locale } from "./i18n.js";
 
-export const FORMATS = ["json", "slack", "mattermost", "teams"] as const;
+export const FORMATS = ["json", "slack", "mattermost", "teams", "discord"] as const;
 export type Format = (typeof FORMATS)[number];
 
 /** The parts of a delivery a message uses (see payload() in webhooks.ts). */
@@ -38,9 +39,11 @@ export function sentence(lang: Locale, d: Delivery, task: string): string {
   }
 }
 
-// Slack's text escapes &, < and >; Mattermost and Teams read Markdown, where brackets would break a link.
+// Slack's text escapes &, < and >; Mattermost, Teams and Discord read Markdown, where brackets would break a link
+// (and Discord hides text between || as a spoiler).
 const slackText = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const markdownText = (s: string) => s.replace(/([\\[\]*_`~])/g, "\\$1");
+const discordText = (s: string) => s.replace(/([\\[\]*_`~|])/g, "\\$1");
 
 /** The body posted to the channel, for a format other than "json". */
 export function chatBody(format: Exclude<Format, "json">, lang: Locale, d: Delivery): object {
@@ -55,6 +58,12 @@ export function chatBody(format: Exclude<Format, "json">, lang: Locale, d: Deliv
         ...(quote ? [{ type: "section", text: { type: "mrkdwn", text: `> ${slackText(quote).replace(/\n/g, "\n> ")}` } }] : []),
       ],
     };
+  }
+  if (format === "discord") {
+    const task = d.task ? `[${discordText(`${d.task.key} ${d.task.title}`)}](${d.task.url})` : "";
+    const text = discordText(sentence(lang, d, "\u0000")).replace("\u0000", task);
+    // No @everyone, role or user ping from a task's title or a comment.
+    return { content: quote ? `${text}\n> ${discordText(quote).replace(/\n/g, "\n> ")}` : text, allowed_mentions: { parse: [] } };
   }
   const task = d.task ? `[${markdownText(`${d.task.key} ${d.task.title}`)}](${d.task.url})` : "";
   const text = markdownText(sentence(lang, d, "\u0000")).replace("\u0000", task);

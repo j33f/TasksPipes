@@ -29,7 +29,7 @@ Outline through its RPC-style API.
 | `access.ts` | Who may see and do what on a task (`taskPermissions`), shared by the API and the notifications. |
 | `pipe-io.ts`, `csv.ts` | Export of a pipe's tasks (CSV, JSON) and their import (CSV with column mapping, Trello JSON), checked line by line; a CSV reader and writer without dependency. |
 | `api.ts` | Personal access tokens and `/api/v1`: the app's own routes, those documented answering (OpenAPI with [@fastify/swagger](https://github.com/fastify/fastify-swagger), Swagger UI). |
-| `chat.ts` | Messages of webhooks posting to Slack, Mattermost or Microsoft Teams channels. |
+| `chat.ts` | Messages of webhooks posting to Slack, Mattermost, Microsoft Teams or Discord channels. |
 | `webhooks.ts` | Outgoing webhooks of pipes: deliveries queued with the history, signed, sent and retried in the background. |
 | `net.ts` | Requests to servers people choose (Outline servers, webhooks): internal addresses refused when connecting. |
 | `recurrence.ts` | Recurring tasks: the dates of a rule, and the scheduler pass making each occurrence once. |

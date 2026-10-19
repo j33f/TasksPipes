@@ -28,6 +28,12 @@ describe("chat messages", () => {
     expect(mm.text).toBe("Alice commented on [TP-12 Fix <login> & \\[menu\\]](https://tasks.test/pipes/p?task=t)\n> Looks \\*good\\*");
   });
 
+  it("are Discord messages with a link, pinging no one", () => {
+    const body = chatBody("discord", "en", d({ event: "task.commented", comment: "@everyone ||look||" })) as { content: string; allowed_mentions: unknown };
+    expect(body.content).toBe("Alice commented on [TP-12 Fix <login> & \\[menu\\]](https://tasks.test/pipes/p?task=t)\n> @everyone \\|\\|look\\|\\|");
+    expect(body.allowed_mentions).toEqual({ parse: [] });
+  });
+
   it("are Adaptive Cards for Teams, with a button to the task", () => {
     const body = chatBody("teams", "fr", d({ event: "task.done" })) as any;
     const card = body.attachments[0];
