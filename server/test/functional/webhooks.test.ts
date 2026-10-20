@@ -87,7 +87,12 @@ describe("outgoing webhooks", () => {
     const id = (await alice.post("/api/tasks", { title: "Chat task", pipeId: pipe })).body.id;
     await alice.post(`/api/tasks/${id}/comments`, { body: "Ship it" });
     expect(await runWebhooks()).toBe(3);
-    const [created, card, commented] = received;
+    // The two task.created deliveries (Slack and Teams) may be written in either order, so match each by its
+    // event and shape rather than by position.
+    const ev = (r: Received) => r.headers["x-taskspipes-event"];
+    const created = received.find((r) => ev(r) === "task.created" && "text" in r.json)!; // Slack
+    const card = received.find((r) => ev(r) === "task.created" && "attachments" in r.json)!; // Teams, in French
+    const commented = received.find((r) => ev(r) === "task.commented")!; // Slack
     // Slack's link: <url|label>.
     expect(created.json.text).toMatch(new RegExp(`^Alice Martin created <[^|>]+\\?task=${id}\\|TP-\\d+ Chat task> in Board$`));
     expect(card.json.attachments[0].content.body[0].text).toMatch(/^Alice Martin a créé \[TP-\d+ Chat task\]\(.+\) dans Board$/);

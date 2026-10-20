@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { agent, signIn, signInWithLink, startApp, stopApp, type Agent } from "./helpers.js";
 import { LIMITS, resetAllRates } from "../../src/rate-limit.js";
+import { one, query } from "../../src/db.js";
 
 let app: FastifyInstance, alice: Agent, bob: Agent;
 
@@ -52,5 +53,26 @@ describe("profile pictures", () => {
       });
       expect(upload.statusCode).toBe(400);
     }
+  });
+});
+
+describe("invitations by e-mail", () => {
+  it("do not match an Outline account from a self-chosen server that claims someone's address", async () => {
+    // An attacker signs in through their own Outline server, which asserts a victim's address: that address is
+    // not theirs, so inviting it must reach a fresh account, never hand the invitation to the attacker.
+    const victim = "spoof-victim@partner.example";
+    const spoofer = await one(
+      `INSERT INTO users (id, name, email, auth_kind, outline_url, outline_id)
+       VALUES (gen_uuidv7(), 'Spoofer', $1, 'outline', 'https://attacker.example', 'spoof-1') RETURNING id`,
+      [victim]
+    );
+
+    const res = await alice.post("/api/invitations", { email: victim, name: "Real Victim" });
+    // A brand-new e-mail account is created, not a connection request to the spoofer.
+    expect(res.body.created).toBe(true);
+
+    const { rows } = await query(`SELECT auth_kind FROM users WHERE lower(email) = $1 ORDER BY auth_kind`, [victim]);
+    expect(rows.map((r) => r.auth_kind)).toEqual(["email", "outline"]); // the new one, and the untouched spoofer
+    expect((await query(`SELECT 1 FROM invitations WHERE invitee_id = $1`, [spoofer!.id])).rows).toHaveLength(0);
   });
 });
