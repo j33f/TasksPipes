@@ -673,8 +673,16 @@ export async function apiRoutes(app: FastifyInstance) {
     if (teamId) await requireTeamAdmin(teamId, uid);
 
     // Someone already on the platform (an e-mail account first, else an Outline account of this server).
+    // Only accounts whose address is trusted are matched: e-mail accounts (proven by their sign-in link),
+    // company sign-in accounts with a verified e-mail, and Outline accounts of this instance's own server.
+    // An Outline account from a server people choose themselves asserts its own e-mail, so it must not match
+    // (otherwise claiming someone's address there would hijack invitations meant for them).
     const existing = await one(
-      `SELECT id, name, email, locale, disabled_reason FROM users WHERE lower(email) = $1 AND id <> $2
+      `SELECT id, name, email, locale, disabled_reason FROM users
+       WHERE lower(email) = $1 AND id <> $2
+         AND (auth_kind = 'email'
+              OR (auth_kind = 'oidc' AND oidc_email_verified)
+              OR (auth_kind = 'outline' AND outline_url = $3))
        ORDER BY auth_kind = 'email' DESC, outline_url = $3 DESC NULLS LAST LIMIT 1`,
       [email, uid, config.outlineUrl]
     );
