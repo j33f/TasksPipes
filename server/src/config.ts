@@ -91,12 +91,19 @@ export const config = {
   /** Lets outgoing webhooks reach internal addresses and plain http (a receiver on the same network, tests). */
   webhookAllowPrivate: process.env.WEBHOOK_ALLOW_PRIVATE === "true",
   /**
-   * Web Push: the server's VAPID key pair (base64url, as `npx web-push generate-vapid-keys` prints them). Without
-   * them, a key is derived from APP_SECRET. The subject is a contact for push services (mailto: or https:).
+   * Web Push: the server's VAPID key pair (base64url, as `npx web-push generate-vapid-keys` prints them), set in the
+   * environment or in Administration › Settings. Without them, a key is derived from APP_SECRET. The subject is a
+   * contact for push services (mailto: or https:), falling back to the app's URL.
    */
-  vapidPublicKey: process.env.VAPID_PUBLIC_KEY || "",
-  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY || "",
-  vapidSubject: process.env.VAPID_SUBJECT || (appUrl.startsWith("https:") ? appUrl : "mailto:admin@localhost"),
+  get vapidPublicKey() {
+    return s<string>("push.vapidPublicKey");
+  },
+  get vapidPrivateKey() {
+    return s<string>("push.vapidPrivateKey");
+  },
+  get vapidSubject() {
+    return s<string>("push.vapidSubject") || (appUrl.startsWith("https:") ? appUrl : "mailto:admin@localhost");
+  },
   /**
    * Company sign-in with OpenID Connect, for accounts without Outline (oidc.ts): the provider (issuer URL), the
    * client registered there, the button's label and the scopes asked. OIDC_ALLOWED_DOMAINS limits sign-in to some

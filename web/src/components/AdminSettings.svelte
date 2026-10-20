@@ -89,6 +89,21 @@
       busy = null;
     }
   }
+
+  // Fills the key fields with a fresh pair; the administrator then saves the section to use it.
+  async function generateVapid() {
+    busy = "push";
+    try {
+      const r = await api.post<{ publicKey: string; privateKey: string }>("/admin/settings/vapid-keys");
+      draft["push.vapidPublicKey"] = r.publicKey;
+      draft["push.vapidPrivateKey"] = r.privateKey;
+      app.toast(t("A key pair was generated — review and save."));
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    } finally {
+      busy = null;
+    }
+  }
 </script>
 
 {#if error}<p class="error-text" role="alert">{error}</p>{/if}
@@ -132,6 +147,9 @@
         <button class="btn small" disabled={busy !== null} onclick={() => save(section.id)}>{t("Save")}</button>
         {#if section.id === "smtp"}
           <button class="btn neutral small" disabled={busy !== null} onclick={testMail}>{t("Send me a test e-mail")}</button>
+        {/if}
+        {#if section.id === "push"}
+          <button class="btn neutral small" disabled={busy !== null} onclick={generateVapid}>{t("Generate a key pair")}</button>
         {/if}
       </div>
     </section>

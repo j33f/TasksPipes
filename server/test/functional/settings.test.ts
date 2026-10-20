@@ -67,6 +67,24 @@ describe("instance settings", () => {
     }
   });
 
+  it("configure push notifications: generate, save and use a VAPID key pair", async () => {
+    const pair = (await alice.post("/api/admin/settings/vapid-keys")).body as { publicKey: string; privateKey: string };
+    expect(Buffer.from(pair.publicKey, "base64url")).toHaveLength(65);
+    expect(Buffer.from(pair.privateKey, "base64url")).toHaveLength(32);
+    // Only administrators may generate a pair.
+    expect((await bob.post("/api/admin/settings/vapid-keys")).status).toBe(404);
+
+    const saved = (await put(alice, { "push.vapidPublicKey": pair.publicKey, "push.vapidPrivateKey": pair.privateKey })).body;
+    expect(find(saved.settings, "push.vapidPublicKey")).toMatchObject({ value: pair.publicKey });
+    expect(find(saved.settings, "push.vapidPrivateKey")).toMatchObject({ value: null, isSet: true });
+    // The server now signs with the saved key, and offers its public key to the browsers (the cache was rebuilt).
+    expect((await alice.get("/api/push/key")).body.publicKey).toBe(pair.publicKey);
+
+    // A value that is not a base64url key of the right length is refused.
+    expect((await put(alice, { "push.vapidPublicKey": "not a key" })).body.error).toBe("Invalid value for push.vapidPublicKey");
+    expect((await put(alice, { "push.vapidPrivateKey": "too-short" })).body.error).toBe("Invalid value for push.vapidPrivateKey");
+  });
+
   it("limit the domains people may be invited from", async () => {
     await put(alice, { "signin.emailDomains": ["example.org"] });
     expect((await bob.post("/api/invitations", { email: "someone@elsewhere.test", name: "X" })).body.error).toBe("Addresses of this domain cannot be invited here");

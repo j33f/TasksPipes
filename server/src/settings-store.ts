@@ -11,7 +11,7 @@ export interface SettingDef {
   key: string;
   env: string;
   kind: SettingKind;
-  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc";
+  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push";
   default: string | number | boolean | string[] | null;
 }
 
@@ -46,6 +46,11 @@ export const SETTINGS: SettingDef[] = [
   { key: "oidc.name", env: "OIDC_NAME", kind: "string", section: "oidc", default: "SSO" },
   { key: "oidc.scopes", env: "OIDC_SCOPES", kind: "string", section: "oidc", default: "openid email profile" },
   { key: "oidc.allowedDomains", env: "OIDC_ALLOWED_DOMAINS", kind: "list", section: "oidc", default: [] },
+
+  // Web Push (push.ts). Empty keys: one is derived from APP_SECRET. The subject is a contact for push services.
+  { key: "push.vapidPublicKey", env: "VAPID_PUBLIC_KEY", kind: "string", section: "push", default: "" },
+  { key: "push.vapidPrivateKey", env: "VAPID_PRIVATE_KEY", kind: "secret", section: "push", default: "" },
+  { key: "push.vapidSubject", env: "VAPID_SUBJECT", kind: "string", section: "push", default: "" },
 ];
 
 export const settingDef = (key: string) => SETTINGS.find((d) => d.key === key);

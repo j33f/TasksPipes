@@ -58,10 +58,13 @@ interface Vapid {
 }
 
 let vapid: Vapid | null = null;
+// The private key the cache was built from, so a change in the settings rebuilds it ("\0derived": from APP_SECRET).
+let vapidFrom: string | null = null;
 
-/** VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY (base64url), else a key derived from APP_SECRET. */
+/** The configured VAPID key (base64url), else one derived from APP_SECRET; rebuilt when the setting changes. */
 export function vapidKeys(): Vapid {
-  if (vapid) return vapid;
+  const from = config.vapidPrivateKey || "\0derived";
+  if (vapid && vapidFrom === from) return vapid;
   const ecdh = crypto.createECDH("prime256v1");
   if (config.vapidPrivateKey) {
     ecdh.setPrivateKey(fromB64u(config.vapidPrivateKey));
@@ -77,7 +80,15 @@ export function vapidKeys(): Vapid {
     format: "jwk",
   });
   vapid = { publicKey: b64u(pub), key };
+  vapidFrom = from;
   return vapid;
+}
+
+/** A fresh VAPID key pair (base64url), for an administrator to store in the settings. */
+export function generateVapidKeys(): { publicKey: string; privateKey: string } {
+  const ecdh = crypto.createECDH("prime256v1");
+  ecdh.generateKeys();
+  return { publicKey: b64u(ecdh.getPublicKey()), privateKey: b64u(ecdh.getPrivateKey()) };
 }
 
 /** The Authorization header for a push service: a JWT signed with the VAPID key, for 12 hours. */

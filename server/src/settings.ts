@@ -13,10 +13,13 @@ import { isEmail, sendLinkMail, verifyMail } from "./mail.js";
 import { closeUserConnections } from "./realtime.js";
 import { LIMITS, rateLimited } from "./rate-limit.js";
 import { localeOf, tr } from "./i18n.js";
+import { generateVapidKeys } from "./push.js";
 import { SETTINGS, lockedSetting, setting, settingDef, storedSetting, type SettingDef } from "./settings-store.js";
 
 const HOST = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+/** A base64url value decoding to exactly `bytes` bytes (a VAPID key: 65 for the public point, 32 for the private). */
+const isVapidKey = (s: string, bytes: number) => /^[A-Za-z0-9_-]+$/.test(s) && Buffer.from(s, "base64url").length === bytes;
 
 /** A value sent by the administration page, checked; null puts the default back. */
 export function cleanSetting(def: SettingDef, v: unknown): unknown {
@@ -55,6 +58,8 @@ export function cleanSetting(def: SettingDef, v: unknown): unknown {
       if (typeof v !== "string" || v.length > 500) throw bad("Invalid value for {key}", label);
       const s = def.kind === "secret" ? v : v.trim();
       if (def.key === "smtp.from" && s && !isEmail(s.match(/<([^>]+)>\s*$/)?.[1] ?? s)) throw bad("Invalid value for {key}", label);
+      if (def.key === "push.vapidPublicKey" && s && !isVapidKey(s, 65)) throw bad("Invalid value for {key}", label);
+      if (def.key === "push.vapidPrivateKey" && s && !isVapidKey(s, 32)) throw bad("Invalid value for {key}", label);
       return s;
     }
   }
@@ -219,6 +224,9 @@ export async function settingsRoutes(app: FastifyInstance) {
     }
     return { ok: true, to };
   });
+
+  // A fresh VAPID key pair for push notifications, for the administrator to review and save.
+  app.post("/admin/settings/vapid-keys", rateLimited(LIMITS.adminSettings), async () => generateVapidKeys());
 
   app.get("/admin/settings/history", async () => {
     const { rows } = await query(
