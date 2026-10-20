@@ -2,8 +2,8 @@
 
 > This guide is also online at [doc.taskspipes.com](https://doc.taskspipes.com) (and the project at [taskspipes.com](https://taskspipes.com)).
 
-TasksPipes is available in English, French and Spanish. The language follows the browser, unless chosen in
-**Settings** (account menu).
+TasksPipes is available in English, French, Spanish and Portuguese (Brazil and Portugal). The language follows the
+browser, unless chosen in **Settings** (account menu).
 
 ## How it works
 
@@ -32,7 +32,8 @@ A language file holds:
 
 The web app bundles every file of `locales/` when it is built; the server reads them when it starts. The web app
 sends its language with each request (`X-Locale` header); otherwise the server uses the browser's `Accept-Language`,
-then `DEFAULT_LOCALE`.
+then `DEFAULT_LOCALE`. A browser language matches a file by its full tag first, then by its first two letters:
+`pt-BR` gets `pt-BR.json`, while `pt-PT` or `pt-AO` get `pt.json`.
 
 The built-in catalog is the exception: it describes French training centres, so it is written in French, and the
 `catalog` part translates it from French (the French file has none). Choice-list options keep their French value,
@@ -41,7 +42,8 @@ English.
 
 ## Adding a language
 
-1. Copy `locales/fr.json` to `locales/<code>.json` (a two- or three-letter code: `de`, `it`, `pt`, `nl`…).
+1. Copy `locales/fr.json` to `locales/<code>.json` (a two- or three-letter code: `de`, `it`, `nl`…, or with a region
+   for a variant of a language, like `pt-BR`).
 2. Set `name`, `intl` and `csvSeparator`, and translate the values of `web` and `server` (the keys are the English
    texts). Translate `catalog` from `locales/en.json`: its keys are the French labels, its values their English
    version.

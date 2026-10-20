@@ -13,7 +13,7 @@
   <a href="http://www.typescriptlang.org" rel="nofollow"><img src="https://img.shields.io/badge/%3C%2F%3E-TypeScript-%230074c1.svg" alt="TypeScript"></a>
   <a href="https://svelte.dev" rel="nofollow"><img src="https://img.shields.io/badge/Svelte-5-%23ff3e00.svg" alt="Svelte 5"></a>
   <a href="https://fastify.dev" rel="nofollow"><img src="https://img.shields.io/badge/Fastify-5-%23202020.svg" alt="Fastify 5"></a>
-  <a href="docs/TRANSLATION.md"><img src="https://img.shields.io/badge/i18n-English%20%7C%20French%20%7C%20Spanish-%233ad984.svg" alt="English, French and Spanish"></a>
+  <a href="docs/TRANSLATION.md"><img src="https://img.shields.io/badge/i18n-English%20%7C%20French%20%7C%20Spanish%20%7C%20Portuguese-%233ad984.svg" alt="English, French, Spanish and Portuguese"></a>
   <a href="https://github.com/j33f/TasksPipes/actions/workflows/ci.yml"><img src="https://github.com/j33f/TasksPipes/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://doc.taskspipes.com"><img src="https://img.shields.io/badge/docs-doc.taskspipes.com-%23111319.svg" alt="Documentation"></a>
   <a href="https://codecov.io/gh/j33f/TasksPipes"><img src="https://codecov.io/gh/j33f/TasksPipes/graph/badge.svg" alt="Coverage"></a>
@@ -59,7 +59,7 @@ follows Outline's look and feel.
   signed webhooks sending a pipe's task events to your tools.
 - **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
   keeps a “Deleted account”), and administrators of the instance can disable accounts.
-- **Sub-tasks, history, live updates**, English, French and Spanish (a language is one file), light and dark themes.
+- **Sub-tasks, history, live updates**, English, French, Spanish and Portuguese (Brazil and Portugal; a language is one file), light and dark themes.
 
 TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:
 course design, admissions, exams, Qualiopi quality, funding… But nothing ties it to training: the general,
