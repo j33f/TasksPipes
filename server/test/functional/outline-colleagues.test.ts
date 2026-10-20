@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { signIn, startApp, stopApp, type Agent } from "./helpers.js";
 import { notificationState, runNotifications } from "../../src/notifications.js";
+import { query } from "../../src/db.js";
 
 // Dave is in the Outline workspace (imported when Alice signs in) but never signed in to TasksPipes.
 const DAVE = "44444444-4444-4444-8444-444444444444";
@@ -16,7 +17,12 @@ beforeAll(async () => {
   daveSpace = dave.spaceId;
   alicePipe = (await alice.get("/api/sidebar")).body.mine.find((p: { isDefault: boolean }) => p.isDefault).id;
 });
-afterAll(stopApp);
+afterAll(async () => {
+  // The last test signs Dave in; the suite shares one database, so undo it and leave him as imported —
+  // never signed in — for whichever file runs next (mentions.test.ts asserts he cannot be mentioned).
+  await query(`UPDATE users SET last_login_at = NULL WHERE id = $1`, [DAVE]);
+  await stopApp();
+});
 
 describe("Outline colleagues who never signed in", () => {
   const notYet = "Dave Leroy has not signed in to TasksPipes yet: invite them first.";
