@@ -356,7 +356,7 @@ Invitations can be turned off for the whole instance (`ALLOW_EMAIL_INVITATIONS=f
 Your name at the bottom of the sidebar opens a menu, like Outline's:
 
 - **Invite people** — invite someone by e-mail (when invitations are on);
-- **Settings** — language (English, French or Spanish — one file per language, see [TRANSLATION.md](TRANSLATION.md) — following the browser unless chosen), theme (automatic, light or
+- **Settings** — language (English, French, Spanish or Portuguese of Brazil or Portugal — one file per language, see [TRANSLATION.md](TRANSLATION.md) — following the browser unless chosen), theme (automatic, light or
   dark), name and picture of e-mail accounts, two-factor authentication, invitations and requests to connect;
 - **Calendar** — your calendar subscription link;
 - **About** — the version, a link to the source code on GitHub and the license;
