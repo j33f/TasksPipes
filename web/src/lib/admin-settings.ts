@@ -3,7 +3,7 @@
 /** One setting of the instance, as the server shows it (a secret's value never comes back). */
 export interface Setting {
   key: string;
-  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc";
+  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push";
   kind: "string" | "url" | "bool" | "int" | "list" | "secret";
   locked: boolean;
   env: string;
@@ -39,6 +39,9 @@ export const LABELS: Record<string, [string, string?]> = {
   "oidc.name": ["Button label", "Shown as “Continue with …”"],
   "oidc.scopes": ["Scopes"],
   "oidc.allowedDomains": ["E-mail domains allowed (optional)", "One per line; empty: every domain"],
+  "push.vapidPublicKey": ["Public key (VAPID)", "base64url; generate a pair below, or leave empty to derive one from the app's secret"],
+  "push.vapidPrivateKey": ["Private key (VAPID)"],
+  "push.vapidSubject": ["Contact for push services", "A mailto: or https: address; defaults to the app's address"],
 };
 export const SECTIONS: { id: Setting["section"]; title: string; intro: string }[] = [
   { id: "smtp", title: "E-mail (SMTP)", intro: "Sign-in links, invitations, notifications and reports." },
@@ -46,4 +49,5 @@ export const SECTIONS: { id: Setting["section"]; title: string; intro: string }[
   { id: "outlineOauth", title: "Outline OAuth", intro: "Sign-in with Outline in one click: create an application in Outline › Settings › Applications with this redirect URL." },
   { id: "signin", title: "Accounts without Outline", intro: "Accounts that sign in with links sent by e-mail." },
   { id: "oidc", title: "Company sign-in (OpenID Connect)", intro: "Any OpenID Connect provider (Keycloak, Okta, Entra ID…): register a confidential client with this redirect URL." },
+  { id: "push", title: "Push notifications", intro: "Notifications on people's devices, next to e-mail. Without a key pair, one is derived from the app's secret." },
 ];
