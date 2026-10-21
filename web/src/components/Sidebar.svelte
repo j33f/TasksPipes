@@ -221,12 +221,23 @@
       <div class="sidebar-section">
         {@render foldTitle("people", t("People"), people.length, app.me?.features.invitations ? () => (showInvite = true) : undefined, t("Invite by e-mail"))}
         {#if isOpen("people")}
-          {#each people as s (s.id)}
-            {#if awaitingSignIn(s) && s.userId}
-              {@const userId = s.userId}
-              <div class="sidebar-link has-disclosure hover-actions muted" class:active={router.path === `/spaces/${s.id}`}>
-                <span class="disclosure-space"></span>
-                <a class="row-link" href={`/spaces/${s.id}`} title={t("{name} (has not signed in yet)", { name: s.name })}>
+          <!-- Outline colleagues who never signed in stand apart, not indented, under their own heading. -->
+          {@const joined = people.filter((s) => !(awaitingSignIn(s) && s.userId))}
+          {@const notJoined = people.filter((s) => awaitingSignIn(s) && s.userId)}
+          {#each joined as s (s.id)}
+            <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}
+              href={`/spaces/${s.id}`} title={s.active ? s.name : t("{name} (has not signed in yet)", { name: s.name })}>
+              <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
+              {#if s.guest}<span class="guest" title={t("Invited by e-mail")}><Icon name="mail" size={14} /></span>{/if}
+              {#if s.pipeCount}<span class="count neutral">{s.pipeCount}</span>{/if}
+            </a>
+          {/each}
+          {#if notJoined.length}
+            <div class="subgroup-title">{t("Not joined")}</div>
+            {#each notJoined as s (s.id)}
+              {@const userId = s.userId!}
+              <div class="sidebar-link hover-actions muted" class:active={router.path === `/spaces/${s.id}`}>
+                <a class="row-link flat" href={`/spaces/${s.id}`} title={t("{name} (has not signed in yet)", { name: s.name })}>
                   <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
                 </a>
                 <span class="actions">
@@ -235,15 +246,8 @@
                   </button>
                 </span>
               </div>
-            {:else}
-              <a class="sidebar-link" class:active={router.path === `/spaces/${s.id}`} class:muted={!s.active}
-                href={`/spaces/${s.id}`} title={s.active ? s.name : t("{name} (has not signed in yet)", { name: s.name })}>
-                <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
-                {#if s.guest}<span class="guest" title={t("Invited by e-mail")}><Icon name="mail" size={14} /></span>{/if}
-                {#if s.pipeCount}<span class="count neutral">{s.pipeCount}</span>{/if}
-              </a>
-            {/if}
-          {/each}
+            {/each}
+          {/if}
         {/if}
       </div>
     {/if}
@@ -370,6 +374,10 @@
   .sidebar-scroll { flex: 1; overflow-y: auto; padding: 4px 8px 16px; }
   .sidebar-section { margin-top: 16px; }
   .sidebar-section.first { margin-top: 0; }
+  /* "Me" links line up with "My pipes", whose disclosure chevron offsets its icon by the chevron column. */
+  .sidebar-section.first > a.sidebar-link,
+  .sidebar-section.first > button.sidebar-link { padding-left: 24px; }
+  .subgroup-title { font-size: 12px; font-weight: 500; color: var(--text-tertiary); padding: 8px 8px 2px; }
   .fold { width: 100%; border: 0; background: none; font: inherit; font-size: 13px; cursor: pointer; padding-left: 0; justify-content: flex-start; gap: 0; border-radius: var(--radius); }
   .fold:hover { color: var(--text); }
   .fold .disclosure { width: 20px; height: 20px; margin-right: 0; }
@@ -409,6 +417,7 @@
   .disclosure.open :global(svg) { transform: rotate(90deg); }
   .pipe-link { font-size: 14px; min-height: 30px; gap: 0; padding-right: 4px; }
   .pipe-link .row-link { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
+  .row-link.flat { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; color: inherit; text-decoration: none; }
   .pipe-link.nested { padding-left: 30px; }
   .space-name { color: var(--text-tertiary); font-weight: 400; }
   .rename {
@@ -418,6 +427,8 @@
   .actions { display: none; align-items: center; gap: 2px; flex-shrink: 0; }
   .hover-actions:hover .actions, .hover-actions:focus-within .actions, .hover-actions.menu-open .actions { display: flex; }
   .hover-actions:hover, .hover-actions.menu-open { background: var(--sidebar-hover); color: var(--text); }
+  /* Touch devices have no hover, and tapping a row navigates: keep the "+" and "…" actions reachable there. */
+  @media (hover: none) { .hover-actions .actions { display: flex; } }
   .act {
     border: 0; background: none; padding: 3px; border-radius: 4px; cursor: pointer; color: var(--text-tertiary);
     display: flex; align-items: center;
