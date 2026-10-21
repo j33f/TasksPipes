@@ -52,6 +52,10 @@
   let newTaskPipe = $state<SidebarPipe | null>(null);
   let editing = $state<SidebarPipe | null>(null);
   let reporting = $state<SidebarPipe | null>(null);
+  // Read null-safely: a menu item sets menu = null, and the menu's template re-evaluates before it unmounts.
+  const menuPipe = $derived(menu?.pipe ?? null);
+  const menuPinned = $derived(menuPipe ? app.isPinned(menuPipe.id) : false);
+  const menuOpenCount = $derived(menuPipe ? openTaskCount(menuPipe.counts) : 0);
 
   function openMenu(e: MouseEvent, pipe: SidebarPipe) {
     if (menu?.pipe.id === pipe.id) return (menu = null);
@@ -327,25 +331,26 @@
 
 <svelte:window onmousedown={closeMenuOutside} onkeydown={(e) => e.key === "Escape" && ((menu = null), (userMenu = false))} onresize={() => (menu = null)} />
 
-{#if menu}
-  {@const p = menu.pipe}
-  {@const pinned = app.isPinned(p.id)}
-  {@const open = openTaskCount(p.counts)}
-  <div class="pipe-menu" style={menu.style} bind:this={menuEl} role="menu">
-    <button class="menu-item" role="menuitem" onclick={() => { menu = null; newTaskPipe = p; }}><Icon name="plus" size={16} />{t("New task")}</button>
+{#if menu && menuPipe}
+  {@const p = menuPipe}
+  {@const pinned = menuPinned}
+  {@const open = menuOpenCount}
+  <div class="pipe-menu" style={menu?.style} bind:this={menuEl} role="menu">
+    <button class="menu-item" role="menuitem" onclick={() => { newTaskPipe = p; menu = null; }}><Icon name="plus" size={16} />{t("New task")}</button>
     {#if p.canManage}
-      <button class="menu-item" role="menuitem" onclick={() => { menu = null; renamingId = p.id; }}><Icon name="edit" size={16} />{t("Rename")}</button>
-      <button class="menu-item" role="menuitem" onclick={() => { menu = null; editing = p; }}><Icon name="settings" size={16} />{t("Icon, colour, type…")}</button>
-      <button class="menu-item" role="menuitem" onclick={() => { menu = null; reporting = p; }}><Icon name="chart" size={16} />{t("Reports")}</button>
+      <button class="menu-item" role="menuitem" onclick={() => { renamingId = p.id; menu = null; }}><Icon name="edit" size={16} />{t("Rename")}</button>
+      <button class="menu-item" role="menuitem" onclick={() => { editing = p; menu = null; }}><Icon name="settings" size={16} />{t("Icon, colour, type…")}</button>
+      <button class="menu-item" role="menuitem" onclick={() => { reporting = p; menu = null; }}><Icon name="chart" size={16} />{t("Reports")}</button>
     {/if}
-    <button class="menu-item" role="menuitem" onclick={() => run(() => app.setPinned(p.id, !pinned), pinned ? t("Pipe unpinned") : t("Pipe pinned"))}>
+    <!-- Snapshot id/state before run() clears the menu, so the action does not read from a now-null menu. -->
+    <button class="menu-item" role="menuitem" onclick={() => { const id = p.id, was = pinned; run(() => app.setPinned(id, !was), was ? t("Pipe unpinned") : t("Pipe pinned")); }}>
       <Icon name="pin" size={16} />{pinned ? t("Unpin") : t("Pin")}
     </button>
     {#if p.canManage && !p.isDefault}
       <div class="menu-sep"></div>
       <button class="menu-item" role="menuitem" disabled={open > 0}
         title={open > 0 ? tn(open, "Still {n} open task: finish or drop it before archiving", "Still {n} open tasks: finish or drop them before archiving") : undefined}
-        onclick={() => run(() => api.patch(`/pipes/${p.id}`, { archived: true }), t("Pipe archived"))}>
+        onclick={() => { const id = p.id; run(() => api.patch(`/pipes/${id}`, { archived: true }), t("Pipe archived")); }}>
         <Icon name="archive" size={16} />{t("Archive")}
       </button>
       <button class="menu-item danger" role="menuitem" onclick={() => remove(p)}><Icon name="trash" size={16} />{t("Delete")}</button>
