@@ -16,13 +16,15 @@
   import type { ChecklistItem } from "../lib/types";
   import { t } from "../lib/i18n.svelte";
 
-  let { pipe = null, stage: initialStage = null, spaceId: initialSpaceId = null, onclose }: {
+  let { pipe = null, stage: initialStage = null, spaceId: initialSpaceId = null, dueDate: initialDueDate = null, onclose }: {
     /** Create directly in this pipe… */
     pipe?: { id: string; name: string; spaceId: string; kind: string } | null;
     /** Column of the pipe (its first one by default). */
     stage?: string | null;
     /** …or send to this space's incoming bucket. */
     spaceId?: string | null;
+    /** Pre-filled due date (YYYY-MM-DD), e.g. when created from a calendar day. */
+    dueDate?: string | null;
     onclose: () => void;
   } = $props();
 
@@ -44,7 +46,7 @@
   let pending = $state<FieldFile[]>([]);
   let spaceId = $state<string | null>(untrack(() => initialSpaceId ?? app.me?.personalSpaceId ?? null));
   let assigneeId = $state<string | null>(null);
-  let dueDate = $state("");
+  let dueDate = $state(untrack(() => initialDueDate ?? ""));
   let priority = $state("");
   let labelIds = $state<string[]>([]);
   // Labels are put by those who edit the space's tasks: in a pipe, or in one's own incoming.

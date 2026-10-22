@@ -9,7 +9,7 @@ import {
 import { validatePipeType, validateTaskType } from "./designer.js";
 import { exportModels, importModels } from "./models-io.js";
 import { latestReportDay, latestReportWeek, pipeDailyReport, pipeWeeklyReport, reportDay, stepTimes } from "./reports.js";
-import { lastWeekday } from "./time.js";
+import { lastWeekday, localDay } from "./time.js";
 import { PROVIDERS, TASK_KEY_PREFIX, gitItems, verifyGithub, verifyGitlab, type GitItem, type Provider } from "./git.js";
 import crypto from "node:crypto";
 import { cleanFields } from "./fields.js";
@@ -25,7 +25,7 @@ import { accountRoutes } from "./account.js";
 import { tokenRoutes } from "./api.js";
 import { queueWebhooks, webhookRoutes } from "./webhooks.js";
 import { mentionRecipients, mentionable, mentionedIds, newMentions } from "./mentions.js";
-import { presentRecurrence, recurrenceRoutes, type RecordCreated } from "./recurrence.js";
+import { occurrencesBetween, presentRecurrence, recurrenceRoutes, type RecordCreated, type Rule } from "./recurrence.js";
 import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
@@ -195,6 +195,63 @@ export function presentTask(t: Row) {
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   };
+}
+
+/** How many projected recurrence occurrences the calendar shows at most. */
+const CALENDAR_OCCURRENCES = 500;
+
+/**
+ * Future occurrences of scheduled recurring series, projected onto the calendar before the scheduler makes them.
+ * Each ghost copies the series' latest task (title, pipe, owner, priority…) with the occurrence's date; a slot already
+ * materialised (among `made`) or in the past is left out. Same visibility, scope, space and pipe filters as the tasks.
+ * after_done series have no fixed future dates, so only scheduled ones are projected.
+ */
+async function calendarOccurrences(
+  uid: string, from: string, to: string, scopeAll: boolean, spaceId: string | null, pipeId: string | null, made: Row[]
+) {
+  const { rows } = await query(
+    `SELECT r.id AS recurrence_id, r.rule, r.starts_on, r.next_on, r.ends_on, t.*,
+            p.name AS pipe_name, p.visibility AS pipe_visibility, p.kind AS pipe_kind,
+            ${SPACE_NAME} AS space_name, s.kind AS space_kind, s.user_id AS space_user_id, su.avatar_url AS space_user_avatar,
+            au.name AS author_name, au.avatar_url AS author_avatar,
+            asg.name AS assignee_name, asg.avatar_url AS assignee_avatar,
+            se.name AS sender_name, se.avatar_url AS sender_avatar
+     FROM task_recurrences r
+     JOIN LATERAL (
+       SELECT * FROM tasks tt WHERE tt.recurrence_id = r.id ORDER BY tt.occurrence_on DESC NULLS LAST, tt.created_at DESC LIMIT 1
+     ) t ON true
+     JOIN spaces s ON s.id = t.space_id
+     LEFT JOIN users su ON su.id = s.user_id
+     LEFT JOIN pipes p ON p.id = t.pipe_id
+     JOIN users au ON au.id = t.author_id
+     LEFT JOIN users asg ON asg.id = t.assignee_id
+     LEFT JOIN users se ON se.id = t.sender_id
+     WHERE r.active AND r.mode = 'schedule' AND r.next_on IS NOT NULL AND r.next_on <= $2
+       AND t.pipe_id IS NOT NULL AND p.archived_at IS NULL
+       AND ${taskVisibleSql("$1", "$3")}
+       AND ($4 OR COALESCE(s.user_id, t.assignee_id) = $1)
+       AND ($5::uuid IS NULL OR t.space_id = $5)
+       AND ($6::uuid IS NULL OR t.pipe_id = $6)`,
+    [uid, to, teamOnlyKinds(), scopeAll, spaceId, pipeId]
+  );
+  const today = localDay(new Date(), config.timezone);
+  // Never project into the past: missed slots were either made or skipped by the scheduler.
+  const start = from > today ? from : today;
+  const seen = new Set(made.map((t) => `${t.recurrence_id}:${String(t.occurrence_on).slice(0, 10)}`));
+  const out = [];
+  for (const r of rows) {
+    const base = presentTask(r);
+    const days = occurrencesBetween(
+      r.rule as Rule, String(r.starts_on).slice(0, 10), String(r.next_on).slice(0, 10), start, to,
+      r.ends_on ? String(r.ends_on).slice(0, 10) : null
+    );
+    for (const day of days) {
+      if (seen.has(`${r.recurrence_id}:${day}`)) continue;
+      out.push({ ...base, id: `rec-${r.recurrence_id}-${day}`, dueDate: day, ghost: true, sourceId: base.id, recurrenceId: r.recurrence_id, canMove: false });
+      if (out.length >= CALENDAR_OCCURRENCES) return out;
+    }
+  }
+  return out;
 }
 
 function presentPipe(p: Row) {
@@ -864,6 +921,9 @@ export async function apiRoutes(app: FastifyInstance) {
     const from = day(q.from);
     const to = day(q.to);
     if (!from || !to || to < from || (Date.parse(to) - Date.parse(from)) / 86_400_000 > CALENDAR_DAYS) throw bad("Invalid period");
+    const spaceId = optUuid(q.space, "Space");
+    const pipeId = optUuid(q.pipe, "Pipe");
+    const scopeAll = q.scope === "all";
     const { rows } = await query(
       `${TASK_SELECT.replace("SELECT t.*,", `SELECT t.*, EXISTS (SELECT 1 FROM space_members cm WHERE cm.space_id = t.space_id AND cm.user_id = $1) AS can_move,`)}
        WHERE t.due_date BETWEEN $2 AND $3 AND t.pipe_id IS NOT NULL AND p.archived_at IS NULL
@@ -871,12 +931,14 @@ export async function apiRoutes(app: FastifyInstance) {
          AND ($5 OR COALESCE(s.user_id, t.assignee_id) = $1)
          AND ($6::uuid IS NULL OR t.space_id = $6)
          AND ($7 OR t.status NOT IN ('done', 'abandoned'))
+         AND ($8::uuid IS NULL OR t.pipe_id = $8)
        ORDER BY t.due_date, t.priority NULLS LAST, t.position, t.created_at LIMIT ${CALENDAR_LIMIT + 1}`,
-      [uid, from, to, teamOnlyKinds(), q.scope === "all", optUuid(q.space, "Space"), q.done === "1"]
+      [uid, from, to, teamOnlyKinds(), scopeAll, spaceId, q.done === "1", pipeId]
     );
     return {
       tasks: rows.slice(0, CALENDAR_LIMIT).map((t) => ({ ...presentTask(t), canMove: t.can_move })),
       truncated: rows.length > CALENDAR_LIMIT,
+      occurrences: await calendarOccurrences(uid, from, to, scopeAll, spaceId, pipeId, rows),
     };
   });
 
