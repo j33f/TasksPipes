@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { signIn, startApp, stopApp, type Agent } from "./helpers.js";
 import { runScheduledReports } from "../../src/reports.js";
 import { addDays, dailyPeriod, lastWeekday, localDay } from "../../src/time.js";
+import { pool } from "../../src/db.js";
 
 let alice: Agent, bob: Agent, pipe: string, team: string;
 // The report day whose period holds "now" (tests use UTC and 18:00).
@@ -78,7 +79,12 @@ describe("reports", () => {
     const sent: string[] = [];
     const send = async (_l: string, _to: string, subject: string) => void sent.push(subject);
     const friday = lastWeekday(addDays(day, 6), 5);
-    await runScheduledReports(new Date(dailyPeriod(friday, 18, "UTC").end.getTime() + 60_000), send);
+    const end = dailyPeriod(friday, 18, "UTC").end;
+    // The weekly send is claimed once per week, globally (report_runs). When the report day is itself a
+    // Friday, the daily-email test above already ran the scheduler at this same end and claimed it; clear
+    // that one claim so this test reliably exercises the weekly send.
+    await pool.query(`DELETE FROM report_runs WHERE kind = 'weekly' AND period_end = $1`, [end]);
+    await runScheduledReports(new Date(end.getTime() + 60_000), send);
     expect(sent.some((s) => s.startsWith("Time report of App (reports)"))).toBe(true);
     // The weekly option is ignored on a pipe type without time reports.
     const space = (await alice.get("/api/me")).body.personalSpaceId;
