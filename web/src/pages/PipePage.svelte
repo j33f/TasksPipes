@@ -12,6 +12,7 @@
   import ReportModal from "../components/ReportModal.svelte";
   import IconPicker from "../components/IconPicker.svelte";
   import NewTaskModal from "../components/NewTaskModal.svelte";
+  import Calendar from "./Calendar.svelte";
   import TransferModal from "../components/TransferModal.svelte";
   import WebhooksModal from "../components/WebhooksModal.svelte";
   import { confirmWhileBlocked } from "../lib/dependencies";
@@ -65,6 +66,16 @@
   function setLanes(v: LanesBy) {
     lanesBy = v;
     try { localStorage.setItem("tp:pipeLanes", v); } catch { /* storage unavailable */ }
+  }
+
+  // Board (kanban) or agenda (calendar) view of the pipe; remembered in the browser.
+  const readView = (): "board" | "calendar" => {
+    try { return localStorage.getItem("tp:pipeView") === "calendar" ? "calendar" : "board"; } catch { return "board"; }
+  };
+  let pipeView = $state<"board" | "calendar">(readView());
+  function setPipeView(v: "board" | "calendar") {
+    pipeView = v;
+    try { localStorage.setItem("tp:pipeView", v); } catch { /* storage unavailable */ }
   }
 
   $effect(() => {
@@ -221,6 +232,11 @@
         {/if}
       </div>
       <div class="row wrap">
+        <div class="seg" role="group" aria-label={t("View")}>
+          <button class:active={pipeView === "board"} onclick={() => setPipeView("board")}>{t("Board")}</button>
+          <button class:active={pipeView === "calendar"} onclick={() => setPipeView("calendar")}>{t("Agenda")}</button>
+        </div>
+        {#if pipeView === "board"}
         <input class="input filter" placeholder={t("Filter…")} bind:value={filter} />
         {#if labelChoices.length}
           <select class="input filter-select" bind:value={labelFilter} aria-label={t("Label")}>
@@ -256,6 +272,7 @@
           {#if pipe.space.kind === "team"}<option value="owner">{t("Swimlanes by owner")}</option>{/if}
           <option value="type">{t("Swimlanes by task type")}</option>
         </select>
+        {/if}
         <button class="btn neutral icon" class:active-toggle={app.isPinned(pipe.id)}
           title={app.isPinned(pipe.id) ? t("Unpin from the menu") : t("Pin to the menu")}
           onclick={() => app.setPinned(pipe!.id, !app.isPinned(pipe!.id)).catch((err) => app.toast(errorMessage(err), "error"))}>
@@ -275,6 +292,7 @@
       </div>
     </div>
 
+    {#if pipeView === "board"}
     <div class="board" style="--columns:{boardColumns.length}">
       <div class="board-row">
         {#each boardColumns as s (s.id)}
@@ -314,6 +332,9 @@
         </div>
       {/each}
     </div>
+    {:else}
+      <Calendar pipe={{ id: pipe.id, name: pipe.name, spaceId: pipe.space.id, kind: pipe.kind, canAddTasks: pipe.canAddTasks }} />
+    {/if}
   </div>
 
   {#if editing}<PipeModal spaceId={pipe.space.id} pipe={pipe} onclose={() => (editing = false)} />{/if}

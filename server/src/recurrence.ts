@@ -116,6 +116,23 @@ export function upcoming(rule: Rule, start: string, after: string, count: number
   return out;
 }
 
+/**
+ * The occurrence dates of a scheduled series within [from, to] (inclusive), starting from `nextOn` — its first
+ * not-yet-made date. Used to show future occurrences on the calendar before the scheduler materialises them.
+ */
+export function occurrencesBetween(
+  rule: Rule, start: string, nextOn: string, from: string, to: string, endsOn: string | null = null, max = 90
+): string[] {
+  const out: string[] = [];
+  let d = nextOn;
+  for (let i = 0; d <= to && out.length < max && i < 2000; i++) {
+    if (endsOn && d > endsOn) break;
+    if (d >= from) out.push(d);
+    d = nextDate(rule, start, d);
+  }
+  return out;
+}
+
 /** A rule as given by the app, checked; throws on anything else. */
 export function cleanRule(input: unknown): Rule {
   const r = (input ?? {}) as Record<string, unknown>;

@@ -63,4 +63,23 @@ describe("calendar", () => {
       expect((await bob.get(`/api/calendar?${q}`)).body.error, q).toBe("Invalid period");
     }
   });
+
+  it("filters by a single pipe", async () => {
+    const list = titles(await calendar(alice, `${period}&scope=all&space=${team}&pipe=${board}`));
+    expect(list).toContain("Team planning");
+    expect(list).not.toContain("Open meetup");
+  });
+
+  it("projects future occurrences of scheduled recurring tasks as ghosts", async () => {
+    // 2031-03-03 is a Monday; a weekly series on Mondays recurs on the 10th, 17th, 24th and 31st.
+    const task = await newTask(alice, { title: "Weekly standup", pipeId: board, dueDate: "2031-03-03" });
+    expect((await alice.put(`/api/tasks/${task}/recurrence`, { rule: { freq: "weekly", weekdays: [1] } })).status).toBe(200);
+    const res = await alice.get(`/api/calendar?${period}&scope=all&space=${team}&pipe=${board}`);
+    expect(res.status).toBe(200);
+    // The first occurrence is a real task on its due date; the later ones are projected, not yet materialised.
+    expect((res.body.tasks as { id: string; dueDate: string }[]).some((t) => t.id === task && t.dueDate === "2031-03-03")).toBe(true);
+    const occ = res.body.occurrences as { dueDate: string; ghost: boolean; sourceId: string; title: string }[];
+    expect(occ.map((o) => o.dueDate).sort()).toEqual(["2031-03-10", "2031-03-17", "2031-03-24", "2031-03-31"]);
+    expect(occ.every((o) => o.ghost && o.sourceId === task && o.title === "Weekly standup")).toBe(true);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanRule, monthlyDay, nextDate, upcoming, weekday } from "./recurrence.js";
+import { cleanRule, monthlyDay, nextDate, occurrencesBetween, upcoming, weekday } from "./recurrence.js";
 
 describe("recurring dates", () => {
   it("know the weekdays", () => {
@@ -63,5 +63,40 @@ describe("recurring dates", () => {
     expect(() => cleanRule({ freq: "weekly", weekdays: [] })).toThrow("Choose at least one day of the week");
     expect(() => cleanRule({ freq: "monthly", monthly: { kind: "weekday", nth: 5, weekday: 1 } })).toThrow("Invalid repetition");
     expect(() => cleanRule({ freq: "daily", interval: 0 })).toThrow("Invalid repetition");
+  });
+});
+
+describe("occurrences within a window (calendar projection)", () => {
+  const daily = { freq: "daily", interval: 1 } as const;
+
+  it("returns the dates from the next one, inside [from, to]", () => {
+    // Series next falls on the 19th; a window starting after it skips the earlier dates.
+    expect(occurrencesBetween(daily, "2026-10-19", "2026-10-19", "2026-10-21", "2026-10-24"))
+      .toEqual(["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24"]);
+  });
+
+  it("starts at the next date even when it is inside the window", () => {
+    expect(occurrencesBetween(daily, "2026-10-19", "2026-10-22", "2026-10-19", "2026-10-25"))
+      .toEqual(["2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25"]);
+  });
+
+  it("stops at the series end", () => {
+    expect(occurrencesBetween(daily, "2026-10-19", "2026-10-20", "2026-10-19", "2026-10-31", "2026-10-22"))
+      .toEqual(["2026-10-20", "2026-10-21", "2026-10-22"]);
+  });
+
+  it("is empty when the next date is past the window", () => {
+    expect(occurrencesBetween(daily, "2026-10-19", "2026-11-10", "2026-10-19", "2026-10-31")).toEqual([]);
+  });
+
+  it("follows the rhythm of weekly rules", () => {
+    // Every Monday, next on the 26th, across four weeks.
+    expect(occurrencesBetween({ freq: "weekly", interval: 1, weekdays: [1] }, "2026-10-19", "2026-10-26", "2026-10-19", "2026-11-16"))
+      .toEqual(["2026-10-26", "2026-11-02", "2026-11-09", "2026-11-16"]);
+  });
+
+  it("caps the number returned", () => {
+    expect(occurrencesBetween(daily, "2026-10-19", "2026-10-19", "2026-10-19", "2027-10-19", null, 5))
+      .toEqual(["2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"]);
   });
 });
