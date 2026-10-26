@@ -311,9 +311,17 @@ With e-mail set up on the instance, TasksPipes tells people by e-mail what needs
 
 The **Calendar** page (menu) shows the tasks with a due date, by **month** or **week** (weeks start on Monday): your
 own tasks, or everything you see, in the pipes you can see (archived pipes and incoming buckets left out), filtered
-by space, finished tasks on demand. A task shows its priority and title, and opens on a click; overdue tasks are
+by space and pipe, finished tasks on demand. A task shows its priority and title, and opens on a click; overdue tasks are
 marked. **Dragging a task to another day changes its due date**, for those who may change it (members of its space).
 It shows up to 62 days and 1,000 tasks at a time.
+
+- **Create from a day**: clicking an empty day (or the **+** that appears on it) opens the new-task form with that day
+  already set as the due date — in the pipe, on a pipe's agenda, or to a space's incoming on the global calendar.
+- **Pipe agenda**: every pipe's page has a **Board / Agenda** switch; the agenda is the same calendar, scoped to that
+  pipe, so you can see and reschedule its tasks on the days they are due.
+- **Future occurrences**: a scheduled [repeat](#tasks) (*at fixed dates*) shows its upcoming occurrences as faint
+  ghosts, before the tasks are actually made, so the calendar reads ahead. A ghost cannot be dragged and opens the
+  series' latest task. Repeats made *once the previous one is done* have no fixed future dates, so they show none.
 
 **Calendar**, in the account menu, also gives a personal link to subscribe to your tasks with a due date in Google Calendar, Apple Calendar or
 any calendar app. Each task is an all-day event with a link back to it, and open tasks carry reminders at 9:00 five

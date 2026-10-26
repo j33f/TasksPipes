@@ -350,6 +350,8 @@
 <style>
   .page-header { margin-bottom: 16px; }
   .archived { margin-top: 10px; align-items: center; }
+  /* Keep the button at its natural size on narrow widths; let the message column shrink instead. */
+  .archived .btn { flex-shrink: 0; }
   .page-header h1 { gap: 6px; flex-wrap: wrap; }
   .page-header h1 :global(.badge) { margin-left: 4px; }
   .title-input {
