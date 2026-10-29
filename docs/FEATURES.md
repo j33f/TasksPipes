@@ -25,8 +25,9 @@ and get no e-mail until they sign in once. **Invite** them from the sidebar or t
 them to sign in with their Outline account (on their Outline server), or, when the instance sends no e-mail, the
 link to give them is copied.
 
-On the sign-in page, you type the address of your Outline server; it is kept in your browser for next time, and you
-can add others and switch between them. Each server keeps its own people and teams: accounts of one server do not
+When the instance is connected to its Outline server with OAuth, the sign-in page needs no address: "Continue with
+Outline" signs you in on that server. Otherwise, or for an API key on another server, you type the address of your
+Outline server; it is kept in your browser for next time, and you can add others and switch between them. Each server keeps its own people and teams: accounts of one server do not
 see those of another.
 
 You can also use TasksPipes [without Outline](#e-mail-accounts), and [invite people by e-mail](#invitations-and-connections):

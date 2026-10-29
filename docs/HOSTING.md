@@ -14,7 +14,8 @@ TasksPipes is a single Node.js container serving both the API and the web app, w
    ```
 
    At least `APP_URL` (the public URL), `APP_SECRET` (`openssl rand -hex 32`) and `POSTGRES_PASSWORD`.
-   No Outline server needs to be configured: people type theirs on the sign-in page.
+   No Outline server needs to be configured: people type theirs on the sign-in page (or, with OAuth set up, sign in
+   with the instance's one straight away).
 
 2. Choose how people sign in (see below), then start:
 
@@ -55,7 +56,7 @@ the setting in the app. Those settings are: `SMTP_*`, `MAIL_FROM`, `OUTLINE_ENAB
 | `APP_SECRET` | At least 32 characters. Encrypts Outline tokens, TOTP secrets and calendar links in the database. |
 | `POSTGRES_PASSWORD` | Password of the bundled database (`DATABASE_URL` when running the server yourself). With a database of your own, the account must be allowed to create the `pgcrypto` and `unaccent` extensions (both ship with PostgreSQL). |
 | `OUTLINE_ENABLED` | `false` turns Outline off: no sign-in with Outline, no Outline documents. `true` by default. |
-| `OUTLINE_URL` | Optional Outline server known to the instance: needed for OAuth sign-in. It is never suggested on the sign-in page. |
+| `OUTLINE_URL` | Optional Outline server known to the instance: needed for OAuth sign-in. With OAuth set up, the sign-in page uses it without asking for a server. |
 | `OUTLINE_API_URL` | Optional internal URL the server uses to reach Outline (e.g. `http://outline:3000`). |
 | `OUTLINE_OAUTH_CLIENT_ID`, `OUTLINE_OAUTH_CLIENT_SECRET` | OAuth sign-in, see below. |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | Company sign-in with an OpenID Connect provider (its issuer URL, and the client registered there, confidential, with the redirect URI `APP_URL/auth/oidc/callback`). Off without them. |
@@ -86,8 +87,10 @@ the setting in the app. Those settings are: `SMTP_*`, `MAIL_FROM`, `OUTLINE_ENAB
 
 ## Signing in with Outline
 
-People type the address of their Outline server on the sign-in page; it is then kept in their browser, and they can
-add others and switch between them. No server is suggested by the instance.
+With [OAuth](#oauth-recommended) set up, the sign-in page uses the server set in `OUTLINE_URL`: people click
+"Continue with Outline" without typing any address. Otherwise (or after "Another Outline server?", for an API key),
+they type the address of their Outline server; it is then kept in their browser, and they can add others and switch
+between them.
 
 ### OAuth (recommended)
 

@@ -8,7 +8,8 @@
 
   let cfg = $state<{ oauth: boolean; apiKey: boolean; outlineUrl: string | null; mail: boolean; signup: boolean; oidc: { name: string } | null } | null>(null);
 
-  // Outline servers typed here, remembered in this browser: no server is suggested.
+  // Outline servers typed here, remembered in this browser. With OAuth set up, the instance's server is used without
+  // asking; the others stay a click away for API key sign-in.
   const readList = (): string[] => {
     try {
       const v = JSON.parse(localStorage.getItem("tp:outlineServers") || "[]");
@@ -26,7 +27,10 @@
   let newServer = $state("");
   let serverError = $state("");
 
-  const server = $derived(servers.includes(selected) ? selected : (servers[0] ?? ""));
+  let otherServer = $state(false);
+  const typed = $derived(servers.includes(selected) ? selected : (servers[0] ?? ""));
+  const instanceServer = $derived(cfg?.oauth && !otherServer ? cfg.outlineUrl : null);
+  const server = $derived(instanceServer ?? typed);
   // With no server yet, the address is typed straight away.
   const typing = $derived(adding || !servers.length);
   const hostOf = (url: string) => url.replace(/^https?:\/\//, "");
@@ -79,6 +83,8 @@
 
   onMount(async () => {
     cfg = await api.get("/auth/config");
+    // Kept on another server picked last time.
+    otherServer = Boolean(cfg?.oauth && cfg.apiKey && servers.includes(selected) && selected !== cfg.outlineUrl);
   });
 
   async function askLink(e: SubmitEvent) {
@@ -123,20 +129,20 @@
       <div class="divider-text">{t("or")}</div>
     {/if}
 
-    {#if cfg?.apiKey || cfg?.oauth}
+    {#if (cfg?.apiKey || cfg?.oauth) && !instanceServer}
       <div class="field">
         <label for="server">{t("Outline server")}</label>
         {#if servers.length}
           <div class="row">
-            <select id="server" class="input" value={server}
+            <select id="server" class="input" value={typed}
               onchange={(e) => {
                 const v = (e.currentTarget as HTMLSelectElement).value;
-                if (v === "+") { adding = true; (e.currentTarget as HTMLSelectElement).value = server; } else select(v);
+                if (v === "+") { adding = true; (e.currentTarget as HTMLSelectElement).value = typed; } else select(v);
               }}>
               {#each servers as url (url)}<option value={url}>{hostOf(url)}</option>{/each}
               <option value="+">{t("Add a server…")}</option>
             </select>
-            <button type="button" class="btn ghost icon" title={t("Remove this server from the list")} onclick={() => removeServer(server)}>
+            <button type="button" class="btn ghost icon" title={t("Remove this server from the list")} onclick={() => removeServer(typed)}>
               <Icon name="close" size={18} />
             </button>
           </div>
@@ -153,6 +159,11 @@
           </form>
           {#if serverError}<div class="error-text">{serverError}</div>{/if}
           {#if !servers.length}<div class="hint">{t("The address of your Outline workspace, e.g. https://docs.example.com")}</div>{/if}
+        {/if}
+        {#if cfg?.oauth && cfg.outlineUrl}
+          <p class="switch small">
+            <button class="link" onclick={() => (otherServer = false)}>{t("Back to {server}", { server: hostOf(cfg.outlineUrl) })}</button>
+          </p>
         {/if}
       </div>
     {/if}
@@ -174,6 +185,11 @@
           </div>
           <button class="btn full" class:neutral={cfg.oauth && server === cfg.outlineUrl} disabled={busy || !token.trim()}>{t("Sign in with an API key")}</button>
         </form>
+        {#if instanceServer}
+          <p class="switch small">
+            <button class="link" onclick={() => (otherServer = true)}>{t("Another Outline server?")}</button>
+          </p>
+        {/if}
       {/if}
     {/if}
 
