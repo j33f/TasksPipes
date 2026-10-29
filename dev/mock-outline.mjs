@@ -21,6 +21,11 @@ http.createServer((req, res) => {
       res.writeHead(status, { "Content-Type": "application/json" });
       res.end(JSON.stringify(json));
     };
+    // OAuth: the code is the token of the person who signed in (code=alice-token).
+    if (req.url === "/oauth/token") {
+      const code = new URLSearchParams(body).get("code");
+      return users[code] ? send(200, { access_token: code, token_type: "Bearer", expires_in: 3600 }) : send(400, { error: "invalid_grant", error_description: "Invalid code" });
+    }
     const user = users[(req.headers.authorization || "").replace("Bearer ", "")];
     if (!user) return send(401, { ok: false, error: "authentication_required", message: "Authentication required" });
     const input = body ? JSON.parse(body) : {};

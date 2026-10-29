@@ -60,6 +60,47 @@ export const cookieOptions = (maxAgeSeconds: number): CookieSerializeOptions => 
   maxAge: maxAgeSeconds,
 });
 
+/**
+ * Sign-in flows under way in this browser (Outline OAuth, OpenID Connect), each found again by its `state` when the
+ * provider sends the person back. They are kept together in one encrypted cookie for ten minutes, so that a second
+ * flow (another tab, a double click, a sign-in started over) does not wipe out the first one.
+ */
+const FLOW_SECONDS = 600;
+const MAX_FLOWS = 5;
+type Flow<T> = T & { state: string; at: number };
+
+function readFlows<T>(req: FastifyRequest, cookie: string): Flow<T>[] {
+  try {
+    const list = JSON.parse(decrypt(req.cookies[cookie] ?? "") ?? "[]");
+    return Array.isArray(list) ? list.filter((f) => typeof f?.state === "string" && Date.now() - f.at < FLOW_SECONDS * 1000) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFlows(reply: FastifyReply, cookie: string, flows: Flow<unknown>[]) {
+  if (flows.length) reply.setCookie(cookie, encrypt(JSON.stringify(flows))!, cookieOptions(FLOW_SECONDS));
+  else reply.clearCookie(cookie, { path: "/" });
+}
+
+/** Starts a flow carrying `data`; returns its state, to send to the provider. */
+export function startFlow(req: FastifyRequest, reply: FastifyReply, cookie: string, data: object = {}): string {
+  const state = crypto.randomBytes(16).toString("base64url");
+  writeFlows(reply, cookie, [...readFlows(req, cookie), { ...data, state, at: Date.now() }].slice(-MAX_FLOWS));
+  return state;
+}
+
+/** The flow of `state`, removed from the cookie (a flow is used once); null when unknown or expired. */
+export function takeFlow<T>(req: FastifyRequest, reply: FastifyReply, cookie: string, state: string | undefined): Flow<T> | null {
+  const flows = readFlows<T>(req, cookie);
+  const flow = state ? flows.find((f) => f.state === state) ?? null : null;
+  if (flow) writeFlows(reply, cookie, flows.filter((f) => f !== flow));
+  return flow;
+}
+
+/** Back on the sign-in page with a message (a provider's sign-in that went wrong). */
+export const loginError = (reply: FastifyReply, message: string) => reply.redirect(`/login?error=${encodeURIComponent(message)}`);
+
 /** Inserts or updates a user coming from Outline and makes sure they have a personal space. */
 /**
  * Inserts or updates a user coming from an Outline server and makes sure they have a personal space.
@@ -462,9 +503,8 @@ async function auth(app: FastifyInstance) {
   });
 
   app.get("/auth/outline", rateLimited(LIMITS.oauth), async (req, reply) => {
-    if (!config.oauthEnabled) return reply.code(404).send(tr(localeOf(req), "OAuth is not set up"));
-    const state = crypto.randomBytes(16).toString("hex");
-    reply.setCookie(STATE_COOKIE, state, cookieOptions(600));
+    if (!config.oauthEnabled) return loginError(reply, tr(localeOf(req), "OAuth is not set up"));
+    const state = startFlow(req, reply, STATE_COOKIE);
     const url = new URL(`${config.outlineUrl}/oauth/authorize`);
     url.searchParams.set("client_id", config.oauthClientId);
     url.searchParams.set("redirect_uri", `${config.appUrl}/auth/outline/callback`);
@@ -475,12 +515,16 @@ async function auth(app: FastifyInstance) {
   });
 
   app.get<{ Querystring: Record<string, string | undefined> }>("/auth/outline/callback", rateLimited(LIMITS.oauth), async (req, reply) => {
-    const fail = (msg: string) => reply.redirect(`/login?error=${encodeURIComponent(msg)}`);
+    const fail = (msg: string) => loginError(reply, msg);
     try {
+      const flow = takeFlow(req, reply, STATE_COOKIE, req.query.state);
       if (req.query.error) return fail(req.query.error_description || req.query.error);
-      const expected = req.cookies[STATE_COOKIE];
-      reply.clearCookie(STATE_COOKIE, { path: "/" });
-      if (!expected || expected !== req.query.state) return fail(tr(localeOf(req), "Invalid OAuth state, please try again."));
+      if (!flow || !req.query.code) {
+        // Already signed in: this return was played again (back button, a second tab); nothing to do.
+        if (req.user) return reply.redirect("/");
+        req.log.warn({ cookie: Boolean(req.cookies[STATE_COOKIE]), state: Boolean(req.query.state) }, "OAuth sign-in with an unknown state");
+        return fail(tr(localeOf(req), "Sign-in expired or interrupted, please try again."));
+      }
       const t = await outlineToken({
         grant_type: "authorization_code",
         code: req.query.code || "",

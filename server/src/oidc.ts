@@ -9,7 +9,7 @@ import crypto, { type JsonWebKey } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "./config.js";
 import { one, tx } from "./db.js";
-import { cookieOptions, decrypt, encrypt, ensurePersonalSpace, reenableInvited, signInAccount } from "./auth.js";
+import { ensurePersonalSpace, loginError, reenableInvited, signInAccount, startFlow, takeFlow } from "./auth.js";
 import { localeOf, tr } from "./i18n.js";
 import { LIMITS, rateLimited } from "./rate-limit.js";
 
@@ -168,14 +168,14 @@ export async function oidcAccount(c: IdClaims, lang: ReturnType<typeof localeOf>
 
 export async function oidcRoutes(app: FastifyInstance) {
   app.get("/auth/oidc", rateLimited(LIMITS.oidc), async (req, reply) => {
-    if (!config.oidc.enabled) return reply.code(404).send(tr(localeOf(req), "Not found"));
-    const flow = { state: b64u(crypto.randomBytes(16)), nonce: b64u(crypto.randomBytes(16)), verifier: b64u(crypto.randomBytes(32)) };
+    if (!config.oidc.enabled) return loginError(reply, tr(localeOf(req), "Not found"));
     const p = await discover();
-    reply.setCookie(FLOW_COOKIE, encrypt(JSON.stringify(flow))!, cookieOptions(600));
+    const flow = { nonce: b64u(crypto.randomBytes(16)), verifier: b64u(crypto.randomBytes(32)) };
+    const state = startFlow(req, reply, FLOW_COOKIE, flow);
     const url = new URL(p.authorization_endpoint);
     for (const [k, v] of Object.entries({
       response_type: "code", client_id: config.oidc.clientId, redirect_uri: redirectUri(), scope: config.oidc.scopes,
-      state: flow.state, nonce: flow.nonce, code_challenge: b64u(crypto.createHash("sha256").update(flow.verifier).digest()), code_challenge_method: "S256",
+      state, nonce: flow.nonce, code_challenge: b64u(crypto.createHash("sha256").update(flow.verifier).digest()), code_challenge_method: "S256",
     })) url.searchParams.set(k, v);
     return reply.redirect(url.toString());
   });
@@ -183,17 +183,16 @@ export async function oidcRoutes(app: FastifyInstance) {
   type Callback = FastifyRequest<{ Querystring: Record<string, string | undefined> }>;
   app.get("/auth/oidc/callback", rateLimited(LIMITS.oidc), async (req: Callback, reply: FastifyReply) => {
     const lang = localeOf(req);
-    const fail = (msg: string) => reply.redirect(`/login?error=${encodeURIComponent(msg)}`);
-    if (!config.oidc.enabled) return reply.code(404).send(tr(lang, "Not found"));
-    const raw = req.cookies[FLOW_COOKIE];
-    reply.clearCookie(FLOW_COOKIE, { path: "/" });
+    const fail = (msg: string) => loginError(reply, msg);
+    if (!config.oidc.enabled) return fail(tr(lang, "Not found"));
     try {
+      const flow = takeFlow<{ nonce: string; verifier: string }>(req, reply, FLOW_COOKIE, req.query.state);
       if (req.query.error) return fail(tr(lang, "Sign-in failed"));
-      let flow: { state: string; nonce: string; verifier: string } | null = null;
-      try {
-        flow = raw ? JSON.parse(decrypt(raw) ?? "") : null;
-      } catch { /* checked below */ }
-      if (!flow || !req.query.state || req.query.state !== flow.state || !req.query.code) return fail(tr(lang, "Invalid OAuth state, please try again."));
+      if (!flow || !req.query.code) {
+        // Already signed in: this return was played again (back button, a second tab); nothing to do.
+        if (req.user) return reply.redirect("/");
+        return fail(tr(lang, "Sign-in expired or interrupted, please try again."));
+      }
       const p = await discover();
       const tokens = await getJson(p.token_endpoint, {
         method: "POST",

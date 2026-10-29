@@ -36,6 +36,15 @@ describe("service worker", () => {
     expect(other.respondWith).not.toHaveBeenCalled();
   });
 
+  it("leaves sign-in round trips to the browser", () => {
+    const { listeners } = load();
+    for (const url of ["https://tasks.test/auth/outline", "https://tasks.test/auth/outline/callback?code=c&state=s", "https://tasks.test/auth/oidc/callback"]) {
+      const e = fetchEvent(url, "navigate");
+      listeners.fetch(e);
+      expect(e.respondWith, url).not.toHaveBeenCalled();
+    }
+  });
+
   it("keeps the interface: built files, fonts, icons, and the page for offline starts", async () => {
     vi.stubGlobal("caches", { match: vi.fn(async () => undefined), open: vi.fn(async () => ({ put: vi.fn() })) });
     vi.stubGlobal("fetch", vi.fn(async () => new Response("")));

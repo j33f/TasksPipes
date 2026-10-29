@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import Login from "./Login.svelte";
+import { router } from "../lib/router.svelte";
 
 let oidc: { name: string } | null;
 let outline: { oauth: boolean; apiKey: boolean; outlineUrl: string | null };
@@ -19,6 +20,15 @@ afterEach(() => {
 });
 
 describe("sign-in page", () => {
+  it("shows the error a sign-in came back with, once", async () => {
+    history.replaceState({}, "", "/login?error=Sign-in%20failed");
+    router.sync();
+    render(Login);
+    expect(await screen.findByText("Sign-in failed")).toBeTruthy();
+    // Not shown again on a reload.
+    expect(location.search).toBe("");
+  });
+
   it("offers the company's sign-in when it is set up", async () => {
     oidc = { name: "Acme SSO" };
     render(Login);

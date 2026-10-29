@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
-  import { router } from "../lib/router.svelte";
+  import { router, setParams } from "../lib/router.svelte";
   import Icon from "../components/Icon.svelte";
   import { LOCALES, prefs, t, type Locale } from "../lib/i18n.svelte";
 
@@ -82,6 +82,8 @@
   let error = $state(router.params.get("error") ?? "");
 
   onMount(async () => {
+    // A sign-in that came back with an error: shown once, not again on a reload.
+    if (router.params.has("error")) setParams({ error: null }, { replace: true });
     cfg = await api.get("/auth/config");
     // Kept on another server picked last time.
     otherServer = Boolean(cfg?.oauth && cfg.apiKey && servers.includes(selected) && selected !== cfg.outlineUrl);

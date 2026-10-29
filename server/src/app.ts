@@ -7,7 +7,7 @@ import cookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import { config } from "./config.js";
 import { pool } from "./db.js";
-import { authPlugin } from "./auth.js";
+import { authPlugin, loginError } from "./auth.js";
 import { oidcRoutes } from "./oidc.js";
 import { apiRoutes, gitWebhooks } from "./routes.js";
 import { publicApi } from "./api.js";
@@ -50,6 +50,11 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   app.setErrorHandler((err: FastifyError, req, reply) => {
     // Messages are English source text, translated into the language of the page.
     const lang = localeOf(req);
+    // Sign-in pages the browser was sent to (a provider, its return): back on the sign-in page, never a raw error.
+    if (req.method === "GET" && req.url.startsWith("/auth/")) {
+      if (!(err instanceof HttpError)) req.log.error({ err }, "Sign-in error");
+      return loginError(reply, err instanceof HttpError ? tr(lang, err.message, err.params) : tr(lang, "Sign-in failed"));
+    }
     if (err instanceof HttpError) return reply.code(err.statusCode).send({ error: tr(lang, err.message, err.params) });
     if (err instanceof OutlineError) {
       req.log.warn({ err }, "Outline API error");
