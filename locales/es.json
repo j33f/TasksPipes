@@ -1166,7 +1166,7 @@
     "This link is no longer valid (already used or expired). Ask for a new one.": "Este enlace ya no es válido (ya usado o caducado). Pide uno nuevo.",
     "Verification expired or too many attempts: sign in again with a new link.": "Verificación caducada o demasiados intentos: vuelve a iniciar sesión con un nuevo enlace.",
     "OAuth is not set up": "OAuth no está configurado",
-    "Invalid OAuth state, please try again.": "Estado de OAuth no válido, inténtalo de nuevo.",
+    "Sign-in expired or interrupted, please try again.": "El inicio de sesión ha caducado o se ha interrumpido, inténtalo de nuevo.",
     "Sign-in failed": "No se pudo iniciar sesión",
     "API key sign-in is disabled": "El inicio de sesión con clave de API está desactivado",
     "API key required": "Se necesita una clave de API",

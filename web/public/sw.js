@@ -25,6 +25,9 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
   if (req.method !== "GET" || url.origin !== self.location.origin) return;
+  // Sign-in round trips (to the provider and back) are left to the browser: some browsers drop the sign-in cookie
+  // from a navigation coming back from another site when a service worker answers it.
+  if (url.pathname.startsWith("/auth/")) return;
   if (req.mode === "navigate") {
     // The page from the network, the kept one when offline.
     event.respondWith(fetch(req).catch(() => caches.match(SHELL)));

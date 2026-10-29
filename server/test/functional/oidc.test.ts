@@ -112,7 +112,8 @@ describe("company sign-in (OpenID Connect)", () => {
 
   it("is off when turned off", async () => {
     config.oidc.enabled = false;
-    expect((await app.inject({ method: "GET", url: "/auth/oidc" })).statusCode).toBe(404);
+    // Back on the sign-in page, not a bare error.
+    expect((await app.inject({ method: "GET", url: "/auth/oidc" })).headers.location).toBe("/login?error=Not%20found");
     expect((await app.inject({ method: "GET", url: "/api/auth/config" })).json().oidc).toBeNull();
     config.oidc.enabled = true;
   });
