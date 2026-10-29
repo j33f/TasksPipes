@@ -38,8 +38,8 @@ follows Outline's look and feel.
   with reminders five days before, the day before and on the day.
 - **Your Outline workspace, ready** — once connected to Outline, everyone in the workspace is there straight away:
   invite the colleagues who have not signed in yet, and send them tasks or build teams with them once they have.
-- **Any Outline server** — you type the address of your Outline server when signing in; it is then remembered in
-  your browser, and you can switch between several servers.
+- **Any Outline server** — sign in with the instance's Outline server in one click (OAuth), or type the address of
+  yours; it is then remembered in your browser, and you can switch between several servers.
 - **Without Outline too** — anyone can create an account with just an e-mail address and a display name, sign in
   with links sent by e-mail (optionally with two-factor authentication) and set a profile picture.
 - **Invitations and connections** — invite people by e-mail (trainers, clients, partners…): a new person gets a

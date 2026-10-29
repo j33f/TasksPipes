@@ -290,7 +290,7 @@ async function auth(app: FastifyInstance) {
   app.get("/api/auth/config", async () => ({
     oauth: config.oauthEnabled,
     apiKey: config.allowApiKeyLogin,
-    // Only to match the OAuth button with the server typed on the login page: no server is suggested.
+    // With OAuth set up, the login page signs in with this server without asking for one.
     outlineUrl: config.oauthEnabled ? config.outlineUrl : null,
     mail: mailEnabled(),
     signup: config.allowEmailSignup && mailEnabled(),
