@@ -15,6 +15,7 @@
   import AboutModal from "./components/AboutModal.svelte";
   import InviteModal from "./components/InviteModal.svelte";
   import SearchModal from "./components/SearchModal.svelte";
+  import PushPrompt from "./components/PushPrompt.svelte";
   import { isSearchShortcut } from "./lib/search";
   import Home from "./pages/Home.svelte";
   import SpacePage from "./pages/SpacePage.svelte";
@@ -133,6 +134,7 @@
           <button class="btn small" onclick={reloadNow}>{t("Reload")}</button>
         </div>
       {/if}
+      <PushPrompt />
       <div class="mobile-bar">
         <button class="btn ghost icon menu-btn" onclick={() => (navOpen = !navOpen)}
           aria-label={app.pendingCount ? tn(app.pendingCount, "Menu, {n} task waiting", "Menu, {n} tasks waiting") : t("Menu")}>
