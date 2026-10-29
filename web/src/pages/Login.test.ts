@@ -40,6 +40,16 @@ describe("sign-in page", () => {
     expect(screen.getByRole("link", { name: /docs\.example\.com/ }).getAttribute("href")).toBe("https://docs.example.com/settings/api-and-apps");
   });
 
+  it("keeps the e-mail sign-in, for people invited by e-mail, when OAuth is set up", async () => {
+    outline = { oauth: true, apiKey: false, outlineUrl: "https://docs.example.com" };
+    render(Login);
+    await screen.findByRole("link", { name: "Continue with Outline" });
+    expect(screen.getByText("Sign in with your docs.example.com account")).toBeTruthy();
+    expect(screen.queryByText("without Outline")).toBeNull();
+    expect(screen.getByLabelText("E-mail address")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Get a sign-in link" })).toBeTruthy();
+  });
+
   it("still lets people pick another server for an API key", async () => {
     outline = { oauth: true, apiKey: true, outlineUrl: "https://docs.example.com" };
     render(Login);

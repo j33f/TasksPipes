@@ -120,7 +120,10 @@
   <div class="login-box">
     <svg width="40" height="40" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><rect x="7" y="8" width="5" height="16" rx="2" fill="var(--background)"/><rect x="14" y="8" width="5" height="11" rx="2" fill="var(--background)" opacity=".75"/><rect x="21" y="8" width="5" height="7" rx="2" fill="var(--background)" opacity=".5"/></svg>
     <h1>{t("Sign in to TasksPipes")}</h1>
-    <p class="muted">{cfg && !cfg.apiKey && !cfg.oauth ? t("Use your e-mail address.") : t("Use your Outline account, or your e-mail address.")}</p>
+    <p class="muted">
+      {#if instanceServer}{t("Sign in with your {server} account", { server: hostOf(instanceServer) })}
+      {:else}{cfg && !cfg.apiKey && !cfg.oauth ? t("Use your e-mail address.") : t("Use your Outline account, or your e-mail address.")}{/if}
+    </p>
 
     {#if error}<div class="callout danger">{error}</div>{/if}
 
@@ -194,7 +197,7 @@
     {/if}
 
     {#if cfg?.mail}
-      <div class="divider-text">{t("without Outline")}</div>
+      <div class="divider-text">{instanceServer ? t("or") : t("without Outline")}</div>
       {#if emailSent}
         <div class="callout info">
           {mode === "signup"
