@@ -278,6 +278,8 @@ edited, otherwise once the edit is over, with a banner offering to reload.
   the app, the notification shows live. A click opens the task. Confidential and team-only tasks are only named by
   their key; access is checked again when sending. E-mails follow their own settings. Without e-mail on the
   instance, the choices of notifications are offered to those who turned push on.
+- A bar at the top of the app **offers to turn them on** on each device the browser has not asked yet: the browser's
+  own prompt opens from its button. "Not now" asks again a month later; *Settings* keeps the switch.
 - Signing out turns push off for that device. A device the push service no longer knows is forgotten.
 
 ## E-mail notifications
