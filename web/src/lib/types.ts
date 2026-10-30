@@ -70,6 +70,8 @@ export interface Pipe {
   /** Reports sent by e-mail at the report hour: daily activity, weekly time (development pipes). */
   dailyReport: boolean;
   weeklyReport: boolean;
+  /** Outline document linked to the pipe. */
+  outlineDoc: DocRef | null;
 }
 
 export interface Member extends UserRef {
