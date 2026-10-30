@@ -126,6 +126,7 @@ the setting in the app. Those settings are: `SMTP_*`, `MAIL_FROM`, `OUTLINE_ENAB
 | `UPDATER_TOKEN` | Turns [one-click updates](#one-click-updates) on: a shared secret (`openssl rand -hex 32`) between the app and the updater. |
 | `UPDATER_URL` | Address of the updater seen by the app; default `http://updater:8080` once `UPDATER_TOKEN` is set. |
 | `PROJECT_DIR` | For the updater: this directory's absolute path on the host; default the directory `docker compose` is run from. |
+| `UPDATER_SERVICE` | For the updater: its own service in the compose file, which it moves to the new version after the app (`updater` by default; empty to never touch itself). |
 | `UPDATE_CHECK` | `false` to stop asking GitHub every hour for a new version (on by default; also in Administration › Settings). |
 | `VAPID_SUBJECT` | A contact for push services, `mailto:` or `https:`. Default: `APP_URL` when it is https, else `mailto:admin@localhost`. |
 | `WEBHOOK_ALLOW_PRIVATE` | `true` lets outgoing webhooks (and push messages) reach http addresses and internal networks (a receiver on the same network, tests). Off by default: https and public addresses only, checked when connecting. |
@@ -327,8 +328,8 @@ The [installer](#install-in-one-command) does it (`--updates auto`, the default)
    docker compose up -d
    ```
 
-The app finds the updater at `http://updater:8080` (`UPDATER_URL` otherwise). The updater only changes the version;
-when a release also changes `docker-compose.yml` (its notes say so, under **Upgrading**), update with
+The app finds the updater at `http://updater:8080` (`UPDATER_URL` otherwise). The updater moves the app and itself to
+the new version, but leaves the compose file as it is; when a release also changes `docker-compose.yml` (its notes say so, under **Upgrading**), update with
 `taskspipes-update`, which fetches the release's compose file too. One-click updates use the images
 published for each release on GitHub's registry (`ghcr.io/j33f/taskspipes`): an instance built from its sources
 (`build:`) keeps updating by hand, or switches to the images by setting `TASKSPIPES_VERSION`.
@@ -350,6 +351,12 @@ published for each release on GitHub's registry (`ghcr.io/j33f/taskspipes`): an 
    again (**rolled back**).
 5. Meanwhile the About dialog follows the updater (`GET /api/admin/update`: state and last log line) and reloads
    once the server answers in the new version.
+6. Once the app runs the new version, the **updater moves to it too**. It cannot restart its own container (that would
+   stop the command doing it), so it pulls its new image and starts a short-lived container of it, detached, which
+   runs `docker compose up -d --no-deps updater` and goes away; Compose recreates the updater only when its image
+   changed. After a failed or rolled-back update it leaves itself alone. Its service is named by `UPDATER_SERVICE`
+   (`updater` by default; empty to never touch itself). An updater older than 0.20.1 does not do it: once, move it
+   by hand (`docker compose up -d updater`) or with `taskspipes-update`.
 
 The database is migrated by the new version at start-up. Migrations are written to add (tables, columns) rather than
 remove, so that the previous version keeps working after a rollback; back up the database before updating all the

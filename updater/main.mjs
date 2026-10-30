@@ -19,6 +19,8 @@ if (!projectDir || !["compose.yml", "compose.yaml", "docker-compose.yml", "docke
 const updater = createUpdater({
   projectDir,
   service: process.env.APP_SERVICE || "app",
+  // Its own service, to move to the new version too ("" to never touch itself).
+  self: process.env.UPDATER_SERVICE ?? "updater",
   healthTimeoutMs: Number(process.env.HEALTH_TIMEOUT || 180) * 1000,
 });
 
