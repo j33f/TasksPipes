@@ -175,7 +175,7 @@ env_set() {
 FIRST=1
 [ -f .env ] && FIRST=0
 if [ "$FIRST" = 1 ]; then
-  say "A few questions (Enter keeps the suggestion)"
+  [ -z "$TTY" ] || say "A few questions (Enter keeps the suggestion)"
   [ -n "$DOMAIN" ] || ask DOMAIN "Public address of TasksPipes (e.g. tasks.example.com)" "$(hostname -f 2>/dev/null || hostname)"
   [ -n "$ADMIN" ] || ask ADMIN "E-mail address of the administrator (comma-separated for several)" ""
   [ -n "$OUTLINE" ] || ask OUTLINE "Your Outline server, if any (e.g. https://docs.example.com; empty: none)" ""
