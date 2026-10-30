@@ -16,7 +16,7 @@ import { getTaskRow, isConfidential, taskPermissions } from "./access.js";
 import { isOnline } from "./realtime.js";
 import { bad } from "./errors.js";
 import { localeOf, localize, tr, type Locale } from "./i18n.js";
-import { mailEnabled, sendHtmlMail } from "./mail.js";
+import { escape, mailEnabled, mailLayout, mailStyle, sendHtmlMail, type MailTheme } from "./mail.js";
 import { stageLabel } from "./pipeTypes.js";
 import { TASK_KEY_PREFIX } from "./git.js";
 import { dailyPeriod, addDays, localDay, zonedInstant } from "./time.js";
@@ -161,7 +161,6 @@ export async function queueUnblocked(db: Queryable, eventId: number, told: { use
 // ---------------------------------------------------------------------------
 // E-mails
 
-const escape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export interface NotificationLine {
   kind: Exclude<RowKind, "overdue">;
@@ -211,23 +210,29 @@ function taskPath(lang: Locale, t: Row): string {
   return [t.space_name, t.pipe_name, stage ? localize(lang, stage) : null].filter(Boolean).join(" › ");
 }
 
-function taskBlock(lang: Locale, t: Row, lines: string[]): string {
+function taskBlock(lang: Locale, t: Row, lines: string[], theme: MailTheme): string {
+  const st = mailStyle(theme);
   const masked = isConfidential(t);
   const title = masked
-    ? `${escape(taskKey(t))} <span style="color:#66778F">· ${escape(tr(lang, "confidential task: open it to see its content"))}</span>`
+    ? `${escape(taskKey(t))} ${st.muted(`· ${escape(tr(lang, "confidential task: open it to see its content"))}`, "font-weight:400")}`
     : `${escape(taskKey(t))} ${escape(t.title)}`;
-  return `<div style="margin:16px 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:8px">`
-    + `<div style="font-weight:600"><a href="${taskUrl(t)}" style="color:#0366d6;text-decoration:none">${title}</a></div>`
-    + (masked ? "" : `<div style="color:#66778F;font-size:13px">${escape(taskPath(lang, t))}</div>`)
-    + `<ul style="padding-left:18px;margin:8px 0 0">${lines.map((l) => `<li>${escape(l)}</li>`).join("")}</ul></div>`;
+  return st.box(
+    `<div style="font-weight:600">${st.link(taskUrl(t), title)}</div>`
+      + (masked ? "" : `<div ${st.attr("muted", "font-size:13px")}>${escape(taskPath(lang, t))}</div>`)
+      + `<div style="margin-top:8px">${st.list(lines.map(escape))}</div>`
+  );
 }
 
-function page(lang: Locale, title: string, body: string, unsubscribe: string) {
-  return `<div lang="${lang}" style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.5;color:#111319;max-width:640px">`
-    + `<h2 style="font-size:18px;margin:0 0 4px">${escape(title)}</h2>${body}`
-    + `<p style="color:#66778F;font-size:12px;margin-top:24px">${escape(tr(lang, "You receive this e-mail because of your notification settings in TasksPipes."))} `
-    + `<a href="${config.appUrl}/" style="color:#66778F">${escape(tr(lang, "Change them"))}</a> · `
-    + `<a href="${escape(unsubscribe)}" style="color:#66778F">${escape(tr(lang, "Unsubscribe"))}</a></p></div>`;
+function page(lang: Locale, title: string, body: string, unsubscribe: string, theme: MailTheme) {
+  const st = mailStyle(theme);
+  return mailLayout(lang, {
+    title,
+    body,
+    theme,
+    footer: `${escape(tr(lang, "You receive this e-mail because of your notification settings in TasksPipes."))} `
+      + `${st.link(`${config.appUrl}/`, escape(tr(lang, "Change them")), "text-decoration:underline")} · `
+      + st.link(unsubscribe, escape(tr(lang, "Unsubscribe")), "text-decoration:underline"),
+  });
 }
 
 const SUBJECTS: Record<NotificationLine["kind"], string> = {
@@ -239,37 +244,38 @@ const SUBJECTS: Record<NotificationLine["kind"], string> = {
   unblocked: "No longer blocked: {task}",
 };
 
-export function immediateEmail(lang: Locale, t: Row, lines: NotificationLine[], unsubscribe: string) {
+export function immediateEmail(lang: Locale, t: Row, lines: NotificationLine[], unsubscribe: string, theme: MailTheme = null) {
   const masked = isConfidential(t);
   const kinds = new Set(lines.map((l) => l.kind));
   const task = taskName(t, masked);
   const subject = kinds.size === 1 ? tr(lang, SUBJECTS[lines[0].kind], { task }) : tr(lang, "Activity on {task}", { task });
-  return { subject, html: page(lang, subject, taskBlock(lang, t, lines.map((l) => describe(lang, l, masked))), unsubscribe) };
+  return { subject, html: page(lang, subject, taskBlock(lang, t, lines.map((l) => describe(lang, l, masked)), theme), unsubscribe, theme) };
 }
 
-export function digestEmail(lang: Locale, day: string, tasks: { t: Row; lines: NotificationLine[] }[], unsubscribe: string) {
+export function digestEmail(lang: Locale, day: string, tasks: { t: Row; lines: NotificationLine[] }[], unsubscribe: string, theme: MailTheme = null) {
   const subject = tr(lang, "Your TasksPipes notifications — {day}", { day });
-  const body = tasks.map(({ t, lines }) => taskBlock(lang, t, lines.map((l) => describe(lang, l, isConfidential(t))))).join("");
-  return { subject, html: page(lang, subject, body, unsubscribe) };
+  const body = tasks.map(({ t, lines }) => taskBlock(lang, t, lines.map((l) => describe(lang, l, isConfidential(t))), theme)).join("");
+  return { subject, html: page(lang, subject, body, unsubscribe, theme) };
 }
 
 const MAX_DUE_LINES = 30;
 
-export function dueEmail(lang: Locale, day: string, sections: { overdue: Row[]; today: Row[]; tomorrow: Row[] }, unsubscribe: string) {
+export function dueEmail(lang: Locale, day: string, sections: { overdue: Row[]; today: Row[]; tomorrow: Row[] }, unsubscribe: string, theme: MailTheme = null) {
+  const st = mailStyle(theme);
   const subject = tr(lang, "Your due dates — {day}", { day });
   const list = (title: string, tasks: Row[]) => {
     if (!tasks.length) return "";
     const items = tasks.slice(0, MAX_DUE_LINES).map((t) => {
       const masked = isConfidential(t);
-      const where = masked ? "" : ` <span style="color:#66778F">· ${escape(taskPath(lang, t))}</span>`;
-      const due = title === "Overdue" ? ` <span style="color:#66778F">· ${escape(tr(lang, "due on {date}", { date: t.due_date }))}</span>` : "";
-      return `<li><a href="${taskUrl(t)}" style="color:#0366d6;text-decoration:none">${escape(taskName(t, masked))}</a>${where}${due}</li>`;
+      const where = masked ? "" : ` ${st.muted(`· ${escape(taskPath(lang, t))}`)}`;
+      const due = title === "Overdue" ? ` ${st.muted(`· ${escape(tr(lang, "due on {date}", { date: t.due_date }))}`)}` : "";
+      return `${st.link(taskUrl(t), escape(taskName(t, masked)))}${where}${due}`;
     });
-    if (tasks.length > MAX_DUE_LINES) items.push(`<li>${escape(tr(lang, "and {n} more", { n: tasks.length - MAX_DUE_LINES }))}</li>`);
-    return `<h3 style="font-size:15px;margin:18px 0 6px">${escape(tr(lang, title))} (${tasks.length})</h3><ul style="padding-left:18px;margin:0">${items.join("")}</ul>`;
+    if (tasks.length > MAX_DUE_LINES) items.push(escape(tr(lang, "and {n} more", { n: tasks.length - MAX_DUE_LINES })));
+    return `${st.heading(`${tr(lang, title)} (${tasks.length})`)}${st.list(items)}`;
   };
   const body = list("Overdue", sections.overdue) + list("Due today", sections.today) + list("Due tomorrow", sections.tomorrow);
-  return { subject, html: page(lang, subject, body, unsubscribe) };
+  return { subject, html: page(lang, subject, body, unsubscribe, theme) };
 }
 
 // ---------------------------------------------------------------------------
@@ -308,12 +314,14 @@ const KIND_LABELS: Record<Kind, string> = {
 
 function unsubscribePage(lang: Locale, title: string, text: string, button?: { action: string; label: string }) {
   const form = button
-    ? `<form method="post" action="${escape(button.action)}"><button style="font:inherit;background:#0366d6;color:#fff;border:0;border-radius:6px;padding:10px 18px;font-weight:600;cursor:pointer">${escape(button.label)}</button></form>`
-    : `<p><a href="${config.appUrl}/" style="color:#0366d6">${escape(tr(lang, "Open TasksPipes"))}</a></p>`;
-  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`
-    + `<meta name="robots" content="noindex"><title>${escape(title)} — TasksPipes</title></head>`
-    + `<body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:15px;line-height:1.5;color:#111319;max-width:520px;margin:48px auto;padding:0 16px">`
-    + `<h1 style="font-size:20px">${escape(title)}</h1><p>${escape(text)}</p>${form}</body></html>`;
+    ? `<form method="post" action="${escape(button.action)}" style="margin:20px 0 0"><button style="font:inherit;background-color:#0366d6;color:#ffffff;border:0;border-radius:8px;padding:10px 18px;font-weight:600;cursor:pointer">${escape(button.label)}</button></form>`
+    : "";
+  const html = mailLayout(lang, {
+    title,
+    body: `<p style="margin:0">${escape(text)}</p>${form}`,
+    action: button ? undefined : { label: tr(lang, "Open TasksPipes"), url: `${config.appUrl}/` },
+  });
+  return html.replace("<title>", '<meta name="robots" content="noindex"><title>').replace(`<title>${escape(title)}</title>`, `<title>${escape(title)} — TasksPipes</title>`);
 }
 
 export async function notificationRoutes(app: FastifyInstance) {
@@ -394,12 +402,13 @@ interface Recipient {
   id: string;
   email: string;
   lang: Locale;
+  theme: MailTheme;
   prefs: Prefs;
 }
 
 async function recipientsOf(ids: string[]): Promise<Map<string, Recipient>> {
-  const { rows } = await query(`SELECT u.id, u.email, u.locale, u.notification_prefs FROM users u WHERE u.id = ANY($1) AND ${ELIGIBLE}`, [ids]);
-  return new Map(rows.map((r) => [r.id, { id: r.id, email: r.email, lang: (r.locale as Locale) ?? config.defaultLocale, prefs: prefsOf(r.notification_prefs) }]));
+  const { rows } = await query(`SELECT u.id, u.email, u.locale, u.theme, u.notification_prefs FROM users u WHERE u.id = ANY($1) AND ${ELIGIBLE}`, [ids]);
+  return new Map(rows.map((r) => [r.id, { id: r.id, email: r.email, lang: (r.locale as Locale) ?? config.defaultLocale, theme: r.theme ?? null, prefs: prefsOf(r.notification_prefs) }]));
 }
 
 async function deliver(send: Send, r: Recipient, mail: { subject: string; html: string }, unsubscribe: string) {
@@ -448,7 +457,7 @@ async function sendImmediate(now: Date, send: Send): Promise<number> {
     const lines = ready.filter((r) => taken.has(Number(r.id))).map(toLine);
     if (!lines.length) continue;
     const unsubscribe = unsubscribeUrl(u.id, lines.map((l) => prefKind(l.kind)));
-    await deliver(send, u, immediateEmail(u.lang, t, lines, unsubscribe), unsubscribe).then(() => sent++, () => {});
+    await deliver(send, u, immediateEmail(u.lang, t, lines, unsubscribe, u.theme), unsubscribe).then(() => sent++, () => {});
   }
   return sent;
 }
@@ -477,7 +486,7 @@ async function sendDigests(day: string, send: Send): Promise<number> {
       .filter((x) => x.lines.length);
     if (!kept.length) continue;
     const unsubscribe = unsubscribeUrl(u.id, kept.flatMap((x) => x.lines.map((l) => prefKind(l.kind))));
-    await deliver(send, u, digestEmail(u.lang, day, kept, unsubscribe), unsubscribe).then(() => sent++, () => {});
+    await deliver(send, u, digestEmail(u.lang, day, kept, unsubscribe, u.theme), unsubscribe).then(() => sent++, () => {});
   }
   return sent;
 }
@@ -525,7 +534,7 @@ async function sendDueReminders(now: Date, send: Send): Promise<number> {
     }
     if (!sections.overdue.length && !sections.today.length && !sections.tomorrow.length) continue;
     const unsubscribe = unsubscribeUrl(u.id, ["due"]);
-    await deliver(send, u, dueEmail(u.lang, today, sections, unsubscribe), unsubscribe).then(() => sent++, () => {});
+    await deliver(send, u, dueEmail(u.lang, today, sections, unsubscribe, u.theme), unsubscribe).then(() => sent++, () => {});
   }
   return sent;
 }

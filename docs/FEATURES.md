@@ -292,6 +292,10 @@ edited, otherwise once the edit is over, with a banner offering to reload.
 
 ## E-mail notifications
 
+Every e-mail (notifications, reports, sign-in links and invitations) has the look of the app — its colours, a white
+card on a blue-grey background, the blue button — and turns **dark** when the mail app is in dark mode; a theme forced
+in one's profile (light or dark) applies to one's notifications and reports too.
+
 With e-mail set up on the instance, TasksPipes tells people by e-mail what needs them, even with the app closed:
 
 | Notification | Who gets it | By default |
