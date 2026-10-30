@@ -5,9 +5,9 @@
 #   update.sh --check       only tell whether a newer release exists
 #   update.sh --version X   move to version X (e.g. 0.18.0)
 #
-# With the published images, it sets TASKSPIPES_VERSION in .env, refreshes docker-compose.yml from that release,
-# pulls the image and restarts the app; built from the sources (a git checkout), it checks out the release's tag and
-# rebuilds. Either way the database is backed up first (backups/, the last 5 kept), and the previous version is put
+# With the published images, it sets TASKSPIPES_VERSION in .env, refreshes docker-compose.yml from that release (the
+# release's tag, in a clone of the repository), pulls the image and restarts the app; built from the sources, it checks
+# out the release's tag and rebuilds. Either way the database is backed up first (backups/, the last 5 kept), and the previous version is put
 # back when the new one does not become healthy.
 set -euo pipefail
 
@@ -28,6 +28,17 @@ trap 'rm -f "${BASH_SOURCE[0]}"' EXIT
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+
+# git in the installation's clone, as the person who owns it (its files stay theirs); as root, for this directory only.
+git_in() {
+  local owner
+  owner="$(stat -c %U "$DIR/.git" 2>/dev/null || echo root)"
+  if [ "$owner" != root ] && [ "$(id -u)" = 0 ] && command -v runuser >/dev/null; then
+    runuser -u "$owner" -- git -C "$DIR" -c advice.detachedHead=false "$@"
+  else
+    git -C "$DIR" -c safe.directory="$DIR" -c advice.detachedHead=false "$@"
+  fi
+}
 
 CHECK_ONLY=0
 TARGET=""
@@ -59,10 +70,17 @@ latest_release() {
 # The newest of two versions (sort -V knows 1.10.0 > 1.9.0).
 newest() { printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1; }
 
+# How this installation runs: written by install.sh; before, a clone of the repository was built from its sources.
+MODE="$(env_get TASKSPIPES_INSTALL)"
+if [ -z "$MODE" ]; then
+  if [ -d .git ]; then MODE=source; else MODE=image; fi
+fi
 SOURCE=0
-[ -d .git ] && SOURCE=1
+[ "$MODE" = source ] && SOURCE=1
+GIT=0
+[ -d .git ] && GIT=1
 if [ "$SOURCE" = 1 ]; then
-  CURRENT="$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//' || true)"
+  CURRENT="$(git_in describe --tags --exact-match 2>/dev/null | sed 's/^v//' || true)"
   CURRENT="${CURRENT:-$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' server/package.json | head -n 1)}"
 else
   CURRENT="$(env_get TASKSPIPES_VERSION)"
@@ -119,28 +137,39 @@ wait_healthy() {
 # ---- Move to the new version -------------------------------------------------------------------------------------------
 say "Updating TasksPipes from $CURRENT to $TARGET"
 if [ "$SOURCE" = 1 ]; then
-  PREVIOUS_REF="$(git rev-parse HEAD)"
-  git fetch --quiet --tags origin
-  git -c advice.detachedHead=false checkout --quiet "v$TARGET" || die "No tag v$TARGET: nothing changed."
+  PREVIOUS_REF="$(git_in rev-parse HEAD)"
+  git_in fetch --quiet --tags origin
+  git_in checkout --quiet "v$TARGET" || die "No tag v$TARGET: nothing changed."
   if docker compose up -d --build app && wait_healthy; then
     say "TasksPipes $TARGET is running."
     exit 0
   fi
   warn "The new version did not start: going back to $CURRENT."
-  git -c advice.detachedHead=false checkout --quiet "$PREVIOUS_REF"
+  git_in checkout --quiet "$PREVIOUS_REF"
   docker compose up -d --build app || true
   die "Update failed; $CURRENT was put back (database backup: $DIR/$BACKUP)."
 fi
 
 cp .env .env.before-update
 cp docker-compose.yml docker-compose.yml.before-update
+PREVIOUS_REF=""
+if [ "$GIT" = 1 ]; then PREVIOUS_REF="$(git_in rev-parse HEAD)"; fi
 restore() {
   mv -f .env.before-update .env
-  mv -f docker-compose.yml.before-update docker-compose.yml
+  if [ -n "$PREVIOUS_REF" ]; then
+    rm -f docker-compose.yml.before-update
+    git_in checkout --quiet "$PREVIOUS_REF"
+  else
+    mv -f docker-compose.yml.before-update docker-compose.yml
+  fi
 }
 env_set TASKSPIPES_VERSION "$TARGET"
-# The release's own compose file (new services, settings…); kept as it was when it cannot be fetched.
-if curl -fsSL "https://raw.githubusercontent.com/$REPO/v$TARGET/docker-compose.yml" -o docker-compose.yml.new; then
+# The release's own compose file (new services, settings…): its tag in a clone of the repository, else downloaded;
+# kept as it was when it cannot be had.
+if [ "$GIT" = 1 ]; then
+  git_in fetch --quiet --tags origin || true
+  git_in checkout --quiet "v$TARGET" || warn "No tag v$TARGET here: keeping the current compose file."
+elif curl -fsSL "https://raw.githubusercontent.com/$REPO/v$TARGET/docker-compose.yml" -o docker-compose.yml.new; then
   mv -f docker-compose.yml.new docker-compose.yml
 else
   rm -f docker-compose.yml.new
@@ -150,12 +179,12 @@ if ! docker compose pull app; then
   restore
   die "TasksPipes $TARGET could not be downloaded: nothing changed."
 fi
-if docker compose up -d --remove-orphans && wait_healthy; then
+if docker compose up -d --no-build --remove-orphans && wait_healthy; then
   rm -f .env.before-update docker-compose.yml.before-update
   say "TasksPipes $TARGET is running."
   exit 0
 fi
 warn "The new version did not start: going back to $CURRENT."
 restore
-docker compose up -d --remove-orphans || true
+docker compose up -d --no-build --remove-orphans || true
 die "Update failed; $CURRENT was put back (database backup: $DIR/$BACKUP)."

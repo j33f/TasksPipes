@@ -36,6 +36,25 @@ curl -fsSL https://raw.githubusercontent.com/j33f/TasksPipes/main/scripts/instal
 Other options: `--dir`, `--outline-url`, `--port`, `--version` (a release), `--ref` (build a branch or tag from the
 sources); `--help` lists them.
 
+### An existing installation
+
+The installer also takes over an installation made before it — by hand, from a clone of this repository, whatever
+its version — to give it the published image and one-click updates. Run it from that directory (or give it with
+`--dir`):
+
+```shell
+cd /path/to/TasksPipes
+curl -fsSL https://raw.githubusercontent.com/j33f/TasksPipes/main/scripts/install.sh | sudo bash
+```
+
+It backs the database up first (`backups/taskspipes-before-install-….sql.gz`), then moves the clone to the latest
+release's tag and runs its published image, with the updater (or rebuilds from the sources when there is no image for
+the machine). Everything of its own is kept: `.env` (the address and port the app was published on included — before
+0.8.0 that was every address, kept with a warning), other Compose profiles, and a `compose.override.yml` or `Caddyfile`
+not written by the installer. The project directory, hence the Compose project and its database volume, stays the
+same. A clone with changes to the repository's files is refused until they are committed, stashed or undone. Git runs
+as the clone's owner, so that it can still be pulled by hand.
+
 ## Quick start (by hand)
 
 1. Copy the configuration and fill it in:

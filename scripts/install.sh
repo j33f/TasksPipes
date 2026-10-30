@@ -8,13 +8,18 @@
 # stack. Updates: in one click from the app when the published image exists for this machine (the updater), and in
 # one command anyway (the `taskspipes-update` alias, for bash and zsh). Running it again keeps the configuration.
 #
+# An existing installation — made by hand from a clone of the repository (any version), or by this script — is
+# taken over in place: its .env, data and files of its own are kept, the database is backed up first, and it moves to
+# the latest release, on the published image with one-click updates when possible. Run it from that directory, or
+# give it with --dir.
+#
 # Options (all optional; asked when missing, unless --yes):
-#   --dir DIR             where to install (default /opt/taskspipes)
+#   --dir DIR             where to install, or the existing installation (default /opt/taskspipes)
 #   --domain NAME         public address, e.g. tasks.example.com (or a full URL)
 #   --admin-email ADDR    administrator(s) of the instance, comma-separated
 #   --outline-url URL     your Outline server (optional)
 #   --proxy caddy|none    caddy: HTTPS with an automatic certificate (ports 80, 443); none: your own reverse proxy
-#   --port N              port of the app on 127.0.0.1, for your own reverse proxy (default 3000)
+#   --port N              port of the app on 127.0.0.1, for your own reverse proxy (default 3000; kept when set)
 #   --updates auto|alias  auto: one-click updates from the app (when possible) + the alias; alias: the alias only
 #   --version X           version to install (default the latest release)
 #   --ref REF             build from this branch or tag of the sources instead of using the published image
@@ -29,8 +34,8 @@ warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
 trap 'die "Failed at line $LINENO."' ERR
 
-DIR="/opt/taskspipes"
-DOMAIN="" ADMIN="" OUTLINE="" PROXY="" PORT="3000" UPDATES="" TP_VERSION="" REF="" YES=0
+DIR=""
+DOMAIN="" ADMIN="" OUTLINE="" PROXY="" PORT="" UPDATES="" TP_VERSION="" REF="" YES=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) DIR="$2"; shift ;;
@@ -43,7 +48,7 @@ while [ $# -gt 0 ]; do
     --version) TP_VERSION="${2#v}"; shift ;;
     --ref) REF="$2"; shift ;;
     --yes|-y) YES=1 ;;
-    -h|--help) sed -n '2,24p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true; exit 0 ;;
+    -h|--help) sed -n '2,30p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true; exit 0 ;;
     *) die "Unknown option: $1 (see --help)" ;;
   esac
   shift
@@ -117,6 +122,43 @@ fi
 docker info >/dev/null 2>&1 || die "Docker is installed but not running: start it (systemctl start docker) and run this again."
 say "Docker $(docker version -f '{{.Server.Version}}') with Compose $(docker compose version --short)"
 
+# git in the installation's clone, as the person who owns it (its files stay theirs); as root, for this directory only.
+git_in() {
+  local owner
+  owner="$(stat -c %U "$DIR/.git" 2>/dev/null || echo root)"
+  if [ "$owner" != root ] && [ "$(id -u)" = 0 ] && command -v runuser >/dev/null; then
+    runuser -u "$owner" -- git -C "$DIR" -c advice.detachedHead=false "$@"
+  else
+    git -C "$DIR" -c safe.directory="$DIR" -c advice.detachedHead=false "$@"
+  fi
+}
+
+# ---- Where ----------------------------------------------------------------------------------------------------------------
+# An installation of TasksPipes: a .env next to a compose file that runs it.
+is_install() { [ -f "$1/.env" ] && grep -qs -i "taskspipes" "$1/docker-compose.yml" "$1/compose.yml"; }
+if [ -z "$DIR" ]; then
+  DIR=/opt/taskspipes
+  if [ "$PWD" != "$DIR" ] && ! is_install "$DIR" && is_install "$PWD"; then
+    if [ -n "$TTY" ]; then
+      ask HERE "An installation of TasksPipes is in $PWD: take it over (yes) or install anew in $DIR (no)" "yes"
+      case "$HERE" in y|Y|yes|YES|o|oui) DIR="$PWD" ;; esac
+    else
+      die "An installation of TasksPipes is in $PWD: give --dir $PWD to take it over, or --dir $DIR to install anew."
+    fi
+  fi
+fi
+mkdir -p "$DIR"
+DIR="$(cd "$DIR" && pwd)"
+EXISTING=0
+if is_install "$DIR"; then EXISTING=1; fi
+
+# A clone of the repository must hold no change of its own: moving it to the release's tag would fail or lose them.
+if [ "$EXISTING" = 1 ] && [ -d "$DIR/.git" ]; then
+  command -v git >/dev/null || die "$DIR is a clone of the repository, but git is missing."
+  changes="$(git_in status --porcelain --untracked-files=no)"
+  [ -z "$changes" ] || die "$DIR holds changes to the repository's files ($(echo "$changes" | awk '{print $2}' | tr '\n' ' ')): commit, stash or undo them, then run this again."
+fi
+
 # ---- Which version, and how ----------------------------------------------------------------------------------------------
 latest_release() {
   curl -fsSL -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
@@ -142,20 +184,44 @@ else
   say "TasksPipes $TP_VERSION: published image for $PLATFORM"
 fi
 
-# ---- Files -----------------------------------------------------------------------------------------------------------------
-mkdir -p "$DIR"
+# ---- An existing installation: its data first -------------------------------------------------------------------------------
 cd "$DIR"
-if [ "$MODE" = source ]; then
-  if [ -d .git ]; then
-    git fetch --quiet --tags origin
-  elif [ -z "$(find . -mindepth 1 -maxdepth 1 ! -name .env ! -name backups -print -quit)" ]; then
-    git clone --quiet "https://github.com/$REPO.git" .tmp-clone && cp -a .tmp-clone/. . && rm -rf .tmp-clone
+OLD_BIND=""
+if [ "$EXISTING" = 1 ]; then
+  say "Taking over the installation in $DIR (its configuration and data are kept)"
+  # Before 0.8.0 the app was published on every address: kept as it was, so that a proxy elsewhere still reaches it.
+  OLD_BIND="$(docker compose port app 3000 2>/dev/null | sed 's/:[0-9]*$//' | head -n 1 || true)"
+  if [ -n "$(docker compose ps -q db 2>/dev/null)" ]; then
+    mkdir -p backups
+    chmod 700 backups
+    backup="backups/taskspipes-before-install-$(date +%Y%m%d-%H%M%S).sql.gz"
+    if docker compose exec -T db pg_dump -U taskspipes taskspipes | gzip > "$backup"; then
+      say "Database backed up to $DIR/$backup"
+    else
+      rm -f "$backup"
+      die "The database could not be backed up: nothing changed."
+    fi
   else
-    die "$DIR already holds an installation from the published image: update it with taskspipes-update."
+    warn "The database is not running: no backup made."
   fi
-  git -c advice.detachedHead=false checkout --quiet "$REF"
+fi
+
+# ---- Files -----------------------------------------------------------------------------------------------------------------
+if [ -d .git ]; then
+  # A clone of the repository (made by hand, or by this script): moved to the release, whatever the mode.
+  git_in fetch --quiet --tags origin
+  git_in checkout --quiet "$REF"
+elif [ "$MODE" = source ]; then
+  [ -z "$(find . -mindepth 1 -maxdepth 1 ! -name .env ! -name backups -print -quit)" ] \
+    || die "$DIR holds files but no clone of the repository: building from the sources needs an empty directory."
+  git clone --quiet "https://github.com/$REPO.git" .tmp-clone && cp -a .tmp-clone/. . && rm -rf .tmp-clone
+  git_in checkout --quiet "$REF"
 else
-  [ -d .git ] && die "$DIR holds an installation built from the sources: update it with taskspipes-update."
+  # The release's compose file; one changed by hand is kept aside.
+  if [ -f docker-compose.yml ] && ! grep -q "TASKSPIPES_VERSION" docker-compose.yml; then
+    cp docker-compose.yml "docker-compose.yml.before-install"
+    warn "Your docker-compose.yml is kept as docker-compose.yml.before-install; put your own changes in compose.override.yml."
+  fi
   curl -fsSL "$RAW/$REF/docker-compose.yml" -o docker-compose.yml
   curl -fsSL "$RAW/$REF/.env.example" -o .env.example
   mkdir -p scripts
@@ -189,12 +255,13 @@ if [ "$FIRST" = 1 ]; then
   fi
 else
   say "Keeping the configuration of $DIR/.env"
-  PROXY="${PROXY:-$([ -f compose.override.yml ] && grep -q caddy compose.override.yml && echo caddy || echo none)}"
-  UPDATES="${UPDATES:-$(grep -q '^COMPOSE_PROFILES=.*updater' .env && echo auto || echo alias)}"
+  PROXY="${PROXY:-$(grep -qs "Written by scripts/install.sh" compose.override.yml && echo caddy || echo none)}"
+  # Taking over an installation made by hand: one-click updates unless asked otherwise.
+  UPDATES="${UPDATES:-$(grep -q '^TASKSPIPES_INSTALL=' .env && ! grep -q '^COMPOSE_PROFILES=.*updater' .env && echo alias || echo auto)}"
 fi
 case "$PROXY" in caddy|none) ;; *) die "--proxy is caddy or none" ;; esac
 case "$UPDATES" in auto|alias) ;; *) die "--updates is auto or alias" ;; esac
-[[ "$PORT" =~ ^[0-9]+$ ]] || die "--port is a number"
+[ -z "$PORT" ] || [[ "$PORT" =~ ^[0-9]+$ ]] || die "--port is a number"
 
 if [ "$FIRST" = 1 ]; then
   DOMAIN="${DOMAIN#http://}" DOMAIN="${DOMAIN#https://}" DOMAIN="${DOMAIN%%/*}"
@@ -216,11 +283,26 @@ if [ "$FIRST" = 1 ]; then
 fi
 chmod 600 .env
 if [ "$MODE" = image ]; then env_set TASKSPIPES_VERSION "$TP_VERSION"; fi
+# How this installation updates (read by scripts/update.sh).
+env_set TASKSPIPES_INSTALL "$MODE"
 
-# HTTPS: Caddy in front (automatic certificate), or the app on 127.0.0.1 for a reverse proxy of one's own.
-env_set APP_BIND 127.0.0.1
-env_set APP_PORT "$PORT"
+# HTTPS: Caddy in front (automatic certificate), or the app on 127.0.0.1 for a reverse proxy of one's own. The address
+# and port already set are kept.
+if [ -z "$(env_get APP_BIND)" ]; then
+  case "$OLD_BIND" in
+    ""|127.0.0.1|localhost) env_set APP_BIND 127.0.0.1 ;;
+    *)
+      env_set APP_BIND 0.0.0.0
+      warn "The app was reachable on every address of this machine: kept (APP_BIND=0.0.0.0). If your reverse proxy runs here, set APP_BIND=127.0.0.1 in .env (see docs/HOSTING.md)."
+      ;;
+  esac
+fi
+if [ -n "$PORT" ]; then env_set APP_PORT "$PORT"; elif [ -z "$(env_get APP_PORT)" ]; then env_set APP_PORT 3000; fi
+PORT="$(env_get APP_PORT)"
 if [ "$PROXY" = caddy ]; then
+  if [ -f compose.override.yml ] && ! grep -q "Written by scripts/install.sh" compose.override.yml; then
+    die "compose.override.yml is yours: Caddy cannot be added to it. Use --proxy none, or merge it by hand."
+  fi
   host="$(sed -n 's|^APP_URL=https\{0,1\}://||p' .env | tail -n 1)"
   cat > Caddyfile <<EOF
 # Written by scripts/install.sh: HTTPS for TasksPipes, certificate obtained and renewed by Caddy.
@@ -251,24 +333,30 @@ volumes:
   caddy-config:
 EOF
 else
-  rm -f compose.override.yml Caddyfile
+  # Only what this script wrote: a compose.override.yml or Caddyfile of one's own stays.
+  for f in compose.override.yml Caddyfile; do
+    if grep -qs "Written by scripts/install.sh" "$f"; then rm -f "$f"; fi
+  done
 fi
 
 # Updates in one click: the updater service, which needs the published images.
+# Other Compose profiles set in .env are kept.
+profiles="$(env_get COMPOSE_PROFILES | tr ',' '\n' | grep -v -x -e updater -e '' | paste -sd, - || true)"
 if [ "$UPDATES" = auto ] && [ "$MODE" = image ]; then
   [ -n "$(env_get UPDATER_TOKEN)" ] || env_set UPDATER_TOKEN "$(secret)"
   env_set PROJECT_DIR "$DIR"
-  env_set COMPOSE_PROFILES updater
+  env_set COMPOSE_PROFILES "${profiles:+$profiles,}updater"
 else
   if [ "$UPDATES" = auto ]; then warn "One-click updates need the published image: this instance updates with taskspipes-update."; fi
-  sed -i '/^COMPOSE_PROFILES=/d;/^UPDATER_TOKEN=/d' .env
+  sed -i '/^UPDATER_TOKEN=/d' .env
+  if [ -n "$profiles" ]; then env_set COMPOSE_PROFILES "$profiles"; else sed -i '/^COMPOSE_PROFILES=/d' .env; fi
 fi
 
 # ---- Start ------------------------------------------------------------------------------------------------------------------
 say "Starting TasksPipes (the first start can take a few minutes)"
 if [ "$MODE" = image ]; then
   docker compose pull --quiet
-  docker compose up -d --remove-orphans
+  docker compose up -d --no-build --remove-orphans
 else
   docker compose up -d --build --remove-orphans
 fi
