@@ -9,7 +9,7 @@
 import { config } from "./config.js";
 import { one, query, type Queryable } from "./db.js";
 import { intlTag, localize, tr, type Locale } from "./i18n.js";
-import { sendHtmlMail } from "./mail.js";
+import { escape, mailLayout, mailStyle, sendHtmlMail, type MailTheme } from "./mail.js";
 import { TASK_KEY_PREFIX } from "./git.js";
 import { pipeTypeById, stageLabel, taskTypeById, type Status } from "./pipeTypes.js";
 import { dailyPeriod, isDay, lastWeekday, localDay, weeklyPeriod, zonedParts, type Period } from "./time.js";
@@ -271,8 +271,6 @@ export const reportDay = (v: unknown, fallback: string) => (isDay(v) ? v : fallb
 // ---------------------------------------------------------------------------
 // E-mails
 
-const escape = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-
 /** "3 d 4 h", "5 h 20", "45 min" in a language. */
 export function duration(ms: number, lang: Locale): string {
   const min = Math.round(ms / 60_000);
@@ -296,50 +294,56 @@ interface PipeRow {
   space_id: string;
 }
 
-const taskLine = (lang: Locale, kind: string, t: ReportTask | TaskInfo, extra = "") => {
+const taskLine = (lang: Locale, kind: string, t: ReportTask | TaskInfo, theme: MailTheme, extra = "") => {
+  const st = mailStyle(theme);
   const stage = "stage" in t && t.stage ? ` · ${escape(localize(lang, stageLabel(kind, t.stage) ?? t.stage))}` : "";
-  return `<li><a href="${config.appUrl}/?task=${t.id}" style="color:#0366d6;text-decoration:none">${TASK_KEY_PREFIX}-${t.number}</a> ${escape(t.title)}`
-    + `<span style="color:#66778F">${stage}${t.owner ? ` · ${escape(t.owner)}` : ""}${extra}</span></li>`;
+  return `${st.link(`${config.appUrl}/?task=${t.id}`, `${TASK_KEY_PREFIX}-${t.number}`, "font-weight:600")} ${escape(t.title)}`
+    + st.muted(`${stage}${t.owner ? ` · ${escape(t.owner)}` : ""}${extra}`);
 };
 
-export function dailyEmail(pipe: PipeRow, r: DailyReport, lang: Locale, day: string) {
+export function dailyEmail(pipe: PipeRow, r: DailyReport, lang: Locale, day: string, theme: MailTheme = null) {
+  const st = mailStyle(theme);
   const sections: [string, ReportTask[]][] = [
     ["New in the pipe", r.created], ["Tasks started", r.started], ["Tasks done", r.done], ["Tasks blocked", r.blocked], ["Tasks dropped", r.dropped],
     ["Still in progress", r.inProgress], ["Still blocked", r.stillBlocked],
   ];
   const html = sections
     .filter(([, list]) => list.length)
-    .map(([title, list]) => `<h3 style="font-size:15px;margin:18px 0 6px">${escape(tr(lang, title))} (${list.length})</h3><ul style="padding-left:18px;margin:0">${list.map((t) => taskLine(lang, pipe.kind, t)).join("")}</ul>`)
+    .map(([title, list]) => st.heading(`${tr(lang, title)} (${list.length})`) + st.list(list.map((t) => taskLine(lang, pipe.kind, t, theme))))
     .join("");
   return {
     subject: tr(lang, "Activity of {pipe} — {day}", { pipe: pipe.name, day }),
-    html: wrap(lang, tr(lang, "Activity of {pipe} — {day}", { pipe: pipe.name, day }), tr(lang, "From {start} to {end}.", { start: when(r.period.start, lang), end: when(r.period.end, lang) }), html, pipe),
+    html: wrap(lang, tr(lang, "Activity of {pipe} — {day}", { pipe: pipe.name, day }), tr(lang, "From {start} to {end}.", { start: when(r.period.start, lang), end: when(r.period.end, lang) }), html, pipe, theme),
     empty: sections.every(([, list]) => !list.length),
   };
 }
 
-export function weeklyEmail(pipe: PipeRow, r: WeeklyReport, lang: Locale, day: string) {
-  const td = (s: string, right = false) => `<td style="padding:4px 10px 4px 0;${right ? "text-align:right;" : ""}border-bottom:1px solid #e5e7eb">${s}</td>`;
+export function weeklyEmail(pipe: PipeRow, r: WeeklyReport, lang: Locale, day: string, theme: MailTheme = null) {
+  const st = mailStyle(theme);
+  const cell = (s: string, right: boolean, role: "text" | "muted") =>
+    `<td ${st.attr("border", `padding:6px 12px 6px 0;${right ? "text-align:right;" : ""}border-bottom:1px solid`)}><span ${st.attr(role)}>${s}</span></td>`;
+  const td = (s: string, right = false) => cell(s, right, "text");
+  const th = (s: string, right = false) => cell(s, right, "muted");
   const table = r.byType.length
-    ? `<table style="border-collapse:collapse;font-size:14px"><tr style="color:#66778F">${td(tr(lang, "Task type"))}${td(tr(lang, "In progress"), true)}${td(tr(lang, "Blocked"), true)}${td(tr(lang, "Tasks"), true)}${td(tr(lang, "Done"), true)}</tr>`
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;margin-top:12px"><tr>${th(tr(lang, "Task type"))}${th(tr(lang, "In progress"), true)}${th(tr(lang, "Blocked"), true)}${th(tr(lang, "Tasks"), true)}${th(tr(lang, "Done"), true)}</tr>`
       + r.byType.map((row) => `<tr>${td(escape(localize(lang, taskTypeById(row.taskType)?.label ?? row.taskType)))}${td(duration(row.activeMs, lang), true)}${td(duration(row.blockedMs, lang), true)}${td(String(row.tasks), true)}${td(String(row.done), true)}</tr>`).join("")
       + `</table>`
     : `<p>${escape(tr(lang, "No time recorded this week."))}</p>`;
   // Durations only: notes stay in the app.
   const logged = r.logged?.totalMinutes
-    ? `<h3 style="font-size:15px;margin:18px 0 6px">${escape(tr(lang, "Time logged: {total}", { total: workDuration(r.logged.totalMinutes, lang) }))}</h3>`
-      + `<p style="margin:0">${r.logged.byPerson.map((p) => `${escape(p.name)} ${workDuration(p.minutes, lang)}`).join(" · ")}</p>`
-      + `<ul style="padding-left:18px;margin:6px 0 0">${r.logged.tasks.slice(0, 10).map((t) => taskLine(lang, pipe.kind, t, ` · ${workDuration(t.minutes, lang)}`
-        + (t.estimateMinutes ? ` · ${escape(tr(lang, "{logged} of {estimate} estimated", { logged: workDuration(t.totalMinutes, lang), estimate: workDuration(t.estimateMinutes, lang) }))}` : ""))).join("")}</ul>`
+    ? st.heading(tr(lang, "Time logged: {total}", { total: workDuration(r.logged.totalMinutes, lang) }))
+      + `<p style="margin:0 0 6px">${r.logged.byPerson.map((p) => `${escape(p.name)} ${workDuration(p.minutes, lang)}`).join(" · ")}</p>`
+      + st.list(r.logged.tasks.slice(0, 10).map((t) => taskLine(lang, pipe.kind, t, theme, ` · ${workDuration(t.minutes, lang)}`
+        + (t.estimateMinutes ? ` · ${escape(tr(lang, "{logged} of {estimate} estimated", { logged: workDuration(t.totalMinutes, lang), estimate: workDuration(t.estimateMinutes, lang) }))}` : ""))))
     : "";
   const top = r.tasks.length
-    ? `<h3 style="font-size:15px;margin:18px 0 6px">${escape(tr(lang, "Tasks that took the most time"))}</h3><ul style="padding-left:18px;margin:0">${r.tasks.slice(0, 10).map((t) => taskLine(lang, pipe.kind, t, ` · ${duration(t.activeMs, lang)}`)).join("")}</ul>`
+    ? st.heading(tr(lang, "Tasks that took the most time")) + st.list(r.tasks.slice(0, 10).map((t) => taskLine(lang, pipe.kind, t, theme, ` · ${duration(t.activeMs, lang)}`)))
     : "";
   return {
     subject: tr(lang, "Time report of {pipe} — week to {day}", { pipe: pipe.name, day }),
     html: wrap(lang, tr(lang, "Time report of {pipe} — week to {day}", { pipe: pipe.name, day }),
       tr(lang, "Time spent on tasks being worked on, from {start} to {end}: {total}.", { start: when(r.period.start, lang), end: when(r.period.end, lang), total: duration(r.totalActiveMs, lang) }),
-      table + top + logged, pipe),
+      table + top + logged, pipe, theme),
     empty: !r.tasks.length && !r.logged?.totalMinutes,
   };
 }
@@ -347,11 +351,15 @@ export function weeklyEmail(pipe: PipeRow, r: WeeklyReport, lang: Locale, day: s
 const when = (iso: string, lang: Locale) =>
   new Intl.DateTimeFormat(intlTag(lang), { timeZone: config.timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 
-const wrap = (lang: Locale, title: string, intro: string, body: string, pipe: PipeRow) =>
-  `<div lang="${lang}" style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.5;color:#111319;max-width:640px">`
-  + `<h2 style="font-size:18px;margin:0 0 4px">${escape(title)}</h2><p style="color:#66778F;margin:0 0 8px">${escape(intro)}</p>${body}`
-  + `<p style="margin-top:24px"><a href="${config.appUrl}/pipes/${pipe.id}" style="color:#0366d6">${escape(tr(lang, "Open the pipe"))}</a></p>`
-  + `<p style="color:#66778F;font-size:12px">${escape(tr(lang, "You receive this e-mail because the pipe sends its reports to the members of its space."))}</p></div>`;
+const wrap = (lang: Locale, title: string, intro: string, body: string, pipe: PipeRow, theme: MailTheme) =>
+  mailLayout(lang, {
+    title,
+    intro,
+    body,
+    theme,
+    action: { label: tr(lang, "Open the pipe"), url: `${config.appUrl}/pipes/${pipe.id}` },
+    footer: escape(tr(lang, "You receive this e-mail because the pipe sends its reports to the members of its space.")),
+  });
 
 // ---------------------------------------------------------------------------
 // Scheduled sending
@@ -365,12 +373,12 @@ type Send = (lang: Locale, to: string, subject: string, html: string) => Promise
 
 async function recipients(spaceId: string) {
   const { rows } = await query(
-    `SELECT u.email, u.locale FROM space_members m JOIN users u ON u.id = m.user_id
+    `SELECT u.email, u.locale, u.theme FROM space_members m JOIN users u ON u.id = m.user_id
      WHERE m.space_id = $1 AND u.email IS NOT NULL AND u.auth_kind <> 'system' AND u.disabled_at IS NULL
        AND u.last_login_at IS NOT NULL`,
     [spaceId]
   );
-  return rows as { email: string; locale: Locale | null }[];
+  return rows as { email: string; locale: Locale | null; theme: MailTheme }[];
 }
 
 /**
@@ -382,9 +390,9 @@ export async function runScheduledReports(now = new Date(), send: Send = (l, to,
   const end = dailyPeriod(day, config.reportHour, config.timezone).end;
   if (now < end) return 0;
   let sent = 0;
-  const deliver = async (pipe: PipeRow, build: (lang: Locale) => { subject: string; html: string; empty: boolean }) => {
+  const deliver = async (pipe: PipeRow, build: (lang: Locale, theme: MailTheme) => { subject: string; html: string; empty: boolean }) => {
     for (const r of await recipients(pipe.space_id)) {
-      const mail = build(r.locale ?? config.defaultLocale);
+      const mail = build(r.locale ?? config.defaultLocale, r.theme ?? null);
       if (mail.empty) return;
       await send(r.locale ?? config.defaultLocale, r.email, mail.subject, mail.html).then(() => sent++, () => {});
     }
@@ -393,7 +401,7 @@ export async function runScheduledReports(now = new Date(), send: Send = (l, to,
     const { rows } = await query(`SELECT id, name, kind, space_id FROM pipes WHERE daily_report AND archived_at IS NULL`);
     for (const pipe of rows as PipeRow[]) {
       const report = await pipeDailyReport(pipe.id, day);
-      await deliver(pipe, (lang) => dailyEmail(pipe, report, lang, day));
+      await deliver(pipe, (lang, theme) => dailyEmail(pipe, report, lang, day, theme));
     }
   }
   if (zonedParts(now, config.timezone).weekday === "Fri" && (await claim("weekly", end))) {
@@ -401,7 +409,7 @@ export async function runScheduledReports(now = new Date(), send: Send = (l, to,
     for (const pipe of rows as PipeRow[]) {
       if (!pipeTypeById(pipe.kind)?.timeReport) continue;
       const report = await pipeWeeklyReport(pipe.id, day);
-      await deliver(pipe, (lang) => weeklyEmail(pipe, report, lang, day));
+      await deliver(pipe, (lang, theme) => weeklyEmail(pipe, report, lang, day, theme));
     }
   }
   return sent;
