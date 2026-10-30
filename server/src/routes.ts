@@ -267,6 +267,7 @@ function presentPipe(p: Row) {
     isDefault: p.is_default,
     dailyReport: Boolean(p.daily_report),
     weeklyReport: Boolean(p.weekly_report),
+    outlineDoc: p.outline_doc_id ? { id: p.outline_doc_id, title: p.outline_doc_title, url: p.outline_doc_url } : null,
     color: p.color,
     position: p.position,
     createdBy: p.created_by ? { id: p.created_by, name: p.created_by_name } : null,
@@ -1514,11 +1515,13 @@ export async function apiRoutes(app: FastifyInstance) {
     }
     const kind = "kind" in b ? pipeKind(b.kind, me(req), p.kind) : p.kind;
     if (kind !== p.kind) await assertKindAllowed(kind, p.space_id);
+    const doc = "outlineDoc" in b ? docOrNull(b.outlineDoc) : p.outline_doc_id ? { id: p.outline_doc_id, title: p.outline_doc_title, url: p.outline_doc_url } : null;
     await tx(async (client) => {
     await client.query(
       `UPDATE pipes SET name = $2, description = $3, visibility = $4, color = $5, kind = $6, icon = $8,
          archived_at = CASE WHEN $7::boolean IS NULL THEN archived_at WHEN $7 THEN COALESCE(archived_at, now()) END,
-         daily_report = $9, weekly_report = $10, updated_at = now()
+         daily_report = $9, weekly_report = $10, outline_doc_id = $11, outline_doc_title = $12, outline_doc_url = $13,
+         updated_at = now()
        WHERE id = $1`,
       [
         p.id,
@@ -1533,6 +1536,9 @@ export async function apiRoutes(app: FastifyInstance) {
         // Reports sent by e-mail: the weekly time report is for development pipes only.
         "dailyReport" in b ? b.dailyReport === true : p.daily_report,
         pipeTypeById(kind)?.timeReport ? ("weeklyReport" in b ? b.weeklyReport === true : p.weekly_report) : false,
+        doc?.id ?? null,
+        doc?.title ?? null,
+        doc?.url ?? null,
       ]
     );
     // A new type brings new columns: each task goes to the matching one.
@@ -2141,6 +2147,23 @@ export async function apiRoutes(app: FastifyInstance) {
   app.get("/outline/collections", async (req) => {
     const { data } = await req.outline<{ id: string; name: string }[]>("collections.list", { limit: 100 });
     return data.map((c) => ({ id: c.id, name: c.name }));
+  });
+
+  app.post("/pipes/:id/outline-document", async (req: Req) => {
+    const { p, role } = await loadPipeFor(req.params.id, me(req));
+    if (!role) throw forbidden();
+    const collectionId = text(req.body?.collectionId, "Collection", { required: true, max: 100 });
+    const { data } = await req.outline<OutlineDocument>("documents.create", {
+      title: p.name,
+      text: `${p.description || ""}\n\n---\n[${tr(localeOf(req), "TasksPipes pipe {name}", { name: p.name })}](${config.appUrl}/pipes/${p.id})`,
+      collectionId,
+      publish: true,
+    });
+    const doc = presentDoc(data, req.outlineUrl);
+    await query(`UPDATE pipes SET outline_doc_id = $2, outline_doc_title = $3, outline_doc_url = $4, updated_at = now() WHERE id = $1`, [
+      p.id, doc.id, doc.title, doc.url,
+    ]);
+    return doc;
   });
 
   app.post("/tasks/:id/outline-document", async (req: Req) => {

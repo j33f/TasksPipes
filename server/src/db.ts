@@ -695,6 +695,11 @@ DO $$ BEGIN
     INSERT INTO schema_steps (name) VALUES ('user-story-priority') ON CONFLICT DO NOTHING;
   END IF;
 END $$;
+
+-- A pipe can be linked to an Outline document, like a task.
+ALTER TABLE pipes ADD COLUMN IF NOT EXISTS outline_doc_id text;
+ALTER TABLE pipes ADD COLUMN IF NOT EXISTS outline_doc_title text;
+ALTER TABLE pipes ADD COLUMN IF NOT EXISTS outline_doc_url text;
 `;
 
 /**
