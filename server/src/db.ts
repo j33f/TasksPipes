@@ -696,10 +696,18 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- A pipe can be linked to an Outline document, like a task.
-ALTER TABLE pipes ADD COLUMN IF NOT EXISTS outline_doc_id text;
-ALTER TABLE pipes ADD COLUMN IF NOT EXISTS outline_doc_title text;
-ALTER TABLE pipes ADD COLUMN IF NOT EXISTS outline_doc_url text;
+-- Documents linked to a pipe: Outline documents, or pages elsewhere (office suites, design tools, code forges…).
+CREATE TABLE IF NOT EXISTS pipe_links (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  pipe_id uuid NOT NULL REFERENCES pipes(id) ON DELETE CASCADE,
+  source text NOT NULL,
+  url text NOT NULL,
+  title text NOT NULL,
+  outline_doc_id text,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS pipe_links_pipe_idx ON pipe_links(pipe_id);
 `;
 
 /**

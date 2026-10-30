@@ -61,9 +61,14 @@ start, Started, In progress, Blocked, Done, Dropped* — which the dashboard, du
   browser. Dropping a task in another lane gives it that lane's owner or type.
 - **Archiving**: an archived pipe leaves the lists, pickers and "My tasks", and takes no new tasks. It can still be
   viewed and unarchived. A pipe can be archived once all its tasks are done or dropped.
-- **Outline document**: when Outline is on, a pipe can be linked to an Outline document, shown under its description
-  (its specification, brief or meeting notes…). Its members search a document or paste its URL, unlink it, or create
-  one in an Outline collection from the pipe: titled like the pipe, its description and a link back to the pipe.
+- **Linked documents**: a pipe holds links to its documents (specification, brief, mock-ups, repository…), shown
+  under its description. Its members add them by choosing where the document lives, among the sources fitting the
+  pipe type — GitHub, GitLab and Figma first for development, Figma, Miro and Canva for design, Outline, Google Docs,
+  OneDrive / SharePoint, Dropbox, Notion, Confluence… — or any other address. **Outline** (when it is on, for
+  Outline accounts) is searched like for tasks, and a document can be **created in an Outline collection** from the
+  pipe: titled like it, with its description and a link back. Other sources take the document's address, whose
+  source is recognised and shown with its icon. Up to 50 links per pipe; Outline documents are hidden while Outline
+  is turned off.
 
 ### Pipe types
 
@@ -438,7 +443,7 @@ of Outline accounts; links you click (Outline documents, France Compétences pag
 | See a linked task one cannot open | its title and owner only; nothing of a confidential or team-only one |
 | Use the API with a token | the token's owner, with their own rights (read only for a read token) |
 | Manage a pipe's webhooks | members of its space (not on confidential pipes) |
-| Link, unlink or create a pipe's Outline document | members of its space (Outline accounts) |
+| Add or remove a pipe's linked documents | members of its space (Outline documents: Outline accounts) |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
 | Edit title, description and fields, priority and labels | members, or the author of a task in an open pipe |
 | Manage a space's labels | members of the space (whoever sees the space sees them) |

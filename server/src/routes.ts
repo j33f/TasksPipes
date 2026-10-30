@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { config } from "./config.js";
 import { loadCustomTypes, one, pool, query, syncStages, tx, type Queryable, type Row } from "./db.js";
 import { absoluteOutlineUrl, type OutlineDocument } from "./outline.js";
+import { linkSource } from "./links.js";
 import { HttpError, bad, forbidden, notFound } from "./errors.js";
 import {
   DEFAULT_PIPE_TYPE, allPipeTypes, allTaskTypes, pipeTypeById, resolveStage, stageLabel, taskTypeById, usableBy, type TaskType,
@@ -267,7 +268,6 @@ function presentPipe(p: Row) {
     isDefault: p.is_default,
     dailyReport: Boolean(p.daily_report),
     weeklyReport: Boolean(p.weekly_report),
-    outlineDoc: p.outline_doc_id ? { id: p.outline_doc_id, title: p.outline_doc_title, url: p.outline_doc_url } : null,
     color: p.color,
     position: p.position,
     createdBy: p.created_by ? { id: p.created_by, name: p.created_by_name } : null,
@@ -524,6 +524,11 @@ async function assertAdminRemains(db: Queryable, spaceId: string) {
   const r = await one(`SELECT count(*) AS n FROM space_members WHERE space_id = $1 AND role = 'admin'`, [spaceId], db);
   if (r!.n < 1) throw bad("The team must keep at least one admin");
 }
+
+/** Most documents linked to one pipe. */
+const MAX_PIPE_LINKS = 50;
+
+const presentLink = (l: Row) => ({ id: l.id, source: l.source, url: l.url, title: l.title, outlineDocId: l.outline_doc_id });
 
 const presentDoc = (d: OutlineDocument, instance: string) => ({
   id: d.id,
@@ -1350,9 +1355,10 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.get("/pipes/:id", async (req: Req) => {
     const { p, role } = await loadPipeFor(req.params.id, me(req));
-    const [space, tasks] = await Promise.all([
+    const [space, tasks, links] = await Promise.all([
       getSpace(p.space_id, me(req)),
       query(`${TASK_SELECT} WHERE t.pipe_id = $1 ORDER BY t.position, t.created_at`, [p.id]),
+      query(`SELECT * FROM pipe_links WHERE pipe_id = $1 ORDER BY created_at`, [p.id]),
     ]);
     const counts: Record<string, number> = {};
     for (const t of tasks.rows) counts[t.status] = (counts[t.status] ?? 0) + 1;
@@ -1362,6 +1368,7 @@ export async function apiRoutes(app: FastifyInstance) {
       myRole: role,
       canManage: Boolean(role),
       canAddTasks: !p.archived_at && (Boolean(role) || p.visibility === "open"),
+      links: links.rows.map(presentLink),
       tasks: tasks.rows.map(presentTask),
     };
   });
@@ -1515,13 +1522,11 @@ export async function apiRoutes(app: FastifyInstance) {
     }
     const kind = "kind" in b ? pipeKind(b.kind, me(req), p.kind) : p.kind;
     if (kind !== p.kind) await assertKindAllowed(kind, p.space_id);
-    const doc = "outlineDoc" in b ? docOrNull(b.outlineDoc) : p.outline_doc_id ? { id: p.outline_doc_id, title: p.outline_doc_title, url: p.outline_doc_url } : null;
     await tx(async (client) => {
     await client.query(
       `UPDATE pipes SET name = $2, description = $3, visibility = $4, color = $5, kind = $6, icon = $8,
          archived_at = CASE WHEN $7::boolean IS NULL THEN archived_at WHEN $7 THEN COALESCE(archived_at, now()) END,
-         daily_report = $9, weekly_report = $10, outline_doc_id = $11, outline_doc_title = $12, outline_doc_url = $13,
-         updated_at = now()
+         daily_report = $9, weekly_report = $10, updated_at = now()
        WHERE id = $1`,
       [
         p.id,
@@ -1536,9 +1541,6 @@ export async function apiRoutes(app: FastifyInstance) {
         // Reports sent by e-mail: the weekly time report is for development pipes only.
         "dailyReport" in b ? b.dailyReport === true : p.daily_report,
         pipeTypeById(kind)?.timeReport ? ("weeklyReport" in b ? b.weeklyReport === true : p.weekly_report) : false,
-        doc?.id ?? null,
-        doc?.title ?? null,
-        doc?.url ?? null,
       ]
     );
     // A new type brings new columns: each task goes to the matching one.
@@ -2149,9 +2151,50 @@ export async function apiRoutes(app: FastifyInstance) {
     return data.map((c) => ({ id: c.id, name: c.name }));
   });
 
-  app.post("/pipes/:id/outline-document", async (req: Req) => {
+  // ----- Documents linked to a pipe -------------------------------------------
+
+  async function pipeForLinks(req: Req) {
     const { p, role } = await loadPipeFor(req.params.id, me(req));
     if (!role) throw forbidden();
+    return p;
+  }
+
+  async function addLink(pipeId: string, userId: string, link: { url: string; title: string; outlineDocId?: string | null }) {
+    const n = await one(`SELECT count(*)::int AS n FROM pipe_links WHERE pipe_id = $1`, [pipeId]);
+    if (n!.n >= MAX_PIPE_LINKS) throw bad("A pipe holds at most {max} links.", { max: MAX_PIPE_LINKS });
+    const row = await one(
+      `INSERT INTO pipe_links (pipe_id, source, url, title, outline_doc_id, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [pipeId, linkSource(link.url), link.url, link.title, link.outlineDocId ?? null, userId]
+    );
+    return presentLink(row!);
+  }
+
+  // A page anywhere (http or https), or an Outline document picked in the search (its id kept).
+  app.post("/pipes/:id/links", async (req: Req) => {
+    const p = await pipeForLinks(req);
+    const b = req.body || {};
+    const url = text(b.url, "Address", { required: true, max: 2000 });
+    let parsed: URL | null = null;
+    try {
+      parsed = new URL(url);
+    } catch {
+      /* checked below */
+    }
+    if (!parsed || !["http:", "https:"].includes(parsed.protocol)) throw bad("Invalid address: it must start with https:// or http://");
+    const title = text(b.title, "Title", { max: 500 }) || `${parsed.hostname}${parsed.pathname === "/" ? "" : parsed.pathname}`.slice(0, 500);
+    return addLink(p.id, me(req), { url: parsed.href, title, outlineDocId: b.outlineDocId ? text(b.outlineDocId, "Document", { max: 200 }) : null });
+  });
+
+  app.delete("/pipes/:id/links/:linkId", async (req: Req) => {
+    const p = await pipeForLinks(req);
+    const gone = await one(`DELETE FROM pipe_links WHERE id = $1 AND pipe_id = $2 RETURNING id`, [uuid((req.params as { linkId: string }).linkId, "Link"), p.id]);
+    if (!gone) throw notFound("Link not found");
+    return { ok: true };
+  });
+
+  // An Outline document created from the pipe: titled like it, its description and a link back.
+  app.post("/pipes/:id/outline-document", async (req: Req) => {
+    const p = await pipeForLinks(req);
     const collectionId = text(req.body?.collectionId, "Collection", { required: true, max: 100 });
     const { data } = await req.outline<OutlineDocument>("documents.create", {
       title: p.name,
@@ -2160,10 +2203,7 @@ export async function apiRoutes(app: FastifyInstance) {
       publish: true,
     });
     const doc = presentDoc(data, req.outlineUrl);
-    await query(`UPDATE pipes SET outline_doc_id = $2, outline_doc_title = $3, outline_doc_url = $4, updated_at = now() WHERE id = $1`, [
-      p.id, doc.id, doc.title, doc.url,
-    ]);
-    return doc;
+    return addLink(p.id, me(req), { url: doc.url ?? `${req.outlineUrl}/doc/${doc.id}`, title: doc.title, outlineDocId: doc.id });
   });
 
   app.post("/tasks/:id/outline-document", async (req: Req) => {
