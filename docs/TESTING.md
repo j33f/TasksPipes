@@ -8,7 +8,7 @@ TasksPipes is tested with [Vitest](https://vitest.dev) on both sides, at three l
 | --- | --- | --- | --- |
 | Server unit tests | `server/src/**/*.test.ts` | Pure modules: TOTP (RFC 6238 vectors), field validation, designer rules, the catalog and column resolution, translations, iCalendar text, internal address filtering. | Nothing |
 | Server functional tests | `server/test/functional/*.test.ts` | The whole API on a real database, against the fake Outline of `dev/mock-outline.mjs`: sign-in and servers, tasks and history, incoming buckets, sub-tasks, pipes and archiving, teams and visibility, invitations and requests to connect, TOTP, avatars, models, calendar feed, live updates over WebSocket, e-mail notifications and unsubscribing. | PostgreSQL |
-| Updater tests | `updater/updater.test.mjs` | The one-click updater: token check, `.env` editing, health of the app, update, failed download and rollback, version validation (`node:test`, a fake Docker). | Nothing (`cd updater && node --test`) |
+| Updater tests | `updater/updater.test.mjs` | The one-click updater: token check, `.env` editing, health of the app, update, failed download and rollback, version validation, its own update after the app's (`node:test`, a fake Docker). | Nothing (`cd updater && node --test`) |
 | Web unit tests | `web/src/**/*.test.ts` | Translations and preferences, dates, history texts, the Next action suggestions, the API client, the version check, and components (checklist, badges, About) with Testing Library. | Nothing (jsdom) |
 
 Translation checks run with the unit tests (`server/src/translations.test.ts`, `web/src/lib/locales/fr.test.ts`): every

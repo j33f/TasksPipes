@@ -54,8 +54,9 @@ const run = (cmd, args, opts = {}) =>
 /**
  * One updater for one compose project. `exec` runs a command (replaced in tests), `sleep` waits.
  * State: idle → running → done | failed (nothing changed) | rolled-back (the new version did not start).
+ * `self` is the updater's own service: once the app runs the new version, the updater moves to it too.
  */
-export function createUpdater({ projectDir, service = "app", variable = "TASKSPIPES_VERSION", healthTimeoutMs = 180_000, exec = run, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export function createUpdater({ projectDir, service = "app", self = null, variable = "TASKSPIPES_VERSION", healthTimeoutMs = 180_000, exec = run, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const envFile = join(projectDir, ".env");
   const status = { state: "idle", version: null, from: null, startedAt: null, finishedAt: null, log: [] };
   const log = (line) => {
@@ -105,6 +106,29 @@ export function createUpdater({ projectDir, service = "app", variable = "TASKSPI
     return "rolled-back";
   }
 
+  /**
+   * Moves the updater to the version now in .env. It cannot restart itself (stopping its container would stop the
+   * command doing it), so a short-lived container of its new image does it, detached: Compose recreates the updater
+   * when its image changed, and leaves it alone otherwise.
+   */
+  async function updateSelf(version) {
+    if (!self) return;
+    try {
+      log(await compose("pull", self));
+      const image = (await compose("config", "--images", self)).trim().split("\n")[0];
+      if (!image) throw new Error(`No image for the service ${self}`);
+      await exec("docker", [
+        "run", "--detach", "--rm", "--name", `taskspipes-updater-restart-${Date.now()}`,
+        "--volume", "/var/run/docker.sock:/var/run/docker.sock", "--volume", `${projectDir}:${projectDir}`,
+        "--entrypoint", "docker", image,
+        "compose", "--project-directory", projectDir, "up", "--detach", "--no-deps", "--no-build", self,
+      ]);
+      log(`The updater moves to version ${version} too.`);
+    } catch (err) {
+      log(`The updater could not move to version ${version} (the app did): ${err.output || err.message}`);
+    }
+  }
+
   return {
     status,
     /** Starts an update in the background; false when one is already running. */
@@ -117,7 +141,10 @@ export function createUpdater({ projectDir, service = "app", variable = "TASKSPI
           log(err.message);
           return "failed";
         })
-        .then((state) => Object.assign(status, { state, finishedAt: new Date().toISOString() }));
+        .then(async (state) => {
+          Object.assign(status, { state, finishedAt: new Date().toISOString() });
+          if (state === "done") await updateSelf(version);
+        });
       return true;
     },
   };
