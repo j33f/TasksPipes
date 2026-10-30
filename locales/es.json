@@ -959,7 +959,13 @@
     "Check for new versions": "Buscar nuevas versiones",
     "Asks GitHub for the latest release every hour; administrators are told of a new one": "Consulta la última versión en GitHub cada hora; se avisa a los administradores de una nueva",
     "Updates": "Actualizaciones",
-    "New versions of TasksPipes, published on GitHub.": "Las nuevas versiones de TasksPipes, publicadas en GitHub."
+    "New versions of TasksPipes, published on GitHub.": "Las nuevas versiones de TasksPipes, publicadas en GitHub.",
+    "Update TasksPipes to version {version}? The app restarts: it is unavailable for a minute or two.": "¿Actualizar TasksPipes a la versión {version}? La app se reinicia: no estará disponible durante uno o dos minutos.",
+    "Update to {version}": "Actualizar a {version}",
+    "Updating\u2026 the page reloads by itself once the new version is running.": "Actualizando… la página se recargará sola cuando la nueva versión esté en marcha.",
+    "The new version did not start: the previous one was put back.": "La nueva versión no arrancó: se restauró la anterior.",
+    "The update failed: nothing changed.": "La actualización falló: nada ha cambiado.",
+    "You can install it in one click.": "Puede instalarla con un clic."
   },
   "server": {
     "{label} is required": "{label}: obligatorio",
@@ -1327,7 +1333,13 @@
     "This instance runs version {current}.": "Esta instancia usa la versión {current}.",
     "Read what changed, then update the instance (see the hosting guide).": "Consulte los cambios y luego actualice la instancia (vea la guía de alojamiento).",
     "See what's new": "Ver las novedades",
-    "You receive this e-mail because you administer this TasksPipes instance.": "Recibe este correo porque administra esta instancia de TasksPipes."
+    "You receive this e-mail because you administer this TasksPipes instance.": "Recibe este correo porque administra esta instancia de TasksPipes.",
+    "The updater cannot be reached.": "No se puede contactar con el servicio de actualización.",
+    "An update is already running.": "Ya hay una actualización en curso.",
+    "The updater refused the token: UPDATER_TOKEN differs between the app and the updater.": "El servicio de actualización rechazó el token: UPDATER_TOKEN difiere entre la app y el servicio.",
+    "The updater answered with an error.": "El servicio de actualización respondió con un error.",
+    "One-click updates are not set up on this instance.": "La actualización con un clic no está configurada en esta instancia.",
+    "Only the latest published version can be installed.": "Solo se puede instalar la última versión publicada."
   },
   "catalog": {
     "Prêt à démarrer": "Lista para empezar",

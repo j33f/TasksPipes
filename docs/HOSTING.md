@@ -5,7 +5,38 @@
 TasksPipes is a single Node.js container serving both the API and the web app, with a PostgreSQL database. The
 `docker-compose.yml` at the root of the repository runs both.
 
-## Quick start
+## Install in one command
+
+On a Linux server (Debian, Ubuntu, Raspberry Pi OS, Fedora, RHEL, CentOS, Rocky, AlmaLinux; amd64 or arm64):
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/j33f/TasksPipes/main/scripts/install.sh | sudo bash
+```
+
+The installer (`scripts/install.sh`, read it first if you like):
+
+1. installs **Docker** Engine and its Compose plugin from **Docker's official repositories** when they are missing;
+2. asks for the public address, the administrator's e-mail and your Outline server (optional), and how to serve
+   HTTPS: **Caddy** in front (automatic certificate; ports 80 and 443 must reach the server, and the address must
+   point to it) or **your own reverse proxy** (the app then listens on `127.0.0.1:3000`);
+3. installs in `/opt/taskspipes` the latest release — its published image, or built from the sources when there is
+   none for the machine — and writes `.env` with fresh secrets (`chmod 600`);
+4. sets up updates: [in one click from the app](#one-click-updates) when the published image is used, and in any
+   case the **`taskspipes-update`** command (an alias for bash and zsh, for root and the person who ran `sudo`);
+5. starts the stack and waits until the app is healthy.
+
+E-mail, Outline OAuth and the other settings are then made in the app (Administration › Settings). Running the
+installer again keeps the configuration. Without questions, every answer as an option:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/j33f/TasksPipes/main/scripts/install.sh | sudo bash -s -- --yes \
+  --domain tasks.example.com --admin-email admin@example.com --proxy caddy --updates auto
+```
+
+Other options: `--dir`, `--outline-url`, `--port`, `--version` (a release), `--ref` (build a branch or tag from the
+sources); `--help` lists them.
+
+## Quick start (by hand)
 
 1. Copy the configuration and fill it in:
 
@@ -17,11 +48,14 @@ TasksPipes is a single Node.js container serving both the API and the web app, w
    No Outline server needs to be configured: people type theirs on the sign-in page (or, with OAuth set up, sign in
    with the instance's one straight away).
 
-2. Choose how people sign in (see below), then start:
+2. Choose how people sign in (see below), then start — with the image published for each release:
 
    ```shell
-   docker compose up -d --build
+   docker compose up -d
    ```
+
+   (or build it from these sources with `docker compose up -d --build`). Add `--profile updater` to offer
+   [one-click updates](#one-click-updates).
 
 3. Open `APP_URL`. On first sign-in, the members of the Outline workspace are imported (`users.list`) so that tasks
    can be sent to them before they ever sign in.
@@ -69,6 +103,10 @@ the setting in the app. Those settings are: `SMTP_*`, `MAIL_FROM`, `OUTLINE_ENAB
 | `OUTLINE_ALLOWED_HOSTS` | Outline servers people may type on the sign-in page (comma-separated, `*.example.com` allowed). Empty: any public https server. |
 | `OUTLINE_ALLOW_PRIVATE` | `true` also accepts servers over http or on internal addresses (self-hosting on the same network, tests). |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Key pair (base64url) identifying the server to push services, e.g. from `npx web-push generate-vapid-keys`. Optional: without them, a key is derived from `APP_SECRET` (devices subscribe again if `APP_SECRET` changes). |
+| `TASKSPIPES_VERSION` | Version of the published image to run (`ghcr.io/j33f/taskspipes`), e.g. `0.17.0`; `latest` by default. One-click updates set it. |
+| `UPDATER_TOKEN` | Turns [one-click updates](#one-click-updates) on: a shared secret (`openssl rand -hex 32`) between the app and the updater. |
+| `UPDATER_URL` | Address of the updater seen by the app; default `http://updater:8080` once `UPDATER_TOKEN` is set. |
+| `PROJECT_DIR` | For the updater: this directory's absolute path on the host; default the directory `docker compose` is run from. |
 | `UPDATE_CHECK` | `false` to stop asking GitHub every hour for a new version (on by default; also in Administration › Settings). |
 | `VAPID_SUBJECT` | A contact for push services, `mailto:` or `https:`. Default: `APP_URL` when it is https, else `mailto:admin@localhost`. |
 | `WEBHOOK_ALLOW_PRIVATE` | `true` lets outgoing webhooks (and push messages) reach http addresses and internal networks (a receiver on the same network, tests). Off by default: https and public addresses only, checked when connecting. |
@@ -217,10 +255,94 @@ GitHub or GitLab must be able to reach `APP_URL`. See [the integration guide](GI
 ## Upgrading
 
 The server checks every hour for a new release on GitHub: administrators are told by e-mail and push notification,
-and the About dialog shows it (`UPDATE_CHECK=false` to turn it off). Read the release notes, then pull the new version
-and rebuild: the database schema is upgraded at start-up.
+and the About dialog shows it (`UPDATE_CHECK=false` to turn it off). Read the release notes, then update — in one
+click if the updater is set up (below), or by hand. The database schema is upgraded at start-up.
+
+Installed with the installer, one command does it all:
+
+```shell
+taskspipes-update            # or: sudo /opt/taskspipes/scripts/update.sh
+taskspipes-update --check    # only tell whether a new release exists
+```
+
+It backs the database up first (`backups/`, the last five kept), moves to the latest release (`--version X` for
+another one) — the published image, or the release's tag rebuilt from the sources — waits until the app is healthy,
+and puts the previous version back if it is not.
+
+By hand, without the installer:
+
+With the published images, set the version in `.env` and restart:
+
+```shell
+sed -i 's/^TASKSPIPES_VERSION=.*/TASKSPIPES_VERSION=0.18.0/' .env   # or add the line
+docker compose pull app && docker compose up -d app
+```
+
+Built from the sources:
 
 ```shell
 git pull
 docker compose up -d --build
 ```
+
+## One-click updates
+
+With the **updater** set up, an administrator updates the instance from the app: **About** shows the new version with
+an **Update to …** button; the app restarts with it, and open pages reload by themselves once it answers.
+
+### Setting it up
+
+The [installer](#install-in-one-command) does it (`--updates auto`, the default). By hand:
+
+1. Add to `.env` a shared secret, pin the version you run, and keep the `updater` profile on:
+
+   ```shell
+   UPDATER_TOKEN=…              # openssl rand -hex 32
+   TASKSPIPES_VERSION=0.18.0
+   COMPOSE_PROFILES=updater     # so that a plain `docker compose up -d` keeps the updater
+   ```
+
+2. Start the stack, from this directory:
+
+   ```shell
+   docker compose up -d
+   ```
+
+The app finds the updater at `http://updater:8080` (`UPDATER_URL` otherwise). The updater only changes the version;
+when a release also changes `docker-compose.yml` (its notes say so, under **Upgrading**), update with
+`taskspipes-update`, which fetches the release's compose file too. One-click updates use the images
+published for each release on GitHub's registry (`ghcr.io/j33f/taskspipes`): an instance built from its sources
+(`build:`) keeps updating by hand, or switches to the images by setting `TASKSPIPES_VERSION`.
+
+### How it works
+
+```
+ Administrator ── About › "Update to 0.18.0" ──▶ app ── POST /update {"version":"0.18.0"} ──▶ updater ──▶ Docker
+                                                   (admin, latest release only)  (Bearer UPDATER_TOKEN)
+```
+
+1. The app checks every hour for the latest release on GitHub (see [Upgrading](#upgrading)).
+2. When an administrator clicks **Update to X**, the app checks that they are an administrator and that X is the
+   latest release it found — no other version can be asked — then calls the updater with the shared token.
+3. The **updater** (`updater/`, a small Node service with the Docker CLI) writes `TASKSPIPES_VERSION=X` in `.env`,
+   runs `docker compose pull app`, then `docker compose up -d --no-build app`, and waits for the app's health check.
+4. If the image cannot be downloaded, `.env` is put back and nothing changes (**failed**). If the new version does
+   not become healthy within `HEALTH_TIMEOUT` seconds (180), the previous version is put back in `.env` and started
+   again (**rolled back**).
+5. Meanwhile the About dialog follows the updater (`GET /api/admin/update`: state and last log line) and reloads
+   once the server answers in the new version.
+
+The database is migrated by the new version at start-up. Migrations are written to add (tables, columns) rather than
+remove, so that the previous version keeps working after a rollback; back up the database before updating all the
+same, especially across a major version.
+
+### Security
+
+- Only the **updater** holds the Docker socket — which amounts to root on the host — never the app. It is reachable on
+  the compose network only (no published port), answers nothing without the token (compared in constant time), and
+  takes nothing but a version number (`X.Y.Z`): it runs fixed commands, without a shell.
+- The app only lets **administrators** (`ADMIN_EMAILS`) start an update, and only to the latest published release.
+- The updater mounts this directory at the same path as on the host, so that Compose finds the same files; it
+  changes nothing there but the `TASKSPIPES_VERSION` line of `.env`.
+- Without `UPDATER_TOKEN`, or without the `updater` profile, there is no one-click update and nothing holds the socket.
+

@@ -18,6 +18,9 @@ export const config = {
   appUrl,
   appSecret: process.env.APP_SECRET || "",
   databaseUrl: process.env.DATABASE_URL || "",
+  /** One-click updates: the updater service and its shared token (docs/HOSTING.md); off without a token. */
+  updaterToken: process.env.UPDATER_TOKEN || "",
+  updaterUrl: trimSlash(process.env.UPDATER_URL || (process.env.UPDATER_TOKEN ? "http://updater:8080" : "")),
   // The settings below can change while the server runs (Administration › Settings): read them each time.
   /** Outline as a way to sign in and as a source of documents; off, Outline accounts can no longer sign in. */
   get outlineEnabled() {

@@ -6,7 +6,8 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "./config.js";
 import { one, query } from "./db.js";
-import { isInstanceAdmin } from "./admin.js";
+import { isInstanceAdmin, requestIsAdmin } from "./admin.js";
+import { HttpError, bad, forbidden } from "./errors.js";
 import { tr, type Locale } from "./i18n.js";
 import { escape, mailLayout, sendHtmlMail, type MailTheme } from "./mail.js";
 import { pushTo } from "./push.js";
@@ -111,15 +112,64 @@ export async function checkForUpdate(send: Send = sendHtmlMail): Promise<string 
   return latest.version;
 }
 
+// ---------------------------------------------------------------------------
+// One-click updates: the app asks the updater service (updater/, holding the Docker socket) to move to a release.
+
+export const updaterConfigured = () => Boolean(config.updaterUrl && config.updaterToken);
+
+/** A call to the updater; its own errors become messages for the administrator. */
+async function updater(method: "GET" | "POST", path: string, body?: object) {
+  let res: Response;
+  try {
+    res = await fetch(`${config.updaterUrl}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${config.updaterToken}`, "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    throw new HttpError(502, "The updater cannot be reached.");
+  }
+  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (res.status === 409) throw bad("An update is already running.");
+  if (res.status === 401) throw new HttpError(502, "The updater refused the token: UPDATER_TOKEN differs between the app and the updater.");
+  if (!res.ok) throw new HttpError(502, "The updater answered with an error.");
+  return json;
+}
+
 export async function updateRoutes(app: FastifyInstance) {
-  // The version running and, when the check is on, the latest one published.
-  app.get("/version", async () => {
+  // The version running and, when the check is on, the latest one published; whether I may update in one click.
+  app.get("/version", async (req) => {
     const latest = updateCheckOn() ? updateState.latest : null;
+    const updateAvailable = Boolean(latest && newer(latest.version, config.version));
     return {
       current: config.version,
       latest,
-      updateAvailable: Boolean(latest && newer(latest.version, config.version)),
+      updateAvailable,
       checkedAt: updateState.checkedAt,
+      canUpdate: updateAvailable && updaterConfigured() && (await requestIsAdmin(req)),
     };
+  });
+
+  // Starts the update to the latest release (administrators; that version only, never one chosen freely).
+  app.post("/admin/update", async (req) => {
+    if (!(await requestIsAdmin(req))) throw forbidden();
+    if (!updaterConfigured()) throw bad("One-click updates are not set up on this instance.");
+    const version = (req.body as { version?: unknown } | undefined)?.version;
+    const latest = updateState.latest;
+    if (!latest || typeof version !== "string" || version !== latest.version || !newer(version, config.version)) {
+      throw bad("Only the latest published version can be installed.");
+    }
+    req.log.info({ version, by: req.user!.id }, "Update started");
+    await updater("POST", "/update", { version });
+    return { ok: true };
+  });
+
+  // How the update goes; `current` changes once the new version answers.
+  app.get("/admin/update", async (req) => {
+    if (!(await requestIsAdmin(req))) throw forbidden();
+    if (!updaterConfigured()) throw bad("One-click updates are not set up on this instance.");
+    const s = await updater("GET", "/status");
+    return { current: config.version, state: s.state, version: s.version, from: s.from, log: Array.isArray(s.log) ? s.log.slice(-20) : [] };
   });
 }

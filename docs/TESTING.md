@@ -8,6 +8,7 @@ TasksPipes is tested with [Vitest](https://vitest.dev) on both sides, at three l
 | --- | --- | --- | --- |
 | Server unit tests | `server/src/**/*.test.ts` | Pure modules: TOTP (RFC 6238 vectors), field validation, designer rules, the catalog and column resolution, translations, iCalendar text, internal address filtering. | Nothing |
 | Server functional tests | `server/test/functional/*.test.ts` | The whole API on a real database, against the fake Outline of `dev/mock-outline.mjs`: sign-in and servers, tasks and history, incoming buckets, sub-tasks, pipes and archiving, teams and visibility, invitations and requests to connect, TOTP, avatars, models, calendar feed, live updates over WebSocket, e-mail notifications and unsubscribing. | PostgreSQL |
+| Updater tests | `updater/updater.test.mjs` | The one-click updater: token check, `.env` editing, health of the app, update, failed download and rollback, version validation (`node:test`, a fake Docker). | Nothing (`cd updater && node --test`) |
 | Web unit tests | `web/src/**/*.test.ts` | Translations and preferences, dates, history texts, the Next action suggestions, the API client, the version check, and components (checklist, badges, About) with Testing Library. | Nothing (jsdom) |
 
 Translation checks run with the unit tests (`server/src/translations.test.ts`, `web/src/lib/locales/fr.test.ts`): every
@@ -70,7 +71,14 @@ Each run prints a summary and writes an HTML report (`index.html`) and an `lcov.
 1. **Server — types and unit tests**: `npm run typecheck`, then the unit tests with coverage;
 2. **Server — functional tests**: against a PostgreSQL service, with coverage;
 3. **Web — types, unit tests and build**: `svelte-check`, the unit tests with coverage, then `vite build`;
-4. **Docker image**: builds the production image once the three jobs above pass.
+4. **Updater — tests** and **Scripts — shellcheck** (`scripts/*.sh`);
+5. **Docker image**: builds the production image once the jobs above pass;
+6. **Publish images** (tags `v*` only): pushes `ghcr.io/j33f/taskspipes` and `taskspipes-updater` for amd64 and arm64,
+   tagged `X.Y.Z`, `X.Y` and `latest`.
+
+The installer is checked by hand on fresh Debian, Ubuntu and Fedora containers (Docker from the official
+repositories), and end to end in a container using the host's Docker (`-v /var/run/docker.sock:…`): install, update
+to another tag, forced rollback (`HEALTH_TIMEOUT=1`).
 
 Coverage reports are sent to [Codecov](https://about.codecov.io), one flag per suite (`server-unit`,
 `server-functional`, `web`; see `codecov.yml`). Coverage is informational: it does not fail the build.

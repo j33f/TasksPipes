@@ -1,7 +1,9 @@
 services:
   app:
+    # The image published for each release (TASKSPIPES_VERSION, e.g. 0.17.0; "latest" by default), or built here
+    # from the sources with `docker compose up -d --build`.
     build: .
-    image: taskspipes:latest
+    image: ghcr.io/j33f/taskspipes:${TASKSPIPES_VERSION:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -15,6 +17,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # One-click updates (optional): `docker compose --profile updater up -d`, see "One-click updates" in
+  # docs/HOSTING.md. It alone holds the Docker socket; the app asks it, with UPDATER_TOKEN, to move to a release.
+  updater:
+    profiles: ["updater"]
+    build: ./updater
+    image: ghcr.io/j33f/taskspipes-updater:${TASKSPIPES_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      UPDATER_TOKEN: ${UPDATER_TOKEN:-}
+      # This directory, mounted at the same path as on the host so that Compose finds the same files.
+      PROJECT_DIR: ${PROJECT_DIR:-${PWD}}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PROJECT_DIR:-${PWD}}:${PROJECT_DIR:-${PWD}}
 
   # Rate limit counters only: nothing to keep across restarts.
   redis:

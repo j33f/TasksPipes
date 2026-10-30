@@ -73,11 +73,19 @@ The documentation is also online: [taskspipes.com](https://taskspipes.com) prese
 
 # Installation
 
-TasksPipes runs as a single container next to a PostgreSQL database, behind an HTTPS reverse proxy.
+TasksPipes runs as a single container next to a PostgreSQL database, behind an HTTPS reverse proxy. On a Linux
+server, one command installs it — Docker too when missing (from Docker's official repositories), HTTPS with Caddy if
+you wish — and sets up updates (in one click from the app, or with `taskspipes-update`):
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/j33f/TasksPipes/main/scripts/install.sh | sudo bash
+```
+
+Or by hand:
 
 ```shell
 cp .env.example .env        # then set APP_URL, APP_SECRET and POSTGRES_PASSWORD
-docker compose up -d --build
+docker compose up -d        # the published image (ghcr.io/j33f/taskspipes); --build to build it from these sources
 ```
 
 Please see the [hosting documentation](docs/HOSTING.md) for the configuration in production: sign-in with Outline
@@ -144,7 +152,9 @@ node scripts/release.mjs 0.5.0
 git commit -am "chore(release): 0.5.0" && git tag -a v0.5.0 -m "TasksPipes 0.5.0"
 ```
 
-A test fails if the LICENSE and the packages disagree.
+A test fails if the LICENSE and the packages disagree. Pushing the tag publishes the images
+(`ghcr.io/j33f/taskspipes` and `taskspipes-updater`, amd64 and arm64); then create the GitHub release: running
+instances learn of new versions from GitHub's latest release, not from tags.
 
 ## Migrations
 

@@ -959,7 +959,13 @@
     "Check for new versions": "Vérifier les nouvelles versions",
     "Asks GitHub for the latest release every hour; administrators are told of a new one": "Demande la dernière version à GitHub toutes les heures ; les administrateur·rices sont prévenu·es d'une nouvelle",
     "Updates": "Mises à jour",
-    "New versions of TasksPipes, published on GitHub.": "Les nouvelles versions de TasksPipes, publiées sur GitHub."
+    "New versions of TasksPipes, published on GitHub.": "Les nouvelles versions de TasksPipes, publiées sur GitHub.",
+    "Update TasksPipes to version {version}? The app restarts: it is unavailable for a minute or two.": "Mettre TasksPipes à jour vers la version {version} ? L'app redémarre : elle est indisponible une minute ou deux.",
+    "Update to {version}": "Mettre à jour vers {version}",
+    "Updating\u2026 the page reloads by itself once the new version is running.": "Mise à jour en cours… la page se rechargera d'elle-même dès que la nouvelle version tournera.",
+    "The new version did not start: the previous one was put back.": "La nouvelle version n'a pas démarré : la précédente a été remise en place.",
+    "The update failed: nothing changed.": "La mise à jour a échoué : rien n'a changé.",
+    "You can install it in one click.": "Vous pouvez l'installer en un clic."
   },
   "server": {
     "{label} is required": "{label} requis",
@@ -1327,7 +1333,13 @@
     "This instance runs version {current}.": "Cette instance utilise la version {current}.",
     "Read what changed, then update the instance (see the hosting guide).": "Découvrez ce qui change, puis mettez à jour l'instance (voir le guide d'hébergement).",
     "See what's new": "Voir les nouveautés",
-    "You receive this e-mail because you administer this TasksPipes instance.": "Vous recevez cet e-mail car vous administrez cette instance de TasksPipes."
+    "You receive this e-mail because you administer this TasksPipes instance.": "Vous recevez cet e-mail car vous administrez cette instance de TasksPipes.",
+    "The updater cannot be reached.": "Le service de mise à jour est injoignable.",
+    "An update is already running.": "Une mise à jour est déjà en cours.",
+    "The updater refused the token: UPDATER_TOKEN differs between the app and the updater.": "Le service de mise à jour a refusé le jeton : UPDATER_TOKEN diffère entre l'app et le service.",
+    "The updater answered with an error.": "Le service de mise à jour a répondu par une erreur.",
+    "One-click updates are not set up on this instance.": "La mise à jour en un clic n'est pas configurée sur cette instance.",
+    "Only the latest published version can be installed.": "Seule la dernière version publiée peut être installée."
   },
   "catalog": {}
 }

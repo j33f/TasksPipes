@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from "../lib/i18n.svelte";
-  import { api } from "../lib/api";
+  import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
   import Modal from "./Modal.svelte";
   import Icon from "./Icon.svelte";
@@ -11,11 +11,50 @@
 
   // A newer version published (the server checks every hour, unless an administrator turned it off).
   let latest = $state<{ version: string; url: string } | null>(null);
+  /** An administrator, with the updater set up: one click installs it. */
+  let canUpdate = $state(false);
   $effect(() => {
-    api.get<{ latest: { version: string; url: string } | null; updateAvailable: boolean }>("/version")
-      .then((v) => (latest = v.updateAvailable ? v.latest : null))
+    api.get<{ latest: { version: string; url: string } | null; updateAvailable: boolean; canUpdate?: boolean }>("/version")
+      .then((v) => {
+        latest = v.updateAvailable ? v.latest : null;
+        canUpdate = Boolean(v.canUpdate);
+      })
       .catch(() => {});
   });
+
+  // The update under way: asked to the updater, then followed until the new version answers.
+  type Progress = { state: "starting" | "running" | "done" | "failed" | "rolled-back"; line?: string; error?: string };
+  let progress = $state<Progress | null>(null);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(timer));
+
+  async function startUpdate() {
+    if (!latest || !confirm(t("Update TasksPipes to version {version}? The app restarts: it is unavailable for a minute or two.", { version: latest.version }))) return;
+    progress = { state: "starting" };
+    try {
+      await api.post("/admin/update", { version: latest.version });
+      follow();
+    } catch (err) {
+      progress = { state: "failed", error: errorMessage(err) };
+    }
+  }
+
+  function follow() {
+    timer = setTimeout(async () => {
+      try {
+        const s = await api.get<{ current: string; state: Progress["state"] | "idle"; log: string[] }>("/admin/update");
+        const line = s.log.at(-1)?.replace(/^\S+ /, "");
+        // The new version answers: the page reloads to use it.
+        if (s.current !== __APP_VERSION__) return location.reload();
+        if (s.state === "failed" || s.state === "rolled-back") return (progress = { state: s.state, line });
+        progress = { state: "running", line };
+      } catch {
+        // The app is restarting: ask again.
+        progress = { state: "running", line: progress?.line };
+      }
+      follow();
+    }, 3000);
+  }
 </script>
 
 <Modal {onclose}>
@@ -28,10 +67,27 @@
         <Icon name="bolt" size={18} />
         <div class="grow">
           <strong>{t("Version {version} is available", { version: latest.version })}</strong>
-          <div class="small">{app.me?.admin ? t("Update the instance to get it (see the hosting guide).") : t("Your administrator can update the instance.")}</div>
+          <div class="small">{canUpdate ? t("You can install it in one click.") : app.me?.admin ? t("Update the instance to get it (see the hosting guide).") : t("Your administrator can update the instance.")}</div>
         </div>
-        <a class="btn small" href={latest.url} target="_blank" rel="noreferrer">{t("See what's new")}</a>
+        <a class="btn small neutral" href={latest.url} target="_blank" rel="noreferrer">{t("See what's new")}</a>
       </div>
+      {#if canUpdate}
+        {#if !progress || progress.state === "failed" || progress.state === "rolled-back"}
+          <button class="btn update-btn" onclick={startUpdate}><Icon name="bolt" size={16} />{t("Update to {version}", { version: latest.version })}</button>
+        {/if}
+        {#if progress}
+          <div class="progress small" role="status" aria-live="polite">
+            {#if progress.state === "starting" || progress.state === "running"}
+              <strong>{t("Updating… the page reloads by itself once the new version is running.")}</strong>
+            {:else if progress.state === "rolled-back"}
+              <strong class="error-text">{t("The new version did not start: the previous one was put back.")}</strong>
+            {:else if progress.state === "failed"}
+              <strong class="error-text">{progress.error ?? t("The update failed: nothing changed.")}</strong>
+            {/if}
+            {#if progress.line}<div class="muted log">{progress.line}</div>{/if}
+          </div>
+        {/if}
+      {/if}
     {/if}
     <p>{t("Task pipes for teams that live in Outline: kanban boards, incoming buckets and a GTD view.")}</p>
     <div class="links">
@@ -54,5 +110,8 @@
   p { margin: 14px 0 0; line-height: 1.5; }
   .update { margin: 16px 0 0; text-align: left; align-items: center; box-shadow: inset 0 0 0 1px var(--accent); }
   .update .small { color: var(--text-secondary); font-size: 13px; }
+  .update-btn { margin-top: 10px; }
+  .progress { margin-top: 10px; }
+  .log { font-family: var(--font-mono); font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }
   .links { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
 </style>
