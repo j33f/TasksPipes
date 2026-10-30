@@ -167,7 +167,9 @@ grep -q "TASKSPIPES_VERSION" docker-compose.yml || die "TasksPipes $REF is too o
 
 # ---- Configuration ---------------------------------------------------------------------------------------------------------
 secret() { head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
-env_get() { [ -f .env ] && sed -n "s/^$1=//p" .env | tail -n 1 || true; }
+env_get() {
+  if [ -f .env ]; then sed -n "s/^$1=//p" .env | tail -n 1; fi
+}
 env_set() {
   if grep -q "^$1=" .env 2>/dev/null; then sed -i "s|^$1=.*|$1=$2|" .env; else printf '%s=%s\n' "$1" "$2" >> .env; fi
 }
