@@ -18,7 +18,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: node --test updater/
+      - run: node --test
+        working-directory: updater
 
   server-unit:
     name: Server — types and unit tests
