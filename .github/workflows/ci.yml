@@ -10,6 +10,16 @@ permissions:
   contents: read
 
 jobs:
+  updater:
+    name: Updater — tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test updater/
+
   server-unit:
     name: Server — types and unit tests
     runs-on: ubuntu-latest
@@ -98,7 +108,7 @@ jobs:
   docker:
     name: Docker image
     runs-on: ubuntu-latest
-    needs: [server-unit, server-functional, web]
+    needs: [server-unit, server-functional, web, updater]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -107,5 +117,47 @@ jobs:
           context: .
           push: false
           tags: taskspipes:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Each release (tag v*) publishes the app and the updater to GitHub's registry: X.Y.Z, X.Y and latest. One-click
+  # updates pull these images (docs/HOSTING.md).
+  publish:
+    name: Publish images
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [docker]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: taskspipes
+            context: .
+          - image: taskspipes-updater
+            context: updater
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/j33f/${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

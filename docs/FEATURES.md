@@ -431,6 +431,9 @@ Every hour, the sessions of Outline accounts are checked with Outline: when Outl
 **New versions.** Every hour, the server asks GitHub for the latest release of TasksPipes. When a newer one comes out,
 the administrators are told once, by e-mail and on their devices (push notifications); the **About** dialog then shows
 the new version to everyone, with a link to its release notes. Turn it off in Settings › Updates (or `UPDATE_CHECK=false`).
+Where the host set up the updater, an administrator installs it **in one click** from About: the app restarts with
+it, goes back to the previous version by itself if the new one does not start, and open pages reload once it is
+running (see *One-click updates* in [HOSTING.md](HOSTING.md)).
 
 ## Privacy
 
