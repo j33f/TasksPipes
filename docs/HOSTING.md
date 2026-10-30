@@ -69,6 +69,7 @@ the setting in the app. Those settings are: `SMTP_*`, `MAIL_FROM`, `OUTLINE_ENAB
 | `OUTLINE_ALLOWED_HOSTS` | Outline servers people may type on the sign-in page (comma-separated, `*.example.com` allowed). Empty: any public https server. |
 | `OUTLINE_ALLOW_PRIVATE` | `true` also accepts servers over http or on internal addresses (self-hosting on the same network, tests). |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | Key pair (base64url) identifying the server to push services, e.g. from `npx web-push generate-vapid-keys`. Optional: without them, a key is derived from `APP_SECRET` (devices subscribe again if `APP_SECRET` changes). |
+| `UPDATE_CHECK` | `false` to stop asking GitHub every hour for a new version (on by default; also in Administration › Settings). |
 | `VAPID_SUBJECT` | A contact for push services, `mailto:` or `https:`. Default: `APP_URL` when it is https, else `mailto:admin@localhost`. |
 | `WEBHOOK_ALLOW_PRIVATE` | `true` lets outgoing webhooks (and push messages) reach http addresses and internal networks (a receiver on the same network, tests). Off by default: https and public addresses only, checked when connecting. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | E-mail for accounts without Outline and invitations, see below. |
@@ -215,7 +216,9 @@ GitHub or GitLab must be able to reach `APP_URL`. See [the integration guide](GI
 
 ## Upgrading
 
-Pull the new version and rebuild: the database schema is upgraded at start-up.
+The server checks every hour for a new release on GitHub: administrators are told by e-mail and push notification,
+and the About dialog shows it (`UPDATE_CHECK=false` to turn it off). Read the release notes, then pull the new version
+and rebuild: the database schema is upgraded at start-up.
 
 ```shell
 git pull

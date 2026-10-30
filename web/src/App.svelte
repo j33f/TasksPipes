@@ -4,7 +4,7 @@
   import { app } from "./lib/app.svelte";
   import { live } from "./lib/realtime.svelte";
   import { reloadNow, update } from "./lib/version.svelte";
-  import { interceptLinks, navigate, router } from "./lib/router.svelte";
+  import { interceptLinks, navigate, router, setParams } from "./lib/router.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import TaskModal from "./components/TaskModal.svelte";
   import Icon from "./components/Icon.svelte";
@@ -105,6 +105,13 @@
     return { name: "notfound" } as const;
   });
   const taskId = $derived(router.params.get("task"));
+  // "/?about" (the notification of a new version) opens the About dialog.
+  $effect(() => {
+    if (app.me && router.params.has("about")) {
+      app.dialog = "about";
+      setParams({ about: null }, { replace: true });
+    }
+  });
 
   // Ctrl/⌘ + K opens the search from anywhere once signed in.
   function onkeydown(e: KeyboardEvent) {

@@ -417,7 +417,8 @@ Its **Settings** tab manages the instance while it runs, without a restart:
 - **Outline OAuth**: client id and secret, with the redirect URL to copy;
 - **accounts without Outline**: sign-up with an e-mail address, invitations by e-mail, and the **e-mail domains**
   allowed to sign up or be invited;
-- **company sign-in (OpenID Connect)**: on or off, issuer, client, secret, button label, scopes, domains.
+- **company sign-in (OpenID Connect)**: on or off, issuer, client, secret, button label, scopes, domains;
+- **updates**: check for new versions (on by default).
 
 A setting given by the server's environment (`.env`) wins and shows locked. Secrets are kept encrypted with
 `APP_SECRET` and never shown again: they can only be replaced or removed. A change that would leave the administrator
@@ -427,11 +428,17 @@ making it, or every administrator, unable to sign in is refused. Every change is
 Every hour, the sessions of Outline accounts are checked with Outline: when Outline no longer accepts their access
 (revoked, account suspended or deleted), they are closed.
 
+**New versions.** Every hour, the server asks GitHub for the latest release of TasksPipes. When a newer one comes out,
+the administrators are told once, by e-mail and on their devices (push notifications); the **About** dialog then shows
+the new version to everyone, with a link to its release notes. Turn it off in Settings › Updates (or `UPDATE_CHECK=false`).
+
 ## Privacy
 
 The app's styles, scripts and font (Inter) are served by TasksPipes itself, so opening the app sends no visitor's
 address to a third party. The only other server the browser reaches is your Outline server, for the profile pictures
 of Outline accounts; links you click (Outline documents, France Compétences pages…) open other sites, of course.
+On the server side, the check for new versions asks GitHub (`api.github.com`) for the latest release every hour,
+sending nothing but the server's version in its User-Agent; it can be turned off.
 
 ## Access rules
 

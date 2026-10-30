@@ -31,6 +31,7 @@ import { LIMITS, perPerson, rateLimited } from "./rate-limit.js";
 import { cleanPrefs, notificationState, prefsOf, queueNotifications, savePrefs } from "./notifications.js";
 import { searchTasks } from "./search.js";
 import { hasDevices, pushRoutes } from "./push.js";
+import { updateRoutes } from "./updates.js";
 import { emailDomainAllowed } from "./settings.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
 import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
@@ -552,6 +553,7 @@ export async function apiRoutes(app: FastifyInstance) {
   await app.register(recurrenceRoutes);
   await app.register(labelRoutes);
   await app.register(pushRoutes);
+  await app.register(updateRoutes);
   await app.register(accountRoutes, { present: presentTask, events: getEvents });
 
   app.get("/me", async (req) => ({

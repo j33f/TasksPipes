@@ -708,6 +708,9 @@ CREATE TABLE IF NOT EXISTS pipe_links (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS pipe_links_pipe_idx ON pipe_links(pipe_id);
+
+-- New versions the administrators were told of (once each).
+CREATE TABLE IF NOT EXISTS update_notices (version text PRIMARY KEY, notified_at timestamptz NOT NULL DEFAULT now());
 `;
 
 /**

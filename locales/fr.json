@@ -951,7 +951,15 @@
     "Accounts without Outline": "Comptes sans Outline",
     "Accounts that sign in with links sent by e-mail.": "Comptes qui se connectent avec des liens envoyés par e-mail.",
     "Company sign-in (OpenID Connect)": "Connexion d'entreprise (OpenID Connect)",
-    "Any OpenID Connect provider (Keycloak, Okta, Entra ID…): register a confidential client with this redirect URL.": "Tout fournisseur OpenID Connect (Keycloak, Okta, Entra ID…) : enregistrez un client confidentiel avec cette URL de redirection."
+    "Any OpenID Connect provider (Keycloak, Okta, Entra ID…): register a confidential client with this redirect URL.": "Tout fournisseur OpenID Connect (Keycloak, Okta, Entra ID…) : enregistrez un client confidentiel avec cette URL de redirection.",
+    "Version {version} is available": "La version {version} est disponible",
+    "Update the instance to get it (see the hosting guide).": "Mettez l'instance à jour pour en profiter (voir le guide d'hébergement).",
+    "Your administrator can update the instance.": "Votre administrateur·rice peut mettre l'instance à jour.",
+    "See what's new": "Voir les nouveautés",
+    "Check for new versions": "Vérifier les nouvelles versions",
+    "Asks GitHub for the latest release every hour; administrators are told of a new one": "Demande la dernière version à GitHub toutes les heures ; les administrateur·rices sont prévenu·es d'une nouvelle",
+    "Updates": "Mises à jour",
+    "New versions of TasksPipes, published on GitHub.": "Les nouvelles versions de TasksPipes, publiées sur GitHub."
   },
   "server": {
     "{label} is required": "{label} requis",
@@ -1314,7 +1322,12 @@
     "Sending failed: {error}": "Échec de l'envoi : {error}",
     "Addresses of this domain cannot be invited here": "Les adresses de ce domaine ne peuvent pas être invitées ici",
     "Addresses of this domain cannot sign up here": "Les adresses de ce domaine ne peuvent pas créer de compte ici",
-    "Sign-in with Outline is turned off on this instance.": "La connexion avec Outline est désactivée sur cette instance."
+    "Sign-in with Outline is turned off on this instance.": "La connexion avec Outline est désactivée sur cette instance.",
+    "TasksPipes {version} is available": "TasksPipes {version} est disponible",
+    "This instance runs version {current}.": "Cette instance utilise la version {current}.",
+    "Read what changed, then update the instance (see the hosting guide).": "Découvrez ce qui change, puis mettez à jour l'instance (voir le guide d'hébergement).",
+    "See what's new": "Voir les nouveautés",
+    "You receive this e-mail because you administer this TasksPipes instance.": "Vous recevez cet e-mail car vous administrez cette instance de TasksPipes."
   },
   "catalog": {}
 }
