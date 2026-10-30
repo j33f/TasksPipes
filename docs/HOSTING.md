@@ -5,7 +5,38 @@
 TasksPipes is a single Node.js container serving both the API and the web app, with a PostgreSQL database. The
 `docker-compose.yml` at the root of the repository runs both.
 
-## Quick start
+## Install in one command
+
+On a Linux server (Debian, Ubuntu, Raspberry Pi OS, Fedora, RHEL, CentOS, Rocky, AlmaLinux; amd64 or arm64):
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/j33f/TasksPipes/main/scripts/install.sh | sudo bash
+```
+
+The installer (`scripts/install.sh`, read it first if you like):
+
+1. installs **Docker** Engine and its Compose plugin from **Docker's official repositories** when they are missing;
+2. asks for the public address, the administrator's e-mail and your Outline server (optional), and how to serve
+   HTTPS: **Caddy** in front (automatic certificate; ports 80 and 443 must reach the server, and the address must
+   point to it) or **your own reverse proxy** (the app then listens on `127.0.0.1:3000`);
+3. installs in `/opt/taskspipes` the latest release — its published image, or built from the sources when there is
+   none for the machine — and writes `.env` with fresh secrets (`chmod 600`);
+4. sets up updates: [in one click from the app](#one-click-updates) when the published image is used, and in any
+   case the **`taskspipes-update`** command (an alias for bash and zsh, for root and the person who ran `sudo`);
+5. starts the stack and waits until the app is healthy.
+
+E-mail, Outline OAuth and the other settings are then made in the app (Administration › Settings). Running the
+installer again keeps the configuration. Without questions, every answer as an option:
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/j33f/TasksPipes/main/scripts/install.sh | sudo bash -s -- --yes \
+  --domain tasks.example.com --admin-email admin@example.com --proxy caddy --updates auto
+```
+
+Other options: `--dir`, `--outline-url`, `--port`, `--version` (a release), `--ref` (build a branch or tag from the
+sources); `--help` lists them.
+
+## Quick start (by hand)
 
 1. Copy the configuration and fill it in:
 
@@ -227,6 +258,19 @@ The server checks every hour for a new release on GitHub: administrators are tol
 and the About dialog shows it (`UPDATE_CHECK=false` to turn it off). Read the release notes, then update — in one
 click if the updater is set up (below), or by hand. The database schema is upgraded at start-up.
 
+Installed with the installer, one command does it all:
+
+```shell
+taskspipes-update            # or: sudo /opt/taskspipes/scripts/update.sh
+taskspipes-update --check    # only tell whether a new release exists
+```
+
+It backs the database up first (`backups/`, the last five kept), moves to the latest release (`--version X` for
+another one) — the published image, or the release's tag rebuilt from the sources — waits until the app is healthy,
+and puts the previous version back if it is not.
+
+By hand, without the installer:
+
 With the published images, set the version in `.env` and restart:
 
 ```shell
@@ -248,20 +292,25 @@ an **Update to …** button; the app restarts with it, and open pages reload by 
 
 ### Setting it up
 
-1. Add to `.env` a shared secret, and pin the version you run:
+The [installer](#install-in-one-command) does it (`--updates auto`, the default). By hand:
+
+1. Add to `.env` a shared secret, pin the version you run, and keep the `updater` profile on:
 
    ```shell
-   UPDATER_TOKEN=…        # openssl rand -hex 32
-   TASKSPIPES_VERSION=0.17.0
+   UPDATER_TOKEN=…              # openssl rand -hex 32
+   TASKSPIPES_VERSION=0.18.0
+   COMPOSE_PROFILES=updater     # so that a plain `docker compose up -d` keeps the updater
    ```
 
-2. Start the stack with the `updater` profile, from this directory:
+2. Start the stack, from this directory:
 
    ```shell
-   docker compose --profile updater up -d
+   docker compose up -d
    ```
 
-The app finds the updater at `http://updater:8080` (`UPDATER_URL` otherwise). One-click updates use the images
+The app finds the updater at `http://updater:8080` (`UPDATER_URL` otherwise). The updater only changes the version;
+when a release also changes `docker-compose.yml` (its notes say so, under **Upgrading**), update with
+`taskspipes-update`, which fetches the release's compose file too. One-click updates use the images
 published for each release on GitHub's registry (`ghcr.io/j33f/taskspipes`): an instance built from its sources
 (`build:`) keeps updating by hand, or switches to the images by setting `TASKSPIPES_VERSION`.
 

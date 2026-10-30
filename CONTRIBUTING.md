@@ -51,7 +51,8 @@ control fit together, and the [hosting documentation](docs/HOSTING.md) for the p
 | `locales/` | one `<code>.json` per language ([translation guide](docs/TRANSLATION.md)) |
 | `docs/` | architecture, hosting, testing, translation and feature documentation |
 | `dev/` | development and test Compose files, and the fake Outline server |
-| `scripts/` | maintenance scripts (e.g. the release helper) |
+| `scripts/` | the installer and update script for servers (`install.sh`, `update.sh`), and the release helper |
+| `updater/` | the optional service behind one-click updates ([hosting guide](docs/HOSTING.md#one-click-updates)) |
 
 There is no root `package.json`: `server` and `web` are installed and run separately.
 
@@ -119,8 +120,11 @@ git tag -a v0.12.0 -m "TasksPipes 0.12.0"
 git push origin main dev v0.12.0
 ```
 
-Finally create the [GitHub release](https://github.com/j33f/TasksPipes/releases) for the tag with notes grouped into
-**Features**, **Security**/**Fixes** and **Upgrading** (database and environment-variable changes). A test fails if
+The tag publishes the images (`ghcr.io/j33f/taskspipes`, `ghcr.io/j33f/taskspipes-updater`; amd64 and arm64) once
+CI passes. Finally create the [GitHub release](https://github.com/j33f/TasksPipes/releases) for the tag — instances,
+the installer and `taskspipes-update` all look for the **latest release**, so a tag without one is never offered —
+with notes grouped into **Features**, **Security**/**Fixes** and **Upgrading** (database and environment-variable
+changes). A test fails if
 the LICENSE and the package versions disagree, so the whole set is bumped together.
 
 ## License of contributions
