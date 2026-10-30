@@ -355,7 +355,7 @@ published for each release on GitHub's registry (`ghcr.io/j33f/taskspipes`): an 
    stop the command doing it), so it pulls its new image and starts a short-lived container of it, detached, which
    runs `docker compose up -d --no-deps updater` and goes away; Compose recreates the updater only when its image
    changed. After a failed or rolled-back update it leaves itself alone. Its service is named by `UPDATER_SERVICE`
-   (`updater` by default; empty to never touch itself). An updater older than 0.21.0 does not do it: once, move it
+   (`updater` by default; empty to never touch itself). An updater older than 0.20.1 does not do it: once, move it
    by hand (`docker compose up -d updater`) or with `taskspipes-update`.
 
 The database is migrated by the new version at start-up. Migrations are written to add (tables, columns) rather than
