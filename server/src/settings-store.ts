@@ -11,7 +11,7 @@ export interface SettingDef {
   key: string;
   env: string;
   kind: SettingKind;
-  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push";
+  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push" | "updates";
   default: string | number | boolean | string[] | null;
 }
 
@@ -51,6 +51,8 @@ export const SETTINGS: SettingDef[] = [
   { key: "push.vapidPublicKey", env: "VAPID_PUBLIC_KEY", kind: "string", section: "push", default: "" },
   { key: "push.vapidPrivateKey", env: "VAPID_PRIVATE_KEY", kind: "secret", section: "push", default: "" },
   { key: "push.vapidSubject", env: "VAPID_SUBJECT", kind: "string", section: "push", default: "" },
+
+  { key: "updates.check", env: "UPDATE_CHECK", kind: "bool", section: "updates", default: true },
 ];
 
 export const settingDef = (key: string) => SETTINGS.find((d) => d.key === key);

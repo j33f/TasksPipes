@@ -9,6 +9,7 @@ import { cleanupNotifications, runNotifications, runPush } from "./notifications
 import { cleanupWebhookDeliveries, runWebhooks } from "./webhooks.js";
 import { runRecurrences } from "./recurrence.js";
 import { recordOccurrence } from "./routes.js";
+import { checkForUpdate } from "./updates.js";
 
 const app = await buildApp();
 
@@ -29,6 +30,14 @@ setInterval(() => {
     .then((n) => n && app.log.info({ closed: n }, "Sessions closed: Outline access ended"))
     .catch((err) => app.log.warn({ err }, "Checking Outline sessions failed"));
 }, 3_600_000).unref();
+
+// New versions of TasksPipes: a minute after start, then every hour.
+const checkUpdates = () =>
+  checkForUpdate()
+    .then((v) => v && app.log.info({ version: v }, "New version available: administrators told"))
+    .catch((err) => app.log.warn({ err }, "Checking for a new version failed"));
+setTimeout(checkUpdates, 60_000).unref();
+setInterval(checkUpdates, 3_600_000).unref();
 
 // Recurring tasks: the occurrences due, every minute (each made once, whatever the number of instances).
 setInterval(() => {

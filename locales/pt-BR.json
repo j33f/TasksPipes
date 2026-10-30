@@ -951,7 +951,15 @@
     "Accounts without Outline": "Contas sem Outline",
     "Accounts that sign in with links sent by e-mail.": "Contas que entram com links enviados por e-mail.",
     "Company sign-in (OpenID Connect)": "Login da empresa (OpenID Connect)",
-    "Any OpenID Connect provider (Keycloak, Okta, Entra ID…): register a confidential client with this redirect URL.": "Qualquer provedor OpenID Connect (Keycloak, Okta, Entra ID…): registre um cliente confidencial com esta URL de redirecionamento."
+    "Any OpenID Connect provider (Keycloak, Okta, Entra ID…): register a confidential client with this redirect URL.": "Qualquer provedor OpenID Connect (Keycloak, Okta, Entra ID…): registre um cliente confidencial com esta URL de redirecionamento.",
+    "Version {version} is available": "A versão {version} está disponível",
+    "Update the instance to get it (see the hosting guide).": "Atualize a instância para obtê-la (consulte o guia de hospedagem).",
+    "Your administrator can update the instance.": "Seu administrador pode atualizar a instância.",
+    "See what's new": "Ver as novidades",
+    "Check for new versions": "Procurar novas versões",
+    "Asks GitHub for the latest release every hour; administrators are told of a new one": "Consulta o GitHub pela última versão a cada hora; os administradores são avisados de uma nova",
+    "Updates": "Atualizações",
+    "New versions of TasksPipes, published on GitHub.": "As novas versões do TasksPipes, publicadas no GitHub."
   },
   "server": {
     "{label} is required": "{label}: obrigatório",
@@ -1314,7 +1322,12 @@
     "Sending failed: {error}": "Falha no envio: {error}",
     "Addresses of this domain cannot be invited here": "Os endereços deste domínio não podem ser convidados aqui",
     "Addresses of this domain cannot sign up here": "Os endereços deste domínio não podem criar conta aqui",
-    "Sign-in with Outline is turned off on this instance.": "O login com o Outline está desativado nesta instância."
+    "Sign-in with Outline is turned off on this instance.": "O login com o Outline está desativado nesta instância.",
+    "TasksPipes {version} is available": "O TasksPipes {version} está disponível",
+    "This instance runs version {current}.": "Esta instância usa a versão {current}.",
+    "Read what changed, then update the instance (see the hosting guide).": "Veja o que mudou e depois atualize a instância (consulte o guia de hospedagem).",
+    "See what's new": "Ver as novidades",
+    "You receive this e-mail because you administer this TasksPipes instance.": "Você recebe este e-mail porque administra esta instância do TasksPipes."
   },
   "catalog": {
     "Prêt à démarrer": "Pronta para começar",
