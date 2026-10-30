@@ -33,7 +33,7 @@ beforeEach(() => {
     const body = url === "/api/pipes/p"
       ? {
         id: "p", name: "Board", kind: "kanban", visibility: "private", archived: false, counts: {}, icon: null, color: null, description: "",
-        space: { id: "s", name: "Team", kind: "team", userId: null, avatarUrl: null, color: null }, myRole: "member", canManage: true, canAddTasks: true,
+        space: { id: "s", name: "Team", kind: "team", userId: null, avatarUrl: null, color: null }, myRole: "member", canManage: true, canAddTasks: true, links: [],
         tasks: [task("t1", "doing", ann), task("t2", "doing", bob, "bug"), task("t3", "doing", null), task("t4", "todo", ann)],
       }
       : { ok: true };

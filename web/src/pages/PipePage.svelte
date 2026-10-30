@@ -15,7 +15,7 @@
   import Calendar from "./Calendar.svelte";
   import TransferModal from "../components/TransferModal.svelte";
   import WebhooksModal from "../components/WebhooksModal.svelte";
-  import PipeDoc from "../components/PipeDoc.svelte";
+  import PipeLinks from "../components/PipeLinks.svelte";
   import { confirmWhileBlocked } from "../lib/dependencies";
   import { PRIORITIES, distinctLabels, matches, type TaskFilters } from "../lib/labels";
   import { boardLanes, loadLabel, overLimit } from "../lib/lanes";
@@ -214,7 +214,7 @@
           {/if}
         </h1>
         {#if pipe.description}<div class="description"><Markdown source={pipe.description} compact /></div>{/if}
-        <PipeDoc {pipe} onchange={() => app.refresh()} />
+        <PipeLinks {pipe} onchange={() => app.refresh()} />
         {#if pipe.archived}
           <div class="callout row archived">
             <Icon name="archive" />

@@ -70,8 +70,6 @@ export interface Pipe {
   /** Reports sent by e-mail at the report hour: daily activity, weekly time (development pipes). */
   dailyReport: boolean;
   weeklyReport: boolean;
-  /** Outline document linked to the pipe. */
-  outlineDoc: DocRef | null;
 }
 
 export interface Member extends UserRef {
@@ -236,7 +234,23 @@ export interface TaskFile {
   uploadedBy: string;
 }
 
+/** Where a document linked to a pipe lives (found from its address by the server). */
+export type LinkSource =
+  | "outline" | "google_docs" | "google_sheets" | "google_slides" | "google_drive" | "onedrive" | "dropbox" | "notion"
+  | "confluence" | "figma" | "miro" | "canva" | "github" | "gitlab" | "link";
+
+export interface PipeLink {
+  id: string;
+  source: LinkSource;
+  url: string;
+  title: string;
+  /** Set for an Outline document picked in the search or created from the pipe. */
+  outlineDocId: string | null;
+}
+
 export interface PipeDetail extends Pipe {
+  /** Documents linked to the pipe. */
+  links: PipeLink[];
   space: { id: string; name: string; kind: "user" | "team"; userId: string | null; avatarUrl: string | null; color: string | null };
   myRole: string | null;
   canManage: boolean;
