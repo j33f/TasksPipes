@@ -12,8 +12,18 @@
 set -euo pipefail
 
 REPO="j33f/TasksPipes"
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The installation: this script lives in its scripts/ directory.
+DIR="${TP_UPDATE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
+
+# Run from a copy: checking out another version (sources) or a new compose file must not change this script while
+# bash reads it.
+if [ -z "${TP_UPDATE_DIR:-}" ]; then
+  copy="$(mktemp)"
+  cp "${BASH_SOURCE[0]}" "$copy"
+  TP_UPDATE_DIR="$DIR" exec bash "$copy" "$@"
+fi
+trap 'rm -f "${BASH_SOURCE[0]}"' EXIT
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
