@@ -19,6 +19,13 @@ describe("About", () => {
     expect(screen.getByRole("link", { name: "See what's new" }).getAttribute("href")).toBe("https://github.com/j33f/TasksPipes/releases/tag/v0.17.0");
   });
 
+  it("links to the website and the source code", async () => {
+    serve({ current: "0.16.0", latest: null, updateAvailable: false });
+    render(AboutModal, { onclose: () => {} });
+    expect(screen.getByRole("link", { name: "Website" }).getAttribute("href")).toBe("https://taskspipes.com");
+    expect(screen.getByRole("link", { name: "Source code on GitHub" }).getAttribute("href")).toBe("https://github.com/j33f/TasksPipes");
+  });
+
   it("says nothing when the instance is up to date", async () => {
     serve({ current: "0.16.0", latest: { version: "0.16.0", url: "u" }, updateAvailable: false });
     render(AboutModal, { onclose: () => {} });

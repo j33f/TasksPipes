@@ -8,6 +8,7 @@
   let { onclose }: { onclose: () => void } = $props();
 
   const REPO = "https://github.com/j33f/TasksPipes";
+  const SITE = "https://taskspipes.com";
 
   // A newer version published (the server checks every hour, unless an administrator turned it off).
   let latest = $state<{ version: string; url: string } | null>(null);
@@ -91,6 +92,7 @@
     {/if}
     <p>{t("Task pipes for teams that live in Outline: kanban boards, incoming buckets and a GTD view.")}</p>
     <div class="links">
+      <a class="btn neutral small" href={SITE} target="_blank" rel="noreferrer">{t("Website")}</a>
       <a class="btn neutral small" href={REPO} target="_blank" rel="noreferrer">{t("Source code on GitHub")}</a>
       <a class="btn ghost small" href={`${REPO}/releases/tag/v${__APP_VERSION__}`} target="_blank" rel="noreferrer">{t("Release notes")}</a>
       <a class="btn ghost small" href={`${REPO}/issues`} target="_blank" rel="noreferrer">{t("Report a problem")}</a>
