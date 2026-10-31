@@ -7,7 +7,10 @@ TasksPipes is a TypeScript application in two parts, built into a single Docker 
 ```
 server/   Fastify 5 API, Node 24 — also serves the built web app
 web/      Svelte 5 single-page app, built with Vite
-updater/  optional service for one-click updates: it alone holds the Docker socket (see HOSTING.md)
+updater/  optional service for one-click updates: it alone holds the Docker socket (see HOSTING.md); it dumps the
+          database before each update
+scripts/  install.sh, update.sh, backup.sh, restore.sh and transfer.sh: install, update, back up, restore and move an
+          instance on its server (backups are recorded in backup_runs / backup_plan; server/src/backups.ts reads them)
 dev/      development stack: fake Outline server and compose overrides
 docs/     documentation
 .github/  continuous integration (see TESTING.md); each release publishes the images to ghcr.io

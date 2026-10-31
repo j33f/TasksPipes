@@ -470,6 +470,33 @@ export interface AdminUser {
   admin: boolean;
 }
 
+/** A backup made on the server (scripts/backup.sh, the updater, scripts/restore.sh), as recorded there. */
+export interface BackupRun {
+  id: string;
+  kind: "backup" | "before-update" | "before-restore" | "before-install" | "restore" | string;
+  origin: string | null;
+  startedAt: string;
+  finishedAt: string;
+  ok: boolean;
+  file: string | null;
+  size: number | null;
+  encrypted: boolean;
+  appVersion: string | null;
+  host: string | null;
+  remote: string | null;
+  remoteOk: boolean | null;
+  error: string | null;
+}
+
+/** GET /api/admin/backups: how backups are planned on the server, and what they did. */
+export interface BackupStatus {
+  plan: { schedule: "none" | "daily" | "weekly"; at: string | null; keep: number | null; encrypted: boolean; remote: string | null; remoteKeep: number | null; updatedAt: string } | null;
+  last: BackupRun | null;
+  lastOk: BackupRun | null;
+  runs: BackupRun[];
+  problem: "failed" | "remote-failed" | "stale" | null;
+}
+
 /** What an import of tasks would do (POST /api/pipes/:id/import/preview). */
 export interface ImportPreview {
   headers: string[];

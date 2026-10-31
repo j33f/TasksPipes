@@ -48,4 +48,15 @@ describe("administration page", () => {
     await userEvent.click(screen.getByRole("button", { name: "Enable" }));
     expect(calls.filter((c) => c.startsWith("POST"))).toEqual(["POST /api/admin/users/c/disable", "POST /api/admin/users/g/enable"]);
   });
+
+  it("has a tab for the backups, marked when something is wrong with them", async () => {
+    const backups = { plan: null, last: null, lastOk: null, runs: [], problem: "failed" };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("/admin/backups") ? backups : users), { status: 200, headers: { "content-type": "application/json" } })));
+    render(Admin, {});
+    const tab = await screen.findByRole("tab", { name: /Backups/ });
+    expect(await screen.findByTitle("Something is wrong with the backups")).toBeTruthy();
+    await userEvent.click(tab);
+    expect(location.search).toBe("?tab=backups");
+    expect(screen.getByRole("alert").textContent).toContain("The last backup failed.");
+  });
 });

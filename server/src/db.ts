@@ -711,6 +711,38 @@ CREATE INDEX IF NOT EXISTS pipe_links_pipe_idx ON pipe_links(pipe_id);
 
 -- New versions the administrators were told of (once each).
 CREATE TABLE IF NOT EXISTS update_notices (version text PRIMARY KEY, notified_at timestamptz NOT NULL DEFAULT now());
+
+-- Backups, written by scripts/backup.sh, scripts/restore.sh and the updater (never by the app): how they are planned
+-- (one row), and what each run did. The app shows them to the administrators and tells them when one fails.
+CREATE TABLE IF NOT EXISTS backup_plan (
+  id boolean PRIMARY KEY DEFAULT true CHECK (id),
+  schedule text NOT NULL DEFAULT 'none',
+  at text,
+  keep integer,
+  encrypted boolean NOT NULL DEFAULT false,
+  remote text,
+  remote_keep integer,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  stale_notified_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS backup_runs (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  kind text NOT NULL,
+  origin text,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  finished_at timestamptz NOT NULL DEFAULT now(),
+  ok boolean NOT NULL,
+  file text,
+  size_bytes bigint,
+  encrypted boolean NOT NULL DEFAULT false,
+  app_version text,
+  host text,
+  remote text,
+  remote_ok boolean,
+  error text,
+  notified_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS backup_runs_started_idx ON backup_runs(started_at DESC);
 `;
 
 /**

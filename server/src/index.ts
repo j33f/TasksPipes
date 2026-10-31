@@ -10,6 +10,7 @@ import { cleanupWebhookDeliveries, runWebhooks } from "./webhooks.js";
 import { runRecurrences } from "./recurrence.js";
 import { recordOccurrence } from "./routes.js";
 import { checkForUpdate } from "./updates.js";
+import { checkBackups } from "./backups.js";
 
 const app = await buildApp();
 
@@ -38,6 +39,14 @@ const checkUpdates = () =>
     .catch((err) => app.log.warn({ err }, "Checking for a new version failed"));
 setTimeout(checkUpdates, 60_000).unref();
 setInterval(checkUpdates, 3_600_000).unref();
+
+// Backups made on the server (scripts/backup.sh): administrators are told when one fails or they stop coming.
+const checkBackupState = () =>
+  checkBackups()
+    .then((p) => p && app.log.warn({ problem: p }, "Backup problem: administrators told"))
+    .catch((err) => app.log.warn({ err }, "Checking the backups failed"));
+setTimeout(checkBackupState, 120_000).unref();
+setInterval(checkBackupState, 3_600_000).unref();
 
 // Recurring tasks: the occurrences due, every minute (each made once, whatever the number of instances).
 setInterval(() => {
