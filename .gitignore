@@ -6,3 +6,6 @@ coverage/
 backup.env
 backups/
 *.before-restore
+
+# Claude Code personal settings
+.claude/settings.local.json
