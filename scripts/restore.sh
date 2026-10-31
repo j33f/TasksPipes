@@ -189,7 +189,7 @@ if [ "$FORMAT" = archive ]; then
   mkdir -p "$WORK/data"
   tar -xzf "$ARCHIVE" -C "$WORK/data" --no-same-owner || die "Could not open the archive: damaged file?"
   rm -f "$WORK/archive.tar.gz"
-  [ -f "$WORK/data/manifest" ] && [ -f "$WORK/data/db.dump" ] || die "Not a backup of TasksPipes: no manifest or database in it."
+  if [ ! -f "$WORK/data/manifest" ] || [ ! -f "$WORK/data/db.dump" ]; then die "Not a backup of TasksPipes: no manifest or database in it."; fi
   (cd "$WORK/data" && sha256sum --quiet -c SHA256SUMS) || die "The backup is damaged: its checksums do not match."
   [ "$(manifest format)" = 1 ] || die "This backup was made by a newer TasksPipes (format $(manifest format)): restore it with that version's scripts."
   DUMP="$WORK/data/db.dump"

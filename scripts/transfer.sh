@@ -87,7 +87,7 @@ say "Connecting to $TARGET"
 RUID="$(remote 'id -u' </dev/null)" || die "Could not connect to $TARGET over SSH (try: ssh $TARGET)."
 SUDO=""
 [ "$RUID" = 0 ] || SUDO="sudo"
-remote "command -v curl >/dev/null && command -v tar >/dev/null && uname -s" </dev/null | grep -q Linux \
+grep -q Linux <<<"$(remote "command -v curl >/dev/null && command -v tar >/dev/null && uname -s" </dev/null)" \
   || die "$TARGET must be a Linux server with curl and tar."
 if remote "$SUDO test -f $(printf %q "$RDIR/.env")" </dev/null 2>/dev/null; then
   warn "TasksPipes is already installed in $RDIR on $TARGET: its data will be replaced with this instance's."

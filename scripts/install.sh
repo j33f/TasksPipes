@@ -123,7 +123,7 @@ install_docker() {
       case "$family" in rocky|almalinux) repo=centos ;; esac
       if command -v dnf >/dev/null; then
         dnf -q -y install dnf-plugins-core >/dev/null
-        if dnf config-manager --help 2>/dev/null | grep -q addrepo; then
+        if grep -q addrepo <<<"$(dnf config-manager --help 2>/dev/null)"; then
           dnf config-manager addrepo --overwrite --from-repofile="https://download.docker.com/linux/$repo/docker-ce.repo"
         else
           dnf config-manager --add-repo "https://download.docker.com/linux/$repo/docker-ce.repo"
@@ -195,7 +195,7 @@ fi
 # The published image when it exists for this machine (or is already here); the sources otherwise (or when --ref asks
 # for them).
 MODE=source
-if [ -z "$REF" ] && [ -n "$PLATFORM" ] && { docker manifest inspect "ghcr.io/j33f/taskspipes:$TP_VERSION" 2>/dev/null | grep -q "\"architecture\": *\"$PLATFORM\"" \
+if [ -z "$REF" ] && [ -n "$PLATFORM" ] && { grep -q "\"architecture\": *\"$PLATFORM\"" <<<"$(docker manifest inspect "ghcr.io/j33f/taskspipes:$TP_VERSION" 2>/dev/null)" \
   || docker image inspect "ghcr.io/j33f/taskspipes:$TP_VERSION" >/dev/null 2>&1; }; then
   MODE=image
 fi
