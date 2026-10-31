@@ -1,5 +1,5 @@
 # The TasksPipes updater (see docs/HOSTING.md, "One-click updates"): Node and the Docker CLI with Compose, nothing else.
-FROM node:24-alpine
+FROM node:26-alpine
 RUN apk add --no-cache docker-cli docker-cli-compose
 WORKDIR /updater
 COPY updater.mjs main.mjs ./

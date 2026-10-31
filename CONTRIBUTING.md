@@ -32,7 +32,7 @@ a fake Outline server (sign in with the API keys `alice-token`, `bob-token` or `
 docker compose --env-file dev/.env.dev -f docker-compose.yml -f dev/docker-compose.dev.yml up --build
 ```
 
-Or run the two parts locally with **Node 24**:
+Or run the two parts locally with **Node 26**:
 
 ```shell
 cd server && npm install && OUTLINE_URL=… DATABASE_URL=… APP_SECRET=… npm run dev   # API on :3000

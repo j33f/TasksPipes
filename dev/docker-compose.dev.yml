@@ -18,7 +18,7 @@ services:
       POSTGRES_PASSWORD: dev
 
   mock-outline:
-    image: node:24-alpine
+    image: node:26-alpine
     command: ["node", "/mock/mock-outline.mjs"]
     volumes:
       - ./dev/mock-outline.mjs:/mock/mock-outline.mjs:ro
