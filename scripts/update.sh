@@ -7,8 +7,8 @@
 #
 # With the published images, it sets TASKSPIPES_VERSION in .env, refreshes docker-compose.yml from that release (the
 # release's tag, in a clone of the repository), pulls the image and restarts the app; built from the sources, it checks
-# out the release's tag and rebuilds. Either way the database is backed up first (backups/, the last 5 kept), and the previous version is put
-# back when the new one does not become healthy.
+# out the release's tag and rebuilds. Either way the instance is backed up first (scripts/backup.sh: backups/, the last 5
+# kept), and the previous version is put back when the new one does not become healthy.
 set -euo pipefail
 
 REPO="j33f/TasksPipes"
@@ -106,17 +106,23 @@ if [ "$CHECK_ONLY" = 1 ]; then
   exit 0
 fi
 
-# ---- Back up the database --------------------------------------------------------------------------------------------
+# ---- Back up --------------------------------------------------------------------------------------------------------
 mkdir -p backups
 chmod 700 backups
-BACKUP="backups/taskspipes-$CURRENT-$(date +%Y%m%d-%H%M%S).sql.gz"
-say "Backing up the database to $DIR/$BACKUP"
-if docker compose exec -T db pg_dump -U taskspipes taskspipes | gzip > "$BACKUP"; then
-  # shellcheck disable=SC2012 # names without spaces, made above
-  ls -1t backups/taskspipes-*.sql.gz 2>/dev/null | tail -n +6 | xargs -r rm -f
+if [ -x scripts/backup.sh ]; then
+  # The database and the configuration (encrypted when backups are), recorded in Administration › Backups.
+  TP_DIR="$DIR" scripts/backup.sh --kind before-update --origin update --no-upload || die "The backup failed: nothing changed."
+  BACKUP="$(cat backups/.last)"
 else
-  rm -f "$BACKUP"
-  die "The backup failed: nothing changed."
+  BACKUP="backups/taskspipes-$CURRENT-$(date +%Y%m%d-%H%M%S).sql.gz"
+  say "Backing up the database to $DIR/$BACKUP"
+  if docker compose exec -T db pg_dump -U taskspipes taskspipes | gzip > "$BACKUP"; then
+    # shellcheck disable=SC2012 # names without spaces, made above
+    ls -1t backups/taskspipes-*.sql.gz 2>/dev/null | tail -n +6 | xargs -r rm -f
+  else
+    rm -f "$BACKUP"
+    die "The backup failed: nothing changed."
+  fi
 fi
 
 wait_healthy() {
@@ -171,6 +177,15 @@ if [ "$GIT" = 1 ]; then
   git_in checkout --quiet "v$TARGET" || warn "No tag v$TARGET here: keeping the current compose file."
 elif curl -fsSL "https://raw.githubusercontent.com/$REPO/v$TARGET/docker-compose.yml" -o docker-compose.yml.new; then
   mv -f docker-compose.yml.new docker-compose.yml
+  # The scripts of that release too (backups, restore…); each kept as it is when the release has none.
+  for f in update.sh backup.sh restore.sh transfer.sh install.sh; do
+    if curl -fsSL "https://raw.githubusercontent.com/$REPO/v$TARGET/scripts/$f" -o "scripts/$f.new"; then
+      mv -f "scripts/$f.new" "scripts/$f"
+      [ "$f" = install.sh ] || chmod +x "scripts/$f"
+    else
+      rm -f "scripts/$f.new"
+    fi
+  done
 else
   rm -f docker-compose.yml.new
   warn "Could not fetch the compose file of $TARGET: keeping the current one."

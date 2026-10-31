@@ -3,3 +3,6 @@
 .env
 .git
 dev
+backup.env
+backups
+*.before-restore

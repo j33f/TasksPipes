@@ -78,7 +78,7 @@ export function updateEmail(lang: Locale, release: Release, theme: MailTheme = n
 }
 
 /** The instance's administrators (named by ADMIN_EMAILS, proven accounts only), still enabled. */
-async function admins() {
+export async function admins() {
   if (!config.adminEmails.length) return [];
   const { rows } = await query(
     `SELECT id, email, auth_kind, outline_url, oidc_issuer, oidc_email_verified, locale, theme FROM users

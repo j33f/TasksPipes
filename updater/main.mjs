@@ -22,6 +22,8 @@ const updater = createUpdater({
   // Its own service, to move to the new version too ("" to never touch itself).
   self: process.env.UPDATER_SERVICE ?? "updater",
   healthTimeoutMs: Number(process.env.HEALTH_TIMEOUT || 180) * 1000,
+  // The database is backed up before each update (BACKUP_BEFORE_UPDATE=false: not).
+  ...(process.env.BACKUP_BEFORE_UPDATE === "false" ? { backup: null } : {}),
 });
 
 const send = (res, status, body) => {

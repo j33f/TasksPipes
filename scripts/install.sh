@@ -13,6 +13,9 @@
 # the latest release, on the published image with one-click updates when possible. Run it from that directory, or
 # give it with --dir.
 #
+# A new server can also start from a backup of another one (scripts/backup.sh): --restore puts back its data and its
+# configuration (secrets included), from a file or from S3-compatible storage. scripts/transfer.sh does it all over SSH.
+#
 # Options (all optional; asked when missing, unless --yes):
 #   --dir DIR             where to install, or the existing installation (default /opt/taskspipes)
 #   --domain NAME         public address, e.g. tasks.example.com (or a full URL)
@@ -23,11 +26,16 @@
 #   --updates auto|alias  auto: one-click updates from the app (when possible) + the alias; alias: the alias only
 #   --version X           version to install (default the latest release)
 #   --ref REF             build from this branch or tag of the sources instead of using the published image
+#   --backups none|daily|weekly   automatic backups (then asked: how many to keep, encryption, S3-compatible copy)
+#   --restore FILE|s3:NAME|s3:latest   start from this backup (its data and configuration) instead of a new instance
+#   --passphrase-file F   the passphrase of an encrypted backup to restore
+#   --backup-env F        S3 settings and passphrase of the backups to restore (a copy of the old backup.env)
 #   --yes                 no questions: defaults and options only
 set -euo pipefail
 
 REPO="j33f/TasksPipes"
-RAW="https://raw.githubusercontent.com/$REPO"
+# Where the release's files come from (TASKSPIPES_RAW: a mirror of the repository's raw files, e.g. for tests).
+RAW="${TASKSPIPES_RAW:-https://raw.githubusercontent.com/$REPO}"
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
@@ -36,6 +44,7 @@ trap 'die "Failed at line $LINENO."' ERR
 
 DIR=""
 DOMAIN="" ADMIN="" OUTLINE="" PROXY="" PORT="" UPDATES="" TP_VERSION="" REF="" YES=0
+BACKUPS="" RESTORE="" PASS_FILE="" BACKUP_ENV=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dir) DIR="$2"; shift ;;
@@ -47,12 +56,27 @@ while [ $# -gt 0 ]; do
     --updates) UPDATES="$2"; shift ;;
     --version) TP_VERSION="${2#v}"; shift ;;
     --ref) REF="$2"; shift ;;
+    --backups) BACKUPS="$2"; shift ;;
+    --restore) RESTORE="$2"; shift ;;
+    --passphrase-file) PASS_FILE="$2"; shift ;;
+    --backup-env) BACKUP_ENV="$2"; shift ;;
     --yes|-y) YES=1 ;;
-    -h|--help) sed -n '2,30p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true; exit 0 ;;
+    -h|--help) sed -n '2,33p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true; exit 0 ;;
     *) die "Unknown option: $1 (see --help)" ;;
   esac
   shift
 done
+
+case "$BACKUPS" in ""|none|daily|weekly) ;; *) die "--backups is none, daily or weekly" ;; esac
+# Files given relative to where the installer runs.
+abs() { case "$1" in /*) printf '%s' "$1" ;; *) printf '%s/%s' "$PWD" "$1" ;; esac; }
+case "$RESTORE" in
+  "") ;;
+  s3:*) ;;
+  *) [ -f "$RESTORE" ] || die "No such backup: $RESTORE"; RESTORE="$(abs "$RESTORE")" ;;
+esac
+[ -z "$PASS_FILE" ] || { [ -r "$PASS_FILE" ] || die "Cannot read $PASS_FILE"; PASS_FILE="$(abs "$PASS_FILE")"; }
+[ -z "$BACKUP_ENV" ] || { [ -r "$BACKUP_ENV" ] || die "Cannot read $BACKUP_ENV"; BACKUP_ENV="$(abs "$BACKUP_ENV")"; }
 
 # Questions are read from the terminal, also when the script itself comes through a pipe (curl … | bash).
 TTY=""
@@ -168,11 +192,21 @@ if [ -z "$REF" ] && [ -z "$TP_VERSION" ]; then
   TP_VERSION="$(latest_release || true)"
   [ -n "$TP_VERSION" ] || die "Could not learn the latest release from GitHub; give one with --version."
 fi
-# The published image when it exists for this machine; the sources otherwise (or when --ref asks for them).
+# The published image when it exists for this machine (or is already here); the sources otherwise (or when --ref asks
+# for them).
 MODE=source
-if [ -z "$REF" ] && [ -n "$PLATFORM" ] && docker manifest inspect "ghcr.io/j33f/taskspipes:$TP_VERSION" 2>/dev/null | grep -q "\"architecture\": *\"$PLATFORM\""; then
+if [ -z "$REF" ] && [ -n "$PLATFORM" ] && { docker manifest inspect "ghcr.io/j33f/taskspipes:$TP_VERSION" 2>/dev/null | grep -q "\"architecture\": *\"$PLATFORM\"" \
+  || docker image inspect "ghcr.io/j33f/taskspipes:$TP_VERSION" >/dev/null 2>&1; }; then
   MODE=image
 fi
+# Images pulled; those that cannot be are fine when they are already here.
+pull_images() {
+  docker compose pull --quiet 2>/dev/null && return 0
+  local image
+  for image in $(docker compose config --images); do
+    docker image inspect "$image" >/dev/null 2>&1 || die "Could not download $image."
+  done
+}
 [ -n "$REF" ] || REF="v$TP_VERSION"
 if [ "$MODE" = source ]; then
   command -v git >/dev/null || case "${ID:-}" in
@@ -225,11 +259,52 @@ else
   curl -fsSL "$RAW/$REF/docker-compose.yml" -o docker-compose.yml
   curl -fsSL "$RAW/$REF/.env.example" -o .env.example
   mkdir -p scripts
-  curl -fsSL "$RAW/$REF/scripts/update.sh" -o scripts/update.sh
+  for f in update.sh backup.sh restore.sh transfer.sh install.sh; do
+    # Replaced, not rewritten: a copy of this very script may be running.
+    if curl -fsSL "$RAW/$REF/scripts/$f" -o "scripts/$f.new"; then mv -f "scripts/$f.new" "scripts/$f"; else rm -f "scripts/$f.new"; fi
+  done
 fi
-[ -f scripts/update.sh ] || curl -fsSL "$RAW/main/scripts/update.sh" -o scripts/update.sh
-chmod +x scripts/update.sh
+for f in update.sh backup.sh restore.sh transfer.sh; do
+  [ -f "scripts/$f" ] || curl -fsSL "$RAW/main/scripts/$f" -o "scripts/$f"
+  chmod +x "scripts/$f"
+done
 grep -q "TASKSPIPES_VERSION" docker-compose.yml || die "TasksPipes $REF is too old for this installer (0.18.0 or later)."
+
+# ---- From a backup: its configuration first ------------------------------------------------------------------------------------
+RESTORE_FILE=""
+TMP_PASS=""
+if [ -n "$RESTORE" ]; then
+  mkdir -p backups
+  chmod 700 backups
+  # A copy of the backup stays in backups/ (the file given may be temporary).
+  if [ -f "$RESTORE" ] && [ "$(dirname "$RESTORE")" != "$DIR/backups" ]; then
+    cp "$RESTORE" "backups/$(basename "$RESTORE")"
+    chmod 600 "backups/$(basename "$RESTORE")"
+    RESTORE="$DIR/backups/$(basename "$RESTORE")"
+  fi
+  # The passphrase, asked once for both steps.
+  case "$RESTORE" in
+    *.gpg|s3:*)
+      if [ -z "$PASS_FILE" ] && [ -n "$TTY" ] && ! grep -qs '^BACKUP_PASSPHRASE=.' "${BACKUP_ENV:-/nonexistent}"; then
+        read -r -s -u 3 -p "$(printf '\033[1m?\033[0m Passphrase of the backup: ')" pass || true
+        echo
+        TMP_PASS="$(mktemp)"
+        chmod 600 "$TMP_PASS"
+        printf '%s\n' "$pass" > "$TMP_PASS"
+        PASS_FILE="$TMP_PASS"
+      fi ;;
+  esac
+  trap '[ -z "$TMP_PASS" ] || rm -f "$TMP_PASS"' EXIT
+  restore_args=()
+  [ -z "$PASS_FILE" ] || restore_args+=(--passphrase-file "$PASS_FILE")
+  [ -z "$BACKUP_ENV" ] || restore_args+=(--backup-env "$BACKUP_ENV")
+  say "Reading the backup $RESTORE"
+  fetched="$(mktemp)"
+  TP_DIR="$DIR" scripts/restore.sh --extract-config --fetched-to "$fetched" ${DOMAIN:+--domain "$DOMAIN"} "${restore_args[@]}" "$RESTORE" \
+    || die "The backup could not be read: nothing was started."
+  RESTORE_FILE="$(cat "$fetched")"
+  rm -f "$fetched"
+fi
 
 # ---- Configuration ---------------------------------------------------------------------------------------------------------
 secret() { head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
@@ -253,6 +328,10 @@ if [ "$FIRST" = 1 ]; then
   if [ -z "$UPDATES" ]; then
     ask UPDATES "Updates: 'auto' (one click from the app, and a command) or 'alias' (a command only)" "auto"
   fi
+  if [ -z "$BACKUPS" ]; then
+    ask BACKUPS "Automatic backups: 'none', 'daily' or 'weekly' (then: how many to keep, encryption, S3 copy)" "none"
+  fi
+  case "$BACKUPS" in none|daily|weekly) ;; *) die "Automatic backups: none, daily or weekly" ;; esac
 else
   say "Keeping the configuration of $DIR/.env"
   PROXY="${PROXY:-$(grep -qs "Written by scripts/install.sh" compose.override.yml && echo caddy || echo none)}"
@@ -353,9 +432,16 @@ else
 fi
 
 # ---- Start ------------------------------------------------------------------------------------------------------------------
+if [ -n "$RESTORE_FILE" ]; then
+  # The data of the backup, then the whole stack (restore.sh starts it and waits until it is healthy).
+  if [ "$MODE" = image ]; then pull_images; fi
+  say "Restoring the data of the backup"
+  TP_DIR="$DIR" scripts/restore.sh --yes --keep-config --no-safety-backup ${DOMAIN:+--domain "$DOMAIN"} "${restore_args[@]}" "$RESTORE_FILE" \
+    || die "The restore failed (see above). The backup is in $RESTORE_FILE; the configuration it held is in $DIR."
+fi
 say "Starting TasksPipes (the first start can take a few minutes)"
 if [ "$MODE" = image ]; then
-  docker compose pull --quiet
+  pull_images
   docker compose up -d --no-build --remove-orphans
 else
   docker compose up -d --build --remove-orphans
@@ -369,16 +455,29 @@ for _ in $(seq 1 90); do
 done
 [ "$state" = healthy ] || die "TasksPipes did not start ($state): see docker compose -f $DIR/docker-compose.yml logs app"
 
-# ---- The update command -------------------------------------------------------------------------------------------------------
-# For root, and for the person who ran sudo: `taskspipes-update` in bash and zsh.
-alias_line="alias taskspipes-update='sudo $DIR/scripts/update.sh'"
+# ---- Backups -------------------------------------------------------------------------------------------------------------------
+if [ -n "$RESTORE_FILE" ]; then
+  : # restore.sh set up the backups of the backup's backup.env.
+elif [ -n "$BACKUPS" ] && { [ "$BACKUPS" != none ] || [ -f backup.env ]; }; then
+  setup=(--setup --schedule "$BACKUPS")
+  if [ -z "$TTY" ]; then
+    setup+=(--yes)
+    grep -qs '^BACKUP_PASSPHRASE=.' backup.env || setup+=(--generate-passphrase)
+  fi
+  TP_DIR="$DIR" scripts/backup.sh "${setup[@]}" || warn "Backups could not be set up: run taskspipes-backup --setup."
+fi
+
+# ---- The commands -------------------------------------------------------------------------------------------------------------
+# For root, and for the person who ran sudo, in bash and zsh: taskspipes-update, -backup, -restore and -transfer.
 add_alias() { # add_alias HOME
-  local rc
+  local rc cmd
   for rc in "$1/.bashrc" "$1/.zshrc"; do
     case "$rc" in *zshrc) command -v zsh >/dev/null || [ -f "$rc" ] || continue ;; esac
     touch "$rc"
-    sed -i '/# TasksPipes update command/d;/alias taskspipes-update=/d' "$rc"
-    printf '%s # TasksPipes update command\n' "$alias_line" >> "$rc"
+    sed -i '/# TasksPipes update command/d;/# TasksPipes command/d;/alias taskspipes-update=/d' "$rc"
+    for cmd in update backup restore transfer; do
+      printf "alias taskspipes-%s='sudo %s/scripts/%s.sh' # TasksPipes command\n" "$cmd" "$DIR" "$cmd" >> "$rc"
+    done
     if [ -n "${SUDO_USER:-}" ] && [ "$1" != /root ]; then chown "$SUDO_USER": "$rc"; fi
   done
   return 0
@@ -397,7 +496,9 @@ cat <<EOF
   Installed in:   $DIR   (configuration: .env, kept secret)
   Administrator:  ${ADMIN:-$(sed -n 's/^ADMIN_EMAILS=//p' .env)}   — e-mail, Outline and sign-in are set in Administration › Settings
   Updates:        $( [ "$UPDATES" = auto ] && [ "$MODE" = image ] && echo "in one click from the app (About), or with taskspipes-update" || echo "taskspipes-update")
-                  (open a new terminal for the alias; taskspipes-update --check only checks)
+                  (open a new terminal for the commands; taskspipes-update --check only checks)
+  Backups:        $(sed -n 's/^BACKUP_SCHEDULE=//p' backup.env 2>/dev/null | grep -v '^none$' || echo "by hand"): taskspipes-backup (--setup to plan them, --status), taskspipes-restore
+  Other server:   taskspipes-transfer user@new-server moves this instance there
   Logs:           docker compose -f $DIR/docker-compose.yml logs -f app
 
 EOF

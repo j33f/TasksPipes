@@ -2,15 +2,31 @@
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
   import { formatDate, relativeTime } from "../lib/constants";
-  import type { AdminUser } from "../lib/types";
+  import type { AdminUser, BackupStatus } from "../lib/types";
   import { t } from "../lib/i18n.svelte";
+  import { router, setParams } from "../lib/router.svelte";
   import AdminSettings from "../components/AdminSettings.svelte";
+  import AdminBackups from "../components/AdminBackups.svelte";
 
-  let tab = $state<"accounts" | "settings" | "history">("accounts");
+  type Tab = "accounts" | "settings" | "history" | "backups";
+  // "/admin?tab=backups" (the notice of a backup problem) opens that tab.
+  let tab = $state<Tab>(router.params.get("tab") === "backups" ? "backups" : "accounts");
+  function open(next: Tab) {
+    tab = next;
+    setParams({ tab: next === "accounts" ? null : next }, { replace: true });
+    if (next === "backups") loadBackups();
+  }
+
+  // Backups made on the server: read at once, so that the tab shows when something is wrong.
+  let backups = $state<BackupStatus | null>(null);
+  let backupError = $state("");
+  const loadBackups = () =>
+    api.get<BackupStatus>("/admin/backups").then((b) => (backups = b)).catch((err) => (backupError = errorMessage(err)));
+  loadBackups();
   let history = $state<{ key: string; from: unknown; to: unknown; at: string; by: string | null }[]>([]);
   const show = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : Array.isArray(v) ? v.join(", ") || "—" : String(v));
   function openHistory() {
-    tab = "history";
+    open("history");
     api.get<typeof history>("/admin/settings/history").then((h) => (history = h)).catch((err) => (error = errorMessage(err)));
   }
 
@@ -45,13 +61,18 @@
 <div class="page">
   <h1>{t("Administration")}</h1>
   <div class="tabs" role="tablist">
-    <button role="tab" aria-selected={tab === "accounts"} class:active={tab === "accounts"} onclick={() => (tab = "accounts")}>{t("Accounts")}</button>
-    <button role="tab" aria-selected={tab === "settings"} class:active={tab === "settings"} onclick={() => (tab = "settings")}>{t("Settings")}</button>
+    <button role="tab" aria-selected={tab === "accounts"} class:active={tab === "accounts"} onclick={() => open("accounts")}>{t("Accounts")}</button>
+    <button role="tab" aria-selected={tab === "settings"} class:active={tab === "settings"} onclick={() => open("settings")}>{t("Settings")}</button>
     <button role="tab" aria-selected={tab === "history"} class:active={tab === "history"} onclick={openHistory}>{t("History of changes")}</button>
+    <button role="tab" aria-selected={tab === "backups"} class:active={tab === "backups"} onclick={() => open("backups")}>
+      {t("Backups")}{#if backups?.problem}<span class="alert-dot" title={t("Something is wrong with the backups")}></span>{/if}
+    </button>
   </div>
   {#if error}<p class="error-text">{error}</p>{/if}
   {#if tab === "settings"}
     <AdminSettings />
+  {:else if tab === "backups"}
+    <AdminBackups status={backups} error={backupError} />
   {:else if tab === "history"}
     {#if !history.length}<p class="muted">{t("No change yet.")}</p>{/if}
     <div class="table-wrap">
@@ -108,6 +129,7 @@
   .filter { max-width: 360px; margin: 16px 0; }
   .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--divider); margin: 12px 0 16px; }
   .tabs button { border: 0; background: none; font: inherit; padding: 8px 12px; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; }
+  .alert-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); margin-left: 6px; vertical-align: middle; }
   .tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }

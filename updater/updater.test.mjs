@@ -1,10 +1,10 @@
 // cd updater && node --test
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createUpdater, envValue, healthOf, tokenMatches, withEnvValue } from "./updater.mjs";
+import { createBackup, createUpdater, envValue, healthOf, tokenMatches, withEnvValue } from "./updater.mjs";
 
 test("the token is checked", () => {
   const t = "a-long-enough-shared-token-0123";
@@ -36,7 +36,12 @@ async function project(answer, options = {}) {
   const dir = await mkdtemp(join(tmpdir(), "updater-"));
   await writeFile(join(dir, ".env"), "APP_URL=https://x\nTASKSPIPES_VERSION=0.17.0\n");
   const calls = [];
+  const backups = [];
   const updater = createUpdater({
+    backup: async (from) => {
+      backups.push(from);
+      return { file: `taskspipes-before-update-${from}-20261110-120000.dump`, size: 1 };
+    },
     ...options,
     projectDir: dir,
     healthTimeoutMs: 1000,
@@ -50,7 +55,7 @@ async function project(answer, options = {}) {
   const finished = async () => {
     while (updater.status.state === "running") await new Promise((r) => setTimeout(r, 5));
   };
-  return { dir, calls, updater, finished };
+  return { dir, calls, updater, finished, backups };
 }
 
 test("an update pulls the version, restarts the app and waits for it to be healthy", async () => {
@@ -135,4 +140,52 @@ test("an updater that cannot move says so, and the app's update stays done", asy
   await settled(p);
   assert.equal(p.updater.status.state, "done");
   assert.ok(p.updater.status.log.some((l) => l.includes("could not move to version 0.18.0") && l.includes("denied")));
+});
+
+test("the database is backed up before an update, and an update without a backup changes nothing", async () => {
+  const p = await project(healthy);
+  p.updater.start("0.18.0");
+  await p.finished();
+  assert.deepEqual(p.backups, ["0.17.0"]);
+  assert.ok(p.updater.status.log.some((l) => l.includes("Database backed up to backups/taskspipes-before-update-0.17.0-")));
+
+  const failing = await project(healthy, { backup: async () => Promise.reject(new Error("pg_dump: no db")) });
+  failing.updater.start("0.18.0");
+  await failing.finished();
+  assert.equal(failing.updater.status.state, "failed");
+  assert.equal(failing.calls.some((c) => c.sub.startsWith("pull") || c.sub.startsWith("up")), false);
+  assert.equal(envValue(await readFile(join(failing.dir, ".env"), "utf8"), "TASKSPIPES_VERSION"), "0.17.0");
+  assert.ok(failing.updater.status.log.some((l) => l.includes("could not be backed up")));
+});
+
+test("the backup before an update is a private dump in backups/, the last five kept, and recorded", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "updater-backup-"));
+  await mkdir(join(dir, "backups"));
+  for (let i = 1; i <= 6; i++) await writeFile(join(dir, "backups", `taskspipes-before-update-0.1.${i}-2026010${i}-000000.dump`), "old");
+  await writeFile(join(dir, "backups", "taskspipes-backup-0.1.0-20260101-000000.tar.gz"), "kept");
+  const calls = [];
+  const backup = createBackup({
+    projectDir: dir,
+    host: "server-1",
+    now: () => new Date("2026-11-10T12:34:56Z"),
+    dump: async (_dir, file) => writeFile(file, "PGDMP…", { mode: 0o600 }),
+    exec: async (cmd, args, opts) => void calls.push({ cmd, args, input: opts?.input }),
+  });
+  const b = await backup("0.17.0");
+  assert.equal(b.file, "taskspipes-before-update-0.17.0-20261110-123456.dump");
+  const files = (await readdir(join(dir, "backups"))).sort();
+  assert.equal(files.filter((f) => f.startsWith("taskspipes-before-update-")).length, 5);
+  assert.ok(files.includes(b.file) && files.includes("taskspipes-before-update-0.1.6-20260106-000000.dump"));
+  assert.ok(!files.includes("taskspipes-before-update-0.1.2-20260102-000000.dump"));
+  assert.ok(files.includes("taskspipes-backup-0.1.0-20260101-000000.tar.gz"));
+  assert.equal((await stat(join(dir, "backups", b.file))).mode & 0o777, 0o600);
+  assert.equal((await stat(join(dir, "backups"))).mode & 0o777, 0o700);
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].input.includes("INSERT INTO backup_runs"));
+  assert.ok(calls[0].args.includes("ok=true") && calls[0].args.includes(`file=${b.file}`) && calls[0].args.includes("ver=0.17.0"));
+
+  const failing = createBackup({ projectDir: dir, dump: async () => Promise.reject(new Error("no db")), exec: async (cmd, args) => void calls.push({ args }) });
+  await assert.rejects(failing("0.17.0"), /no db/);
+  assert.ok(calls[1].args.includes("ok=false"));
+  assert.ok(!(await readdir(join(dir, "backups"))).some((f) => f.endsWith(".part")));
 });

@@ -8,6 +8,7 @@ import { one, query, type Row } from "./db.js";
 import { bad, notFound } from "./errors.js";
 import { closeUserConnections } from "./realtime.js";
 import { settingsRoutes } from "./settings.js";
+import { backupRoutes } from "./backups.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -44,6 +45,7 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   await app.register(settingsRoutes);
+  await app.register(backupRoutes);
 
   app.get("/admin/users", async () => {
     const { rows } = await query(

@@ -75,7 +75,8 @@ The documentation is also online: [taskspipes.com](https://taskspipes.com) prese
 
 TasksPipes runs as a single container next to a PostgreSQL database, behind an HTTPS reverse proxy. On a Linux
 server, one command installs it — Docker too when missing (from Docker's official repositories), HTTPS with Caddy if
-you wish — and sets up updates (in one click from the app, or with `taskspipes-update`):
+you wish — and sets up updates (in one click from the app, or with `taskspipes-update`) and, if you wish, automatic
+backups (encrypted, copied to S3-compatible storage):
 
 ```shell
 curl -fsSL https://raw.githubusercontent.com/j33f/TasksPipes/main/scripts/install.sh | sudo bash
@@ -89,7 +90,9 @@ docker compose up -d        # the published image (ghcr.io/j33f/taskspipes); --b
 ```
 
 Please see the [hosting documentation](docs/HOSTING.md) for the configuration in production: sign-in with Outline
-(OAuth or API keys), e-mail accounts and invitations, language and security notes.
+(OAuth or API keys), e-mail accounts and invitations, language and security notes, and
+[backups, restore and moving to another server](docs/HOSTING.md#backups-restore-and-moving) — `taskspipes-backup`,
+`taskspipes-restore`, and `taskspipes-transfer user@new-server` to move an instance in one command.
 
 # Contributing
 

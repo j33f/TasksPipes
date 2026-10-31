@@ -425,6 +425,13 @@ A setting given by the server's environment (`.env`) wins and shows locked. Secr
 making it, or every administrator, unable to sign in is refused. Every change is listed in **History of changes**
 (who, when, before and after; never a secret).
 
+Its **Backups** tab shows how the instance is backed up on its server (backups are made and planned there, with
+`scripts/backup.sh`, not in the app): the plan — when, how many kept, encrypted or not, the copy on S3-compatible
+storage — the last good backup, and the recent ones (planned, by hand, before an update or a restore) with their size
+and errors. The tab is marked when something is wrong, and the administrators are told once, by e-mail and push
+notification, when a backup fails, when its off-site copy fails, or when planned backups stop coming (see
+*Backups, restore and moving* in [HOSTING.md](HOSTING.md)).
+
 Every hour, the sessions of Outline accounts are checked with Outline: when Outline no longer accepts their access
 (revoked, account suspended or deleted), they are closed.
 
