@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- Front-end (Svelte + Vite) ----------------------------------------------
-FROM node:24-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -11,7 +11,7 @@ COPY locales/ /locales/
 RUN npm run check && npm run build
 
 # ---- Back-end (Fastify, TypeScript) -----------------------------------------
-FROM node:24-alpine AS server
+FROM node:26-alpine AS server
 WORKDIR /server
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -19,7 +19,7 @@ COPY server/ ./
 RUN npm run build && npm prune --omit=dev
 
 # ---- Runtime ----------------------------------------------------------------
-FROM node:24-alpine
+FROM node:26-alpine
 ENV NODE_ENV=production \
     PORT=3000 \
     WEB_DIR=/app/web

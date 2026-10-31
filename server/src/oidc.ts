@@ -5,13 +5,15 @@
  * and nonce. An account is the provider's person (issuer + sub); an e-mail account with the same address is linked
  * to it only when the provider vouches for the address (email_verified). OIDC_ALLOWED_DOMAINS limits the addresses.
  */
-import crypto, { type JsonWebKey } from "node:crypto";
+import crypto, { type webcrypto } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "./config.js";
 import { one, tx } from "./db.js";
 import { ensurePersonalSpace, loginError, reenableInvited, signInAccount, startFlow, takeFlow } from "./auth.js";
 import { localeOf, tr } from "./i18n.js";
 import { LIMITS, rateLimited } from "./rate-limit.js";
+
+type JsonWebKey = webcrypto.JsonWebKey;
 
 const FLOW_COOKIE = "tp_oidc";
 const b64u = (b: Buffer) => b.toString("base64url");
