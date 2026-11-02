@@ -189,3 +189,18 @@ test("the backup before an update is a private dump in backups/, the last five k
   assert.ok(calls[1].args.includes("ok=false"));
   assert.ok(!(await readdir(join(dir, "backups"))).some((f) => f.endsWith(".part")));
 });
+
+test("the database's service is \"db\" by default, or the one named (DB_SERVICE)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "updater-backup-"));
+  const seen = [];
+  const make = (opts) =>
+    createBackup({
+      projectDir: dir,
+      ...opts,
+      dump: async (_dir, file, service) => (seen.push({ dump: service }), writeFile(file, "PGDMP")),
+      exec: async (_cmd, args) => void seen.push({ psql: args[args.indexOf("-T") + 1] }),
+    });
+  await make({})("0.21.0");
+  await make({ service: "tasks-db" })("0.21.0");
+  assert.deepEqual(seen, [{ dump: "db" }, { psql: "db" }, { dump: "tasks-db" }, { psql: "tasks-db" }]);
+});

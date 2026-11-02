@@ -57,8 +57,8 @@ const run = (cmd, args, { input, ...opts } = {}) =>
   });
 
 /** pg_dump of the project's database (custom format) into a file, streamed: a database may be large. */
-async function pgDump(projectDir, file) {
-  const child = spawn("docker", ["compose", "--project-directory", projectDir, "exec", "-T", "db", "pg_dump", "-U", "taskspipes", "-Fc", "taskspipes"], {
+async function pgDump(projectDir, file, service = "db") {
+  const child = spawn("docker", ["compose", "--project-directory", projectDir, "exec", "-T", service, "pg_dump", "-U", "taskspipes", "-Fc", "taskspipes"], {
     stdio: ["ignore", "pipe", "pipe"],
   });
   let err = "";
@@ -80,12 +80,13 @@ VALUES ('before-update', 'updater', :'ok'::boolean, NULLIF(:'file', ''), NULLIF(
 
 /**
  * The database backup made before an update: backups/taskspipes-before-update-<version>-<date>.dump (private, the
- * last `keep` of them kept), recorded in the database. Throws when it cannot be made.
+ * last `keep` of them kept), recorded in the database. Throws when it cannot be made. `service` is the database's
+ * service in the compose file.
  */
-export function createBackup({ projectDir, exec = run, dump = pgDump, keep = 5, host = process.env.HOST_NAME || "", now = () => new Date() }) {
+export function createBackup({ projectDir, service = "db", exec = run, dump = pgDump, keep = 5, host = process.env.HOST_NAME || "", now = () => new Date() }) {
   const dir = join(projectDir, "backups");
   const record = (values) => {
-    const args = ["compose", "--project-directory", projectDir, "exec", "-T", "db", "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", "taskspipes", "-d", "taskspipes"];
+    const args = ["compose", "--project-directory", projectDir, "exec", "-T", service, "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", "taskspipes", "-d", "taskspipes"];
     for (const [k, v] of Object.entries(values)) args.push("-v", `${k}=${v ?? ""}`);
     // An older database has no table for it: the backup is made all the same.
     return exec("docker", args, { input: RECORD_SQL }).catch(() => "");
@@ -98,7 +99,7 @@ export function createBackup({ projectDir, exec = run, dump = pgDump, keep = 5, 
     try {
       await mkdir(dir, { recursive: true, mode: 0o700 });
       await chmod(dir, 0o700);
-      await dump(projectDir, join(dir, `${file}.part`));
+      await dump(projectDir, join(dir, `${file}.part`), service);
       await rename(join(dir, `${file}.part`), join(dir, file));
       const { size } = await stat(join(dir, file));
       const old = (await readdir(dir)).filter((f) => /^taskspipes-before-update-.*\.dump$/.test(f)).sort((a, b) => stamped(b) - stamped(a));
@@ -119,8 +120,9 @@ const stamped = (name) => Number((name.match(/(\d{8})-(\d{6})\.dump$/) ?? ["", "
  * One updater for one compose project. `exec` runs a command (replaced in tests), `sleep` waits.
  * State: idle → running → done | failed (nothing changed) | rolled-back (the new version did not start).
  * `self` is the updater's own service: once the app runs the new version, the updater moves to it too.
+ * `dbService` is the database's service, backed up before the update.
  */
-export function createUpdater({ projectDir, service = "app", self = null, variable = "TASKSPIPES_VERSION", healthTimeoutMs = 180_000, exec = run, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), backup = createBackup({ projectDir, exec }) }) {
+export function createUpdater({ projectDir, service = "app", self = null, dbService = "db", variable = "TASKSPIPES_VERSION", healthTimeoutMs = 180_000, exec = run, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), backup = createBackup({ projectDir, service: dbService, exec }) }) {
   const envFile = join(projectDir, ".env");
   const status = { state: "idle", version: null, from: null, startedAt: null, finishedAt: null, log: [] };
   const log = (line) => {
