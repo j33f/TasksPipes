@@ -131,6 +131,7 @@ the setting in the app. Those settings are: `SMTP_*`, `MAIL_FROM`, `OUTLINE_ENAB
 | `UPDATER_URL` | Address of the updater seen by the app; default `http://updater:8080` once `UPDATER_TOKEN` is set. |
 | `PROJECT_DIR` | For the updater: this directory's absolute path on the host; default the directory `docker compose` is run from. |
 | `UPDATER_SERVICE` | For the updater: its own service in the compose file, which it moves to the new version after the app (`updater` by default; empty to never touch itself). |
+| `DB_SERVICE` | For the updater: the database's service in the compose file, backed up before each update (`db` by default). |
 | `UPDATE_CHECK` | `false` to stop asking GitHub every hour for a new version (on by default; also in Administration › Settings). |
 | `VAPID_SUBJECT` | A contact for push services, `mailto:` or `https:`. Default: `APP_URL` when it is https, else `mailto:admin@localhost`. |
 | `WEBHOOK_ALLOW_PRIVATE` | `true` lets outgoing webhooks (and push messages) reach http addresses and internal networks (a receiver on the same network, tests). Off by default: https and public addresses only, checked when connecting. |
