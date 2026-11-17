@@ -1006,7 +1006,25 @@
     "Failed": "Falhou",
     "No": "Não",
     "Backups are made on the server: the app shows what they did, and tells the administrators when one fails.": "Os backups são feitos no servidor: o aplicativo mostra o resultado e avisa os administradores quando um falha.",
-    "Backups, restore and moving to another server": "Backups, restauração e mudança de servidor"
+    "Backups, restore and moving to another server": "Backups, restauração e mudança de servidor",
+    "Notifications, {n} unread": "Notificações, {n} não lida(s)",
+    "{n} unread notification": "{n} notificação não lida",
+    "{n} unread notifications": "{n} notificações não lidas",
+    "Nothing new": "Nada de novo",
+    "Mark all as read": "Marcar tudo como lido",
+    "Mark as read": "Marcar como lido",
+    "Swipe a notification aside to mark it as read.": "Deslize uma notificação para o lado para marcá-la como lida.",
+    "You are all caught up.": "Você está em dia.",
+    "Someone": "Alguém",
+    "{name} added a task to {pipe}": "{name} adicionou uma tarefa em {pipe}",
+    "{name} made you the owner of a task": "{name} atribuiu uma tarefa a você",
+    "{name} commented on a task": "{name} comentou uma tarefa",
+    "{name} mentioned you": "{name} mencionou você",
+    "{name} sent a task to {team}": "{name} enviou uma tarefa para {team}",
+    "{name} sent you a task": "{name} enviou uma tarefa para você",
+    "{name} refused a task": "{name} recusou uma tarefa",
+    "A task is no longer blocked": "Uma tarefa não está mais bloqueada",
+    "Incoming of {space}": "Incoming de {space}"
   },
   "server": {
     "{label} is required": "{label}: obrigatório",
@@ -1388,7 +1406,8 @@
     "No backup has been made since they were planned.": "Nenhum backup foi feito desde que foram agendados.",
     "Check what happened, then make a backup again.": "Veja o que aconteceu e faça um backup de novo.",
     "See Administration › Backups, and the backup log on the server.": "Consulte Administração › Backups e o log de backups no servidor.",
-    "See the backups": "Ver os backups"
+    "See the backups": "Ver os backups",
+    "Invalid notifications": "Notificações inválidas"
   },
   "catalog": {
     "Prêt à démarrer": "Pronta para começar",

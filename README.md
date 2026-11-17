@@ -49,6 +49,8 @@ follows Outline's look and feel.
   report per task type for development pipes, readable in the app and sent by e-mail at 18:00 if asked.
 - **Notifications by e-mail** — tasks sent to you, given to you or refused, comments and due dates, at once, in a
   daily digest or not at all, as each person chooses.
+- **Notifications in the app** — a bell with the unread count; a click goes to the task, shown in yellow on its
+  board; swipe or ✓ to mark as read; the news of your teams included.
 - **Recurring tasks** — every day, chosen weekdays, a day or the first Monday of the month, the last business day,
   every year…, at fixed dates (made ahead if wanted) or once the previous one is done.
 - **Search** — every task you can see, by text, field values, comments or number (`TP-123`), from the sidebar

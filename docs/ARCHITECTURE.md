@@ -44,6 +44,7 @@ Outline through its RPC-style API.
 | `dependencies.ts` | Dependencies between tasks: what a linked task shows to whom, loops, and releasing the tasks waiting for one just finished. |
 | `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |
 | `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |
+| `inbox.ts` | In-app notifications (the bell): written with the history (with those of `notifications.ts`, plus the news of one's teams), listed with the view rule of `taskPermissions`, marked as read. |
 | `admin.ts` | Administrators of the instance (`ADMIN_EMAILS`), the account list, disabling and enabling accounts. |
 | `account.ts` | One's data: the zip export, and the deletion of e-mail accounts (history moved to a placeholder account). |
 | `zip.ts` | A small zip writer on `node:zlib`, for the export. |
@@ -91,6 +92,7 @@ follow Outline's design tokens (`web/src/app.css`).
 | `api_tokens` | Access tokens of the public API (hash, scope, expiry, revocation). |
 | `pipe_webhooks`, `webhook_deliveries` | Outgoing webhooks of pipes (encrypted secret) and their deliveries, with attempts and answers. |
 | `notifications` | E-mail notifications waiting, sent or dropped; people's choices are in `users.notification_prefs`. |
+| `inbox` | In-app notifications (one per person and history entry), unread until `read_at`. |
 | `pipe_integrations`, `task_links` | Repositories connected to pipes (webhook token, encrypted secret), and the pull/merge requests and commits linked to tasks. |
 | `sessions`, `login_tokens`, `invitations` | Sessions, e-mail sign-in links and TOTP steps, invitations and requests to connect (pending, accepted, refused). |
 

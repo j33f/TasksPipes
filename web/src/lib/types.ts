@@ -6,6 +6,22 @@ export interface UserRef {
   avatarUrl?: string | null;
 }
 
+/** An in-app notification (the bell): what happened on a task, until marked as read. */
+export interface InboxItem {
+  id: number;
+  kind: "received" | "assigned" | "refused" | "comment" | "mention" | "unblocked" | "created";
+  createdAt: string;
+  actor: UserRef | null;
+  excerpt: string | null;
+  task: {
+    id: string;
+    number: number;
+    title: string;
+    pipe: { id: string; name: string } | null;
+    space: { id: string; name: string; kind: "user" | "team" };
+  };
+}
+
 export interface User extends UserRef {
   spaceId: string;
   active: boolean;

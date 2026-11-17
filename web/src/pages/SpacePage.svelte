@@ -159,7 +159,7 @@
     {:else}
       <div class="list incoming-list">
         {#each space.incoming ?? [] as item (item.id)}
-          <div class="card incoming-item">
+          <div class="card incoming-item" data-task-id={item.id}>
             {#if item.sender}<Avatar user={item.sender} size={32} />{/if}
             <div class="body">
               <button class="link-title" onclick={() => app.openTask(item.id)}>{item.title}</button>

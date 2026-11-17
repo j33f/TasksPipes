@@ -16,6 +16,9 @@
   import InviteModal from "./components/InviteModal.svelte";
   import SearchModal from "./components/SearchModal.svelte";
   import PushPrompt from "./components/PushPrompt.svelte";
+  import NotificationBell from "./components/NotificationBell.svelte";
+  import InboxModal from "./components/InboxModal.svelte";
+  import { inbox } from "./lib/inbox.svelte";
   import { isSearchShortcut } from "./lib/search";
   import Home from "./pages/Home.svelte";
   import SpacePage from "./pages/SpacePage.svelte";
@@ -36,11 +39,15 @@
   // Shared data (spaces, users) is loaded on login; then live updates keep it fresh.
   // Polling only stands in while the live connection is down and the page is in use.
   $effect(() => {
-    if (!app.me) return;
+    if (!app.me) return inbox.reset();
     app.loadShared().catch(() => {});
+    inbox.load();
     live.start();
     const timer = setInterval(() => {
-      if (!live.connected && !live.idle && !document.hidden) app.loadShared().catch(() => {});
+      if (!live.connected && !live.idle && !document.hidden) {
+        app.loadShared().catch(() => {});
+        inbox.load();
+      }
     }, 30_000);
     return () => {
       clearInterval(timer);
@@ -151,6 +158,7 @@
           {/if}
         </button>
         <strong>TasksPipes</strong>
+        <span class="mobile-bar-end"><NotificationBell /></span>
       </div>
       {#if route.name === "home"}
         <Home />
@@ -177,7 +185,8 @@
   {:else if app.dialog === "calendar"}<CalendarModal onclose={() => (app.dialog = null)} />
   {:else if app.dialog === "about"}<AboutModal onclose={() => (app.dialog = null)} />
   {:else if app.dialog === "invite"}<InviteModal onclose={() => (app.dialog = null)} />
-  {:else if app.dialog === "search"}<SearchModal onclose={() => (app.dialog = null)} />{/if}
+  {:else if app.dialog === "search"}<SearchModal onclose={() => (app.dialog = null)} />
+  {:else if app.dialog === "inbox"}<InboxModal onclose={() => (app.dialog = null)} />{/if}
   {#if taskId}
     {#key taskId}<TaskModal id={taskId} onclose={() => app.openTask(null)} />{/key}
   {/if}

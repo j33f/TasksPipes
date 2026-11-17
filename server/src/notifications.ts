@@ -22,6 +22,7 @@ import { TASK_KEY_PREFIX } from "./git.js";
 import { dailyPeriod, addDays, localDay, zonedInstant } from "./time.js";
 import { rateLimited, type Limit } from "./rate-limit.js";
 import { pushTo } from "./push.js";
+import { addToInbox, newsOf, type InboxKind } from "./inbox.js";
 
 export const KINDS = ["received", "assigned", "refused", "comment", "mention", "unblocked", "due"] as const;
 export type Kind = (typeof KINDS)[number];
@@ -138,6 +139,10 @@ export async function queueNotifications(db: Queryable, eventId: number, mention
     add(e.owner_id, "comment");
   }
   to.delete(e.actor_id);
+  // In the app (the bell): the same, and the news of one's teams (a task created in one of their pipes).
+  const inApp = [...to].map(([userId, kind]) => ({ userId, taskId: e.task_id as string, kind: kind as InboxKind }));
+  for (const userId of await newsOf(db, e)) if (!to.has(userId)) inApp.push({ userId, taskId: e.task_id, kind: "created" });
+  await addToInbox(db, eventId, inApp);
   if (!to.size) return;
   await db.query(
     `INSERT INTO notifications (user_id, task_id, kind, event_id)
@@ -150,6 +155,7 @@ export async function queueNotifications(db: Queryable, eventId: number, mention
 /** Tasks no longer blocked since the history entry `eventId` finished their last blocker (dependencies.ts). */
 export async function queueUnblocked(db: Queryable, eventId: number, told: { userId: string; taskId: string }[]) {
   if (!told.length) return;
+  await addToInbox(db, eventId, told.map((t) => ({ ...t, kind: "unblocked" as const })));
   await db.query(
     `INSERT INTO notifications (user_id, task_id, kind, event_id)
      SELECT u.id, x.task_id, 'unblocked', $3 FROM unnest($1::uuid[], $2::uuid[]) AS x(user_id, task_id) JOIN users u ON u.id = x.user_id

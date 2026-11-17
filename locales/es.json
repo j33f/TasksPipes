@@ -1006,7 +1006,25 @@
     "Failed": "Error",
     "No": "No",
     "Backups are made on the server: the app shows what they did, and tells the administrators when one fails.": "Las copias se hacen en el servidor: la aplicación muestra su resultado y avisa a los administradores cuando una falla.",
-    "Backups, restore and moving to another server": "Copias, restauración y cambio de servidor"
+    "Backups, restore and moving to another server": "Copias, restauración y cambio de servidor",
+    "Notifications, {n} unread": "Notificaciones, {n} sin leer",
+    "{n} unread notification": "{n} notificación sin leer",
+    "{n} unread notifications": "{n} notificaciones sin leer",
+    "Nothing new": "Nada nuevo",
+    "Mark all as read": "Marcar todo como leído",
+    "Mark as read": "Marcar como leído",
+    "Swipe a notification aside to mark it as read.": "Desliza una notificación hacia un lado para marcarla como leída.",
+    "You are all caught up.": "Estás al día.",
+    "Someone": "Alguien",
+    "{name} added a task to {pipe}": "{name} añadió una tarea a {pipe}",
+    "{name} made you the owner of a task": "{name} te asignó una tarea",
+    "{name} commented on a task": "{name} comentó una tarea",
+    "{name} mentioned you": "{name} te mencionó",
+    "{name} sent a task to {team}": "{name} envió una tarea a {team}",
+    "{name} sent you a task": "{name} te envió una tarea",
+    "{name} refused a task": "{name} rechazó una tarea",
+    "A task is no longer blocked": "Una tarea ya no está bloqueada",
+    "Incoming of {space}": "Incoming de {space}"
   },
   "server": {
     "{label} is required": "{label}: obligatorio",
@@ -1388,7 +1406,8 @@
     "No backup has been made since they were planned.": "No se ha hecho ninguna copia desde que se programaron.",
     "Check what happened, then make a backup again.": "Revise lo ocurrido y vuelva a hacer una copia.",
     "See Administration › Backups, and the backup log on the server.": "Consulte Administración › Copias de seguridad y el registro de copias en el servidor.",
-    "See the backups": "Ver las copias de seguridad"
+    "See the backups": "Ver las copias de seguridad",
+    "Invalid notifications": "Notificaciones no válidas"
   },
   "catalog": {
     "Prêt à démarrer": "Lista para empezar",

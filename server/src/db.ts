@@ -27,14 +27,38 @@ export async function one<T extends Row = Row>(text: string, params: unknown[] =
   return rows[0] ?? null;
 }
 
+/** Work to do once the transaction of a client commits (dropped on rollback). */
+const pendingAfterCommit = new WeakMap<object, (() => void)[]>();
+
+/**
+ * Runs `fn` once what `db` wrote is committed: at once outside a transaction (the pool), after COMMIT inside tx().
+ * For live notifications, so that a page reloading on them sees the change.
+ */
+export function afterCommit(db: Queryable, fn: () => void) {
+  const list = pendingAfterCommit.get(db);
+  if (list) list.push(fn);
+  else fn();
+}
+
 export async function tx<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
+  const after: (() => void)[] = [];
+  pendingAfterCommit.set(client, after);
   try {
     await client.query("BEGIN");
     const result = await fn(client);
     await client.query("COMMIT");
+    pendingAfterCommit.delete(client);
+    for (const f of after) {
+      try {
+        f();
+      } catch {
+        /* a notification never fails the request */
+      }
+    }
     return result;
   } catch (err) {
+    pendingAfterCommit.delete(client);
     await client.query("ROLLBACK");
     throw err;
   } finally {
@@ -407,6 +431,20 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS notifications_pending_idx ON notifications(user_id, task_id) WHERE sent_at IS NULL AND dropped_at IS NULL;
 CREATE INDEX IF NOT EXISTS notifications_sent_idx ON notifications(user_id, task_id, sent_at) WHERE channel = 'immediate';
 CREATE UNIQUE INDEX IF NOT EXISTS notifications_overdue_idx ON notifications(user_id, task_id, due_date) WHERE kind = 'overdue';
+
+-- In-app notifications (the bell, inbox.ts): what happened on tasks one is concerned by, until marked as read.
+-- Written with the history entry that causes them, for everyone (with or without e-mail or push).
+CREATE TABLE IF NOT EXISTS inbox (
+  id bigserial PRIMARY KEY,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  event_id bigint NOT NULL REFERENCES task_events(id) ON DELETE CASCADE,
+  kind text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  read_at timestamptz,
+  UNIQUE (user_id, event_id)
+);
+CREATE INDEX IF NOT EXISTS inbox_unread_idx ON inbox(user_id, id) WHERE read_at IS NULL;
 
 -- Global search (search.ts). Text is indexed in French and in English, accents ignored; a search uses the
 -- language of the person searching. Each task has one row, kept up to date by triggers.

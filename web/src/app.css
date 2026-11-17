@@ -318,6 +318,12 @@ a.card:hover { text-decoration: none; box-shadow: var(--card-shadow), 0 4px 12px
   box-shadow: 0 0 0 2px var(--background);
 }
 .pastille.pulse { animation: pastille 700ms ease 2; }
+.mobile-bar-end { margin-left: auto; }
+/* A task reached from a notification (highlight.ts): yellow a moment, then back to normal. */
+.task-highlight { animation: task-highlight 4s ease-out; }
+@keyframes task-highlight {
+  0%, 70% { background-color: var(--text-highlight); color: var(--almost-black); box-shadow: 0 0 0 2px #f5c400; }
+}
 @keyframes pastille { 50% { transform: scale(1.35); } }
 .toast.error { box-shadow: inset 3px 0 0 var(--danger), var(--menu-shadow); }
 
