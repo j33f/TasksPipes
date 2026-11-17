@@ -1,13 +1,14 @@
 import { app } from "./app.svelte";
 import { t } from "./i18n.svelte";
 import { checkServerVersion } from "./version.svelte";
+import { inbox } from "./inbox.svelte";
 
 /** Closed after this long without any activity on the page, or this long after the page is hidden. */
 const IDLE_MS = 5 * 60_000;
 const HIDDEN_MS = 60_000;
 
 interface LiveEvent {
-  type: "task.sent" | "task.refused" | "incoming.changed" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello";
+  type: "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "inbox" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello";
   /** "hello": version of the server. */
   version?: string;
   spaceId?: string;
@@ -77,6 +78,7 @@ class Live {
     this.#retry = 0;
     this.#connect();
     app.refresh();
+    inbox.load();
   }
 
   #sleep() {
@@ -95,7 +97,10 @@ class Live {
     ws.onopen = () => {
       this.connected = true;
       // A reconnection after a failure may have missed events.
-      if (this.#retry > 0) app.refresh();
+      if (this.#retry > 0) {
+        app.refresh();
+        inbox.load();
+      }
       this.#retry = 0;
     };
     ws.onmessage = (m) => {
@@ -118,6 +123,7 @@ class Live {
 
   #handle(e: LiveEvent) {
     if (e.type === "hello") return checkServerVersion(e.version);
+    if (e.type === "inbox") return void inbox.load();
     app.refresh();
     if (e.type === "connection.request") {
       return app.toast(t("{name} wants to connect with you", { name: e.by ?? "" }), "info", { label: t("View"), run: () => (app.dialog = "settings") });

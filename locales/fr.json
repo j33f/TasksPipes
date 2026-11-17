@@ -1006,7 +1006,25 @@
     "Failed": "Échec",
     "No": "Non",
     "Backups are made on the server: the app shows what they did, and tells the administrators when one fails.": "Les sauvegardes sont faites sur le serveur : l'application montre ce qu'elles ont donné, et prévient les administrateurs quand l'une d'elles échoue.",
-    "Backups, restore and moving to another server": "Sauvegardes, restauration et changement de serveur"
+    "Backups, restore and moving to another server": "Sauvegardes, restauration et changement de serveur",
+    "Notifications, {n} unread": "Notifications, {n} non lue(s)",
+    "{n} unread notification": "{n} notification non lue",
+    "{n} unread notifications": "{n} notifications non lues",
+    "Nothing new": "Rien de nouveau",
+    "Mark all as read": "Tout marquer comme lu",
+    "Mark as read": "Marquer comme lu",
+    "Swipe a notification aside to mark it as read.": "Glissez une notification sur le côté pour la marquer comme lue.",
+    "You are all caught up.": "Vous êtes à jour.",
+    "Someone": "Quelqu'un",
+    "{name} added a task to {pipe}": "{name} a ajouté une tâche dans {pipe}",
+    "{name} made you the owner of a task": "{name} vous a attribué une tâche",
+    "{name} commented on a task": "{name} a commenté une tâche",
+    "{name} mentioned you": "{name} vous a mentionné",
+    "{name} sent a task to {team}": "{name} a envoyé une tâche à {team}",
+    "{name} sent you a task": "{name} vous a envoyé une tâche",
+    "{name} refused a task": "{name} a refusé une tâche",
+    "A task is no longer blocked": "Une tâche n'est plus bloquée",
+    "Incoming of {space}": "Incoming de {space}"
   },
   "server": {
     "{label} is required": "{label} requis",
@@ -1388,7 +1406,8 @@
     "No backup has been made since they were planned.": "Aucune sauvegarde n'a été faite depuis leur planification.",
     "Check what happened, then make a backup again.": "Voyez ce qui s'est passé, puis refaites une sauvegarde.",
     "See Administration › Backups, and the backup log on the server.": "Voyez Administration › Sauvegardes, et le journal des sauvegardes sur le serveur.",
-    "See the backups": "Voir les sauvegardes"
+    "See the backups": "Voir les sauvegardes",
+    "Invalid notifications": "Notifications invalides"
   },
   "catalog": {}
 }

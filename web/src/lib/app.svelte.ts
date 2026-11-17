@@ -20,7 +20,9 @@ class AppState {
   /** No Outline documents for this person: an account without Outline, or Outline turned off on the instance. */
   noOutline = $derived(this.isGuest || this.me?.features.outline === false);
   /** Dialog opened from the user menu (or the dashboard, notifications…, the search with Ctrl/⌘ + K). */
-  dialog = $state<"settings" | "calendar" | "about" | "invite" | "search" | null>(null);
+  dialog = $state<"settings" | "calendar" | "about" | "invite" | "search" | "inbox" | null>(null);
+  /** A task to show in yellow on the page it is on, reached from a notification (highlight.ts). */
+  highlight = $state<string | null>(null);
   /** Tasks waiting in my incoming and in my teams' ones. */
   pendingCount = $derived(
     this.spaces.filter((s) => s.myRole && (s.id === this.me?.personalSpaceId || s.kind === "team"))
