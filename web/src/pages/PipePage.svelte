@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { t } from "../lib/i18n.svelte";
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
@@ -74,6 +75,17 @@
     try { return localStorage.getItem("tp:pipeView") === "calendar" ? "calendar" : "board"; } catch { return "board"; }
   };
   let pipeView = $state<"board" | "calendar">(readView());
+  // A task reached from a notification is shown on the board, whatever the filters (not remembered).
+  $effect(() => {
+    const id = app.highlight;
+    if (!id || !pipe?.tasks.some((x) => x.id === id)) return;
+    untrack(() => {
+      pipeView = "board";
+      filter = "";
+      mineOnly = false;
+      labelFilter = priorityFilter = ownerFilter = typeFilter = "";
+    });
+  });
   function setPipeView(v: "board" | "calendar") {
     pipeView = v;
     try { localStorage.setItem("tp:pipeView", v); } catch { /* storage unavailable */ }

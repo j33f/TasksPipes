@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { config } from "./config.js";
-import { loadCustomTypes, one, pool, query, syncStages, tx, type Queryable, type Row } from "./db.js";
+import { afterCommit, loadCustomTypes, one, pool, query, syncStages, tx, type Queryable, type Row } from "./db.js";
 import { absoluteOutlineUrl, type OutlineDocument } from "./outline.js";
 import { linkSource } from "./links.js";
 import { HttpError, bad, forbidden, notFound } from "./errors.js";
@@ -20,6 +20,7 @@ import { INVITE_LINK_HOURS, createLoginLink, decrypt, encrypt, ensurePersonalSpa
 import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
 import { isEmail, sendLinkMail, sendOutlineInvite } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
+import { inboxRoutes } from "./inbox.js";
 import { calendarUrl } from "./calendar.js";
 import { adminRoutes, requestIsAdmin } from "./admin.js";
 import { accountRoutes } from "./account.js";
@@ -366,6 +367,13 @@ async function recordEvent(
   if (notify && before && !isResolved(before.status) && isResolved(after.status)) await releaseWaiting(db, Number(rows[0].id));
   // Outgoing webhooks of the pipes concerned (imports too: integrations want every task).
   await queueWebhooks(db, Number(rows[0].id));
+  // The other members' open pages reload, once it is committed (imports tell them once, at the end).
+  if (notify) {
+    afterCommit(db, () => {
+      notifySpace(after.space_id, { type: "task.updated" }, actorId);
+      if (before && before.space_id !== after.space_id) notifySpace(before.space_id, { type: "task.updated" }, actorId);
+    });
+  }
 }
 
 /** Statuses of work under way or finished: reaching one while blocked is allowed, and noted in the history. */
@@ -553,6 +561,7 @@ export async function apiRoutes(app: FastifyInstance) {
   await app.register(recurrenceRoutes);
   await app.register(labelRoutes);
   await app.register(pushRoutes);
+  await app.register(inboxRoutes);
   await app.register(updateRoutes);
   await app.register(accountRoutes, { present: presentTask, events: getEvents });
 

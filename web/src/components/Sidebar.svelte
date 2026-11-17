@@ -7,6 +7,7 @@
   import TeamModal from "./TeamModal.svelte";
   import InviteModal from "./InviteModal.svelte";
   import PipeIcon from "./PipeIcon.svelte";
+  import NotificationBell from "./NotificationBell.svelte";
   import PipeModal from "./PipeModal.svelte";
   import ReportModal from "./ReportModal.svelte";
   import NewTaskModal from "./NewTaskModal.svelte";
@@ -124,6 +125,7 @@
   <div class="sidebar-header">
     <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><rect x="7" y="8" width="5" height="16" rx="2" fill="var(--sidebar-background)"/><rect x="14" y="8" width="5" height="11" rx="2" fill="var(--sidebar-background)" opacity=".75"/><rect x="21" y="8" width="5" height="7" rx="2" fill="var(--sidebar-background)" opacity=".5"/></svg>
     <span>TasksPipes</span>
+    <span class="header-end"><NotificationBell onopen={onclose} /></span>
   </div>
 
   <div class="sidebar-scroll">
@@ -376,6 +378,7 @@
     display: flex; flex-direction: column; overflow: hidden;
   }
   .sidebar-header { display: flex; align-items: center; gap: 8px; padding: 16px 16px 8px; font-weight: 600; color: var(--text); font-size: 16px; }
+  .header-end { margin-left: auto; margin-block: -6px; }
   .sidebar-scroll { flex: 1; overflow-y: auto; padding: 4px 8px 16px; }
   .sidebar-section { margin-top: 16px; }
   .sidebar-section.first { margin-top: 0; }

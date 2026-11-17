@@ -6,6 +6,7 @@ import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
 import { runScheduledReports } from "./reports.js";
 import { cleanupNotifications, runNotifications, runPush } from "./notifications.js";
+import { cleanupInbox } from "./inbox.js";
 import { cleanupWebhookDeliveries, runWebhooks } from "./webhooks.js";
 import { runRecurrences } from "./recurrence.js";
 import { recordOccurrence } from "./routes.js";
@@ -25,6 +26,7 @@ setInterval(() => {
   cleanupSessions().catch((err) => app.log.warn({ err }, "Session cleanup failed"));
   disableUnused();
   cleanupNotifications().catch((err) => app.log.warn({ err }, "Notification cleanup failed"));
+  cleanupInbox().catch((err) => app.log.warn({ err }, "In-app notification cleanup failed"));
   cleanupWebhookDeliveries().catch((err) => app.log.warn({ err }, "Webhook delivery cleanup failed"));
   // Outline accounts whose access was revoked or suspended in Outline lose their sessions.
   checkOutlineSessions()

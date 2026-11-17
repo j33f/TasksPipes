@@ -268,9 +268,26 @@ A search only finds what you could open in the app, checked in the database quer
 
 ## Live updates
 
-A task sent or refused shows up at once for its recipients, with a notification. The connection closes after five
-minutes of inactivity or one minute in the background, and reopens when the page is used again. The number of
-waiting tasks shows in the tab title and, on mobile, as a badge on the menu button.
+A task sent or refused shows up at once for its recipients, with a notification. In a team pipe, what a member
+does (a task created, moved, given to someone, commented…) shows at once on the other members' open pages. The
+connection closes after five minutes of inactivity or one minute in the background, and reopens when the page is
+used again. The number of waiting tasks shows in the tab title and, on mobile, as a badge on the menu button.
+
+## Notifications in the app
+
+The **bell** (at the top of the menu, and of the screen on mobile) shows how many notifications are unread. It opens
+them as a list in the middle of the page, newest first:
+
+- what happened, by whom, on which task and where (team › pipe, or the incoming), with an excerpt of the comment;
+- the news of your teams — a task created by someone else in one of their pipes — and what concerns you: a task
+  received, given to you or refused, a comment on a task you wrote or own, a mention, a task no longer blocked;
+- a click (or a tap) goes to the task's pipe, scrolled to the task, which shines in yellow a moment (the board is
+  shown, and the filters are cleared, so that it can be seen); the notification is then read;
+- the ✓ icon marks one as read; on a touch screen, swiping it to the left or the right does the same;
+  **Mark all as read** empties the list.
+
+Notifications are for everyone, with or without e-mail or push, and come live. Someone who can no longer see a
+task no longer sees what happened on it. Read ones are forgotten after 30 days, unread ones after 90.
 
 After the server is updated, open pages notice the new version and reload themselves — at once if nothing is being
 edited, otherwise once the edit is over, with a banner offering to reload.
