@@ -209,7 +209,7 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
 ## Public API and webhooks
 
 - **Access tokens** (*Settings › Access tokens*) — for scripts and other tools. A token is shown once, at creation,
-  and only its hash is kept; it has a name, an expiry (30 days, 90 days or a year) and a scope: **read only**, or
+  and only its hash is kept; it has a name, an expiry (30 days, 90 days, a year, or never) and a scope: **read only**, or
   **read and write**. It acts with exactly your rights, through the same checks as the app, and can be revoked at
   any time; a disabled account's tokens stop working.
 - **API `/api/v1`** — the documented, versioned part of the API: your account, people, spaces, pipes and their tasks,

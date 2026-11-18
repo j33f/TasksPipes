@@ -61,9 +61,17 @@ async function call(app: FastifyInstance, c: Caller, method: "GET" | "POST" | "P
 
 const allowedSpace = (c: Caller, spaceId: string | undefined) => !c.spaceIds || (Boolean(spaceId) && c.spaceIds.has(spaceId!));
 const secretPipe = (kind: string | null | undefined) => Boolean(kind) && isConfidential({ pipe_kind: kind, task_type: null });
-/** A task the agent may know of. */
-const visible = (c: Caller, t: Json) =>
-  allowedSpace(c, t?.space?.id) && !isConfidential({ pipe_kind: t?.pipe?.kind ?? null, task_type: t?.taskType ?? null });
+/**
+ * A task the agent may know of. Fails closed: a task whose confidentiality cannot be told — in a pipe whose kind the
+ * answer leaves out, without the server's own "confidential" flag (search results carry the flag, not the kind) — is
+ * hidden too.
+ */
+const visible = (c: Caller, t: Json) => {
+  if (!allowedSpace(c, t?.space?.id)) return false;
+  if (t?.confidential === true) return false;
+  if (t?.pipe && t.pipe.kind === undefined && t.confidential === undefined) return false;
+  return !isConfidential({ pipe_kind: t?.pipe?.kind ?? null, task_type: t?.taskType ?? null });
+};
 
 /** What an agent needs of a task in a list. */
 const brief = (t: Json) => ({
@@ -163,7 +171,10 @@ function buildServer(app: FastifyInstance, c: Caller) {
     { title: "Get a pipe", description: "A pipe (board), its stages and its tasks.", inputSchema: z.object({ pipeId: id }), annotations: read },
     run(async ({ pipeId }) => {
       const p = await ownPipe(app, c, pipeId);
-      return { id: p.id, name: p.name, kind: p.kind, space: { id: p.space.id, name: p.space.name }, stages: p.stages, ...filtered(c, p.tasks) };
+      return {
+        id: p.id, name: p.name, kind: p.kind, space: { id: p.space.id, name: p.space.name }, stages: p.stages,
+        ...filtered(c, p.tasks), notice: NOTICE,
+      };
     })
   );
 
@@ -328,8 +339,13 @@ export async function mcpRoutes(app: FastifyInstance) {
       return unauthorized(reply, "This token is invalid, expired or revoked");
     }
     const t = req.apiToken;
-    if (!t || t.kind !== "agent" || !req.user) return unauthorized(reply, "An agent token is needed (Settings › Access tokens)");
+    if (!t || t.kind !== "agent" || !req.user) {
+      await enforceLimit(LIMITS.api, `anonymous:${req.ip}`);
+      return unauthorized(reply, "An agent token is needed (Settings › Access tokens)");
+    }
     await enforceLimit(LIMITS.api, t.id);
+    // One tool call per request, so that each one counts in the rate limit (JSON-RPC batches are refused).
+    if (Array.isArray(req.body)) return reply.code(400).send({ error: "Batches are not supported" });
 
     const caller: Caller = {
       token: String(req.headers.authorization).replace(/^Bearer\s+/i, ""),
@@ -341,7 +357,8 @@ export async function mcpRoutes(app: FastifyInstance) {
 
     const headers = new Headers();
     for (const [k, v] of Object.entries(req.headers)) {
-      if (v === undefined) continue;
+      // The body is serialized again below: its length and encoding headers would not match it.
+      if (v === undefined || k === "content-length" || k === "transfer-encoding" || k === "host" || k === "connection") continue;
       for (const x of Array.isArray(v) ? v : [v]) headers.append(k, String(x));
     }
     const request = new Request(`${config.appUrl}/mcp`, {

@@ -73,6 +73,14 @@ describe("AI agents", () => {
     expect(calls.find((c) => c.method === "POST")!.body).toMatchObject({ scopes: ["tasks:write", "comments:write"], spaceIds: ["team1"] });
   });
 
+  it("may never expire", async () => {
+    render(AgentsSection, {});
+    await userEvent.type(screen.getByLabelText("Agent name"), "Claude");
+    await userEvent.selectOptions(screen.getByLabelText("Valid for"), "Never expires");
+    await userEvent.click(screen.getByRole("button", { name: "Connect an agent" }));
+    expect(calls.find((c) => c.method === "POST")!.body).toMatchObject({ days: null });
+  });
+
   it("are disconnected after confirming", async () => {
     render(AgentsSection, {});
     await userEvent.click(await screen.findByRole("button", { name: "Disconnect" }));

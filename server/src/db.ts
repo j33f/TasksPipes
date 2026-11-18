@@ -556,6 +556,8 @@ CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id);
 ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'personal' CHECK (kind IN ('personal', 'agent'));
 ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS scopes text[];
 ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS space_ids uuid[];
+-- A token may never expire (NULL): its owner chose so; it stays revocable.
+ALTER TABLE api_tokens ALTER COLUMN expires_at DROP NOT NULL;
 -- What was done through an access token or an agent: shown as "via" it in the history (via.ts).
 ALTER TABLE task_events ADD COLUMN IF NOT EXISTS via_token_id uuid REFERENCES api_tokens(id) ON DELETE SET NULL;
 

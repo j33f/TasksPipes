@@ -14,10 +14,13 @@ the server's environment; see [HOSTING.md](HOSTING.md#configuration)).
 - **Only where you allow it.** All your spaces, or only the ones you pick: the others do not exist for it.
 - **Confidential content stays in the app.** Tasks of confidential and team-only pipes are never shown to an agent,
   even yours: what it is given goes to the company running the AI model. Lists say how many tasks were left out.
-- **What it does is visible.** It appears in the task's history as done by you, *via* the agent's name, and the
-  notifications others get are the usual ones.
-- **You can disconnect it at any time** (*Settings › AI agents › Disconnect*). An agent token lasts 90 days at most,
-  and stops working when your account is disabled or when the administrator turns AI agents off.
+- **What it does is visible.** It appears in the task's history as done by you, *via* the agent's name — a name
+  everyone who can open the task sees, so choose it accordingly — and the notifications others get are the usual ones.
+- **Sending tasks reaches beyond its spaces.** *Send tasks to other people* lets the agent send a task of its spaces
+  to anyone you could send it to yourself, and *Comment* lets it @mention people: grant them only when you need them.
+- **You can disconnect it at any time** (*Settings › AI agents › Disconnect*). An agent token lasts 7, 30 or 90 days,
+  or never expires if you choose so; it stops working when you disconnect it, when your account is disabled, or when
+  the administrator turns AI agents off.
 
 An agent reads text written by other people (titles, descriptions, comments). A malicious text could try to steer it
 (*prompt injection*). TasksPipes tells the agent that this text is data, never instructions, and keeps what an agent
