@@ -22,6 +22,7 @@ import { isEmail, sendLinkMail, sendOutlineInvite } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
 import { inboxRoutes } from "./inbox.js";
 import { viaToken } from "./via.js";
+import { cleanTemplates, receive } from "./incoming.js";
 import { calendarUrl } from "./calendar.js";
 import { adminRoutes, requestIsAdmin } from "./admin.js";
 import { accountRoutes } from "./account.js";
@@ -555,6 +556,86 @@ const presentDoc = (d: OutlineDocument, instance: string) => ({
 
 // ---------------------------------------------------------------------------
 // Routes (mounted under /api, all require a session)
+
+/**
+ * Creates a task, as `uid`, from what POST /tasks takes (also used by incoming webhooks, routes.ts gitWebhooks):
+ * straight into a pipe (pipeId), or sent to a space's incoming (spaceId). Every check of the API applies. Its id.
+ */
+export async function createTask(uid: string, byName: string, b: Record<string, any>): Promise<string> {
+  const title = text(b.title, "Title", { required: true, max: 300 });
+  const description = text(b.description, "Description");
+  const dueDate = dateOrNull(b.dueDate);
+  const doc = docOrNull(b.outlineDoc);
+  const comment = text(b.comment, "Comment") || null;
+  const type = taskType(b.taskType);
+  const { values } = cleanFields(type, b.fields ?? {});
+  const priority = cleanPriority(b.priority);
+  const estimate = cleanEstimate(b.estimateMinutes);
+  if (b.items !== undefined && !Array.isArray(b.items)) throw bad("Invalid sub-tasks");
+  const items = ((b.items ?? []) as unknown[])
+    .map((x) => (typeof x === "object" && x ? x : { text: x }) as { text?: unknown; done?: unknown })
+    .map((x) => ({ text: text(x.text, "Sub-task", { max: 500 }), done: x.done === true }))
+    .filter((x) => x.text)
+    .slice(0, MAX_ITEMS);
+  let st = status(b.status);
+  let stage: string | null = null;
+
+  let spaceId: string;
+  let pipeId: string | null = null;
+  let senderId: string | null = null;
+  if (b.pipeId) {
+    // Creating straight into a pipe: own pipe, or someone else's open pipe.
+    const { p } = await loadPipeFor(b.pipeId, uid);
+    if (p.archived_at) throw bad("This pipe is archived");
+    spaceId = p.space_id;
+    pipeId = p.id;
+    const c = resolveStage(p.kind, b.stage, b.status === undefined ? null : st);
+    st = c.status;
+    stage = c.id;
+    assertTaskTypeUsable(type, uid, p.kind);
+  } else {
+    assertTaskTypeUsable(type, uid, null);
+    // Otherwise the task is sent to a space's incoming bucket.
+    spaceId = uuid(b.spaceId, "Space");
+    if (!(await spaceVisible(spaceId, uid))) throw notFound("Space not found");
+    await assertReachable(spaceId);
+    if (!(await incomingTaskTypes(spaceId, uid)).has(type.id)) throw bad("This task type fits none of the recipient's pipes");
+    senderId = uid;
+  }
+  const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Owner")));
+  // Labels of the space, put by those who edit its tasks: in a pipe one adds to, or in an incoming of one's own.
+  const labelIds = b.labelIds === undefined ? [] : await cleanLabelIds(b.labelIds, spaceId);
+  if (labelIds.length && !pipeId && !(await memberRole(spaceId, uid))) throw forbidden();
+
+  const id = await tx(async (client) => {
+    const position = await nextPosition(client, spaceId, pipeId, stage);
+    const row = await one(
+      `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date,
+                          outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields, priority,
+                          estimate_minutes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18) RETURNING id`,
+      [title, description, spaceId, pipeId, st, stage, position, assigneeId, dueDate,
+       doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority, estimate],
+      client
+    ).then((r) => getTaskRow(r!.id, client));
+    if (labelIds.length) await setTaskLabels(client, row!.id, labelIds);
+    for (const [i, item] of items.entries()) {
+      await client.query(
+        `INSERT INTO task_items (task_id, text, done, position, done_by, done_at)
+         VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN $5::uuid END, CASE WHEN $3 THEN now() END)`,
+        [row!.id, item.text, item.done, i + 1, uid]
+      );
+    }
+    const mentioned = mentionedIds(description);
+    await recordEvent(client, row!.id, uid, pipeId ? "created" : "sent", null, snapshot(row!), comment, mentioned.length ? { mentioned } : null);
+    return row!.id as string;
+  });
+  if (!pipeId) {
+    const row = await getTaskRow(id);
+    notifySpace(spaceId, { type: "task.sent", task: { id, number: row!.number, title }, by: byName }, uid);
+  }
+  return id;
+}
 
 export async function apiRoutes(app: FastifyInstance) {
   app.addHook("preHandler", async (req) => {
@@ -1588,83 +1669,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   // ----- Tasks --------------------------------------------------------------
 
-  app.post("/tasks", async (req: Req) => {
-    const uid = me(req);
-    const b = req.body || {};
-    const title = text(b.title, "Title", { required: true, max: 300 });
-    const description = text(b.description, "Description");
-    const dueDate = dateOrNull(b.dueDate);
-    const doc = docOrNull(b.outlineDoc);
-    const comment = text(b.comment, "Comment") || null;
-    const type = taskType(b.taskType);
-    const { values } = cleanFields(type, b.fields ?? {});
-    const priority = cleanPriority(b.priority);
-    const estimate = cleanEstimate(b.estimateMinutes);
-    if (b.items !== undefined && !Array.isArray(b.items)) throw bad("Invalid sub-tasks");
-    const items = ((b.items ?? []) as unknown[])
-      .map((x) => (typeof x === "object" && x ? x : { text: x }) as { text?: unknown; done?: unknown })
-      .map((x) => ({ text: text(x.text, "Sub-task", { max: 500 }), done: x.done === true }))
-      .filter((x) => x.text)
-      .slice(0, MAX_ITEMS);
-    let st = status(b.status);
-    let stage: string | null = null;
-
-    let spaceId: string;
-    let pipeId: string | null = null;
-    let senderId: string | null = null;
-    if (b.pipeId) {
-      // Creating straight into a pipe: own pipe, or someone else's open pipe.
-      const { p } = await loadPipeFor(b.pipeId, uid);
-      if (p.archived_at) throw bad("This pipe is archived");
-      spaceId = p.space_id;
-      pipeId = p.id;
-      const c = resolveStage(p.kind, b.stage, b.status === undefined ? null : st);
-      st = c.status;
-      stage = c.id;
-      assertTaskTypeUsable(type, uid, p.kind);
-    } else {
-      assertTaskTypeUsable(type, uid, null);
-      // Otherwise the task is sent to a space's incoming bucket.
-      spaceId = uuid(b.spaceId, "Space");
-      if (!(await spaceVisible(spaceId, uid))) throw notFound("Space not found");
-      await assertReachable(spaceId);
-      if (!(await incomingTaskTypes(spaceId, uid)).has(type.id)) throw bad("This task type fits none of the recipient's pipes");
-      senderId = uid;
-    }
-    const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Owner")));
-    // Labels of the space, put by those who edit its tasks: in a pipe one adds to, or in an incoming of one's own.
-    const labelIds = b.labelIds === undefined ? [] : await cleanLabelIds(b.labelIds, spaceId);
-    if (labelIds.length && !pipeId && !(await memberRole(spaceId, uid))) throw forbidden();
-
-    const id = await tx(async (client) => {
-      const position = await nextPosition(client, spaceId, pipeId, stage);
-      const row = await one(
-        `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date,
-                            outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields, priority,
-                            estimate_minutes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18) RETURNING id`,
-        [title, description, spaceId, pipeId, st, stage, position, assigneeId, dueDate,
-         doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority, estimate],
-        client
-      ).then((r) => getTaskRow(r!.id, client));
-      if (labelIds.length) await setTaskLabels(client, row!.id, labelIds);
-      for (const [i, item] of items.entries()) {
-        await client.query(
-          `INSERT INTO task_items (task_id, text, done, position, done_by, done_at)
-           VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN $5::uuid END, CASE WHEN $3 THEN now() END)`,
-          [row!.id, item.text, item.done, i + 1, uid]
-        );
-      }
-      const mentioned = mentionedIds(description);
-      await recordEvent(client, row!.id, uid, pipeId ? "created" : "sent", null, snapshot(row!), comment, mentioned.length ? { mentioned } : null);
-      return row!.id as string;
-    });
-    if (!pipeId) {
-      const row = await getTaskRow(id);
-      notifySpace(spaceId, { type: "task.sent", task: { id, number: row!.number, title }, by: req.user!.name }, uid);
-    }
-    return { id };
-  });
+  app.post("/tasks", async (req: Req) => ({ id: await createTask(me(req), req.user!.name, req.body || {}) }));
 
   app.get("/tasks/:id", async (req: Req) => {
     const { t, perms } = await loadTaskFor(req.params.id, me(req));
@@ -1693,7 +1698,7 @@ export async function apiRoutes(app: FastifyInstance) {
       items,
       key: `${TASK_KEY_PREFIX}-${t.number}`,
       timing: stepTimes(events),
-      gitConnected: Boolean(t.pipe_id && (await one(`SELECT 1 FROM pipe_integrations WHERE pipe_id = $1 LIMIT 1`, [t.pipe_id]))),
+      gitConnected: Boolean(t.pipe_id && (await one(`SELECT 1 FROM pipe_integrations WHERE pipe_id = $1 AND provider IN ('github', 'gitlab') LIMIT 1`, [t.pipe_id]))),
       links: links.rows.map((l) => ({
         provider: l.provider, kind: l.kind, url: l.url, number: l.number, title: l.title, state: l.state,
         repo: l.repo, author: l.author, updatedAt: l.updated_at,
@@ -1996,6 +2001,7 @@ export async function apiRoutes(app: FastifyInstance) {
     provider: r.provider,
     url: `${config.appUrl}/hooks/${r.provider}/${r.token}`,
     secret: decrypt(r.secret),
+    templates: r.provider === "incoming" ? r.settings?.templates ?? {} : undefined,
     createdAt: r.created_at,
     lastEventAt: r.last_event_at,
   });
@@ -2017,14 +2023,28 @@ export async function apiRoutes(app: FastifyInstance) {
   app.post("/pipes/:id/integrations", async (req: Req) => {
     const p = await pipeForIntegrations(req);
     const provider = req.body?.provider;
-    if (!PROVIDERS.includes(provider)) throw bad("Unknown provider");
+    if (!PROVIDERS.includes(provider) && provider !== "incoming") throw bad("Unknown provider");
+    const settings = provider === "incoming" ? { templates: cleanTemplates(req.body?.templates) } : null;
     const row = await one(
-      `INSERT INTO pipe_integrations (pipe_id, provider, token, secret, created_by) VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO pipe_integrations (pipe_id, provider, token, secret, created_by, settings) VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (pipe_id, provider) DO UPDATE SET secret = EXCLUDED.secret
        RETURNING *`,
-      [p.id, provider, crypto.randomBytes(18).toString("base64url"), encrypt(crypto.randomBytes(24).toString("base64url")), me(req)]
+      [p.id, provider, crypto.randomBytes(18).toString("base64url"), encrypt(crypto.randomBytes(24).toString("base64url")), me(req), settings]
     );
     return integrationOut(row!);
+  });
+
+  // The templates of an incoming webhook: how the other application's body becomes a task. Whoever changes them
+  // becomes the author of the tasks it makes.
+  app.patch("/pipes/:id/integrations/incoming", async (req: Req) => {
+    const p = await pipeForIntegrations(req);
+    const row = await one(
+      `UPDATE pipe_integrations SET settings = jsonb_build_object('templates', $3::jsonb), created_by = $2
+       WHERE pipe_id = $1 AND provider = 'incoming' RETURNING *`,
+      [p.id, me(req), JSON.stringify(cleanTemplates(req.body?.templates))]
+    );
+    if (!row) throw notFound("Not found");
+    return integrationOut(row);
   });
 
   app.delete("/pipes/:id/integrations/:provider", async (req: Req) => {
@@ -2306,10 +2326,18 @@ export async function gitWebhooks(app: FastifyInstance) {
   app.addContentTypeParser("*", { parseAs: "buffer", bodyLimit: 10 * 1024 * 1024 }, (_req, body, done) => done(null, body));
 
   app.post<{ Params: { provider: string; token: string } }>("/hooks/:provider/:token", rateLimited(LIMITS.webhook), async (req, reply) => {
-    const provider = req.params.provider as Provider;
-    if (!PROVIDERS.includes(provider)) return reply.code(404).send({ error: "Not found" });
-    const integ = await one(`SELECT id, pipe_id, secret FROM pipe_integrations WHERE provider = $1 AND token = $2`, [provider, req.params.token]);
+    const provider = req.params.provider as Provider | "incoming";
+    if (!PROVIDERS.includes(provider as Provider) && provider !== "incoming") return reply.code(404).send({ error: "Not found" });
+    const integ = await one(
+      `SELECT id, pipe_id, secret, settings, created_by FROM pipe_integrations WHERE provider = $1 AND token = $2`,
+      [provider, req.params.token]
+    );
     if (!integ) return reply.code(404).send({ error: "Not found" });
+    if (provider === "incoming") {
+      const r = await receive(integ as Parameters<typeof receive>[0], req.body as Buffer, req.headers);
+      await query(`UPDATE pipe_integrations SET last_event_at = now() WHERE id = $1`, [integ.id]);
+      return reply.code(r.status).send(r.body);
+    }
     const body = req.body as Buffer;
     const secret = decrypt(integ.secret)!;
     const ok =

@@ -388,7 +388,10 @@ export interface TaskLink {
 }
 
 export interface GitIntegration {
-  provider: "github" | "gitlab";
+  /** "incoming": another application creates tasks in the pipe (IncomingWebhook). */
+  provider: "github" | "gitlab" | "incoming";
+  /** Incoming webhook: how the other application's body becomes a task. */
+  templates?: { title?: string; description?: string; dueDate?: string; externalId?: string };
   /** Webhook URL to give to GitHub / GitLab, and its secret. */
   url: string;
   secret: string;
