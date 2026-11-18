@@ -30,6 +30,8 @@ COPY --from=server /server/package.json ./
 COPY --from=web /web/dist ./web
 # Read by the server at start (i18n.ts).
 COPY locales/ ./locales/
+# The user guides, read by AI agents over MCP (docs.ts): those of this very version.
+COPY docs/FEATURES.md docs/MCP.md docs/MODELS.md ./docs/
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \

@@ -123,6 +123,27 @@ describe("a read-only agent", () => {
     token = (await agentToken([])).body.token;
   });
 
+  it("can learn how TasksPipes works from the documentation of this version", async () => {
+    const contents = await tool(token, "docs_contents");
+    const features = contents.find((d: { doc: string }) => d.doc === "features");
+    expect(features.sections).toEqual(expect.arrayContaining(["Incoming buckets", "Tasks"]));
+    const exact = await tool(token, "read_docs", { topic: "incoming buckets" });
+    expect(exact).toHaveLength(1);
+    expect(exact[0]).toMatchObject({ doc: "features", section: "Incoming buckets" });
+    expect(exact[0].text).toMatch(/^## Incoming buckets/);
+    const searched = await tool(token, "read_docs", { topic: "recurring tasks every month" });
+    expect(searched.length).toBeGreaterThan(0);
+    expect(searched[0]).toMatchObject({ doc: "features", section: "Tasks" });
+    expect(searched[0].text).toMatch(/recurring tasks/);
+    expect((await tool(token, "read_docs", { topic: "zzqqxx" })).error).toMatch(/Nothing in the documentation/);
+  });
+
+  it("is told what TasksPipes is when it connects", async () => {
+    const init = await rpc(token, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } });
+    expect(init.body.result.instructions).toMatch(/incoming bucket/);
+    expect(init.body.result.instructions).toMatch(/docs_contents/);
+  });
+
   it("is offered the reading tools only", async () => {
     const names = (await rpc(token, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
     expect(names).toEqual(expect.arrayContaining(["whoami", "search_tasks", "get_task", "get_pipe"]));
