@@ -99,8 +99,8 @@ Please see the [hosting documentation](docs/HOSTING.md) for the configuration in
 (OAuth or API keys), e-mail accounts and invitations, language and security notes, and
 [backups, restore and moving to another server](docs/HOSTING.md#backups-restore-and-moving) — `taskspipes-backup`,
 `taskspipes-restore`, and `taskspipes-transfer user@new-server` to move an instance in one command.
-TasksPipes can also run as [several instances](docs/HOSTING.md#several-instances) on one database, behind a load
-balancer.
+TasksPipes can also run [without Docker](docs/MANUAL-HOSTING.md), or as [several instances](docs/HOSTING.md#several-instances)
+on one database behind a load balancer, for instance [on Kubernetes](docs/KUBERNETES.md).
 
 # Contributing
 

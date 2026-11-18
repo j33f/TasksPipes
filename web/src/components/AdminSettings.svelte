@@ -58,6 +58,8 @@
       const saved = toDraft(r.settings.filter((s) => s.section === section));
       draft = { ...draft, ...saved };
       app.toast(t("Settings saved"));
+      // What the instance offers may have changed (AI agents, e-mail…): this page shows it at once.
+      void app.refreshMe();
     } catch (err) {
       error = errorMessage(err);
     } finally {

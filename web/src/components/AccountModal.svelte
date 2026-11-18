@@ -14,6 +14,8 @@
   import { LOCALES, prefs, t, type Locale, type Theme } from "../lib/i18n.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
+  // What the instance offers may have changed since the page was opened (AI agents turned on by an administrator…).
+  void app.refreshMe();
 
   const user = $derived(app.me!.user);
   let name = $state(app.me?.user.name ?? "");

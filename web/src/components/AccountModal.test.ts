@@ -35,6 +35,18 @@ afterEach(() => {
   invitations = [];
 });
 
+describe("what the instance offers", () => {
+  it("is read again on opening, so that AI agents just turned on show without reloading", async () => {
+    app.me = me(false);
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const answer = url.endsWith("/api/me") ? { ...me(false), features: { invitations: true, notifications: false, mcp: true } } : [];
+      return new Response(JSON.stringify(answer), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    render(AccountModal, { onclose: () => {} });
+    expect(await screen.findByText("AI agents (MCP)")).toBeTruthy();
+  });
+});
+
 describe("e-mail notification settings", () => {
   it("are hidden when the instance has no e-mail", () => {
     app.me = me(false);

@@ -61,6 +61,7 @@ sends you back to is what tells it apart (applications that registered on the fl
 | Tool | What it does | Needs |
 | --- | --- | --- |
 | `whoami` | Who the agent acts for, and what it may do | — |
+| `docs_contents`, `read_docs` | The documentation of the version running (how TasksPipes works), by section or by a few words | — |
 | `list_spaces`, `get_space` | Your spaces and their pipes | — |
 | `get_pipe` | A pipe, its stages and tasks | — |
 | `my_tasks` | Your tasks still to do | — |

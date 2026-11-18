@@ -5,6 +5,9 @@
 TasksPipes is a single Node.js container serving both the API and the web app, with a PostgreSQL database. The
 `docker-compose.yml` at the root of the repository runs both.
 
+Other ways to host it: [without Docker](MANUAL-HOSTING.md) (Node.js, PostgreSQL, systemd and your reverse proxy), or
+[on Kubernetes](KUBERNETES.md) (several instances, Kustomize manifests in `deploy/kubernetes/`).
+
 ## Install in one command
 
 On a Linux server (Debian, Ubuntu, Raspberry Pi OS, Fedora, RHEL, CentOS, Rocky, AlmaLinux; amd64 or arm64):
@@ -166,7 +169,8 @@ with nothing to turn on:
 
 Give every instance the same `APP_SECRET`, and the same `REDIS_URL` so that rate limits are counted once for all. Health checks:
 `/livez` answers as long as the process runs (liveness), `/healthz` also reaches the database (readiness).
-[One-click updates](#one-click-updates) only apply to the Docker Compose setup.
+[One-click updates](#one-click-updates) only apply to the Docker Compose setup. See [KUBERNETES.md](KUBERNETES.md) for
+manifests.
 
 ## Signing in with Outline
 
