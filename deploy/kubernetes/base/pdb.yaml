@@ -1,0 +1,9 @@
+# One instance at least stays up during node drains and upgrades.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: taskspipes
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {}
