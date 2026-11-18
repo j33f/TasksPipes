@@ -59,6 +59,10 @@ follows Outline's look and feel.
   previewed, checked line by line) or a Trello board.
 - **API and webhooks** — personal access tokens for a documented API (`/api/v1`, OpenAPI and Swagger UI), and
   signed webhooks sending a pipe's task events to your tools.
+- **AI agents (MCP)** — let an AI assistant (Claude, Cursor…) work on your tasks over MCP, with your rights and only
+  what you allow: reading, and if you wish creating and changing tasks, commenting, logging time, sending tasks, in
+  all your spaces or chosen ones. It never sees confidential pipes and deletes nothing; what it does shows in the
+  history *via* it. Off until an administrator turns it on; see [docs/MCP.md](docs/MCP.md).
 - **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
   keeps a “Deleted account”), and administrators of the instance can disable accounts.
 - **Sub-tasks, history, live updates**, English, French, Spanish and Portuguese (Brazil and Portugal; a language is one file), light and dark themes.
@@ -95,6 +99,8 @@ Please see the [hosting documentation](docs/HOSTING.md) for the configuration in
 (OAuth or API keys), e-mail accounts and invitations, language and security notes, and
 [backups, restore and moving to another server](docs/HOSTING.md#backups-restore-and-moving) — `taskspipes-backup`,
 `taskspipes-restore`, and `taskspipes-transfer user@new-server` to move an instance in one command.
+TasksPipes can also run as [several instances](docs/HOSTING.md#several-instances) on one database, behind a load
+balancer.
 
 # Contributing
 

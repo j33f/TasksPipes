@@ -8,7 +8,7 @@ let tokens: AccessToken[];
 let calls: { method: string; url: string; body: unknown }[];
 beforeEach(() => {
   calls = [];
-  tokens = [{ id: "t1", name: "CI", prefix: "tp_abcdefg", scope: "read", expiresAt: "2027-01-01T00:00:00Z", lastUsedAt: null, createdAt: "2026-10-01T00:00:00Z", expired: false }];
+  tokens = [{ id: "t1", name: "CI", prefix: "tp_abcdefg", scope: "read", kind: "personal", scopes: [], spaceIds: null, expiresAt: "2027-01-01T00:00:00Z", lastUsedAt: null, createdAt: "2026-10-01T00:00:00Z", expired: false }];
   vi.stubGlobal("confirm", () => true);
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";

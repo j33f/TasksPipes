@@ -13,7 +13,8 @@
   let created = $state<string | null>(null);
   let error = $state("");
 
-  const load = () => api.get<AccessToken[]>("/me/tokens").then((r) => (tokens = r)).catch((err) => (error = errorMessage(err)));
+  // Agent tokens have their own section (AgentsSection).
+  const load = () => api.get<AccessToken[]>("/me/tokens").then((r) => (tokens = r.filter((x) => x.kind !== "agent"))).catch((err) => (error = errorMessage(err)));
   load();
 
   async function create(e: SubmitEvent) {
