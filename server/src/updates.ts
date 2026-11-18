@@ -3,7 +3,7 @@
  * in Administration › Settings, or by UPDATE_CHECK=false); when a newer one comes out, the instance's administrators
  * are told once, by e-mail and on their devices, and the About page shows it to everyone.
  */
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { config } from "./config.js";
 import { one, query } from "./db.js";
 import { isInstanceAdmin, requestIsAdmin } from "./admin.js";
@@ -12,6 +12,7 @@ import { tr, type Locale } from "./i18n.js";
 import { escape, mailLayout, sendHtmlMail, type MailTheme } from "./mail.js";
 import { pushTo } from "./push.js";
 import { setting } from "./settings-store.js";
+import { perPerson, rateLimited } from "./rate-limit.js";
 
 export const REPOSITORY = "j33f/TasksPipes";
 
@@ -54,11 +55,21 @@ async function fetchLatest(): Promise<Release | null> {
 type Send = (lang: Locale, to: string, subject: string, html: string) => Promise<unknown>;
 
 /** What was last learnt (kept in memory: checked again at start). The fetcher can be replaced in tests. */
-export const updateState: { latest: Release | null; checkedAt: Date | null; fetch: () => Promise<Release | null> } = {
+export const updateState: {
+  latest: Release | null;
+  checkedAt: Date | null;
+  /** Why the last check failed (GitHub unreachable, an error answer…), shown to administrators; null when it worked. */
+  error: string | null;
+  fetch: () => Promise<Release | null>;
+} = {
   latest: null,
   checkedAt: null,
+  error: null,
   fetch: fetchLatest,
 };
+
+/** Opening About checks again, but not more than once a minute for the whole instance (GitHub limits its API). */
+const FRESH_MS = 60_000;
 
 export const updateCheckOn = () => setting<boolean>("updates.check");
 
@@ -97,9 +108,18 @@ export async function checkForUpdate(send: Send = sendHtmlMail): Promise<string 
     updateState.latest = null;
     return null;
   }
-  const latest = await updateState.fetch();
+  let latest: Release | null;
+  try {
+    latest = await updateState.fetch();
+  } catch (err) {
+    // Kept for administrators, who otherwise would only learn it from the logs.
+    updateState.checkedAt = new Date();
+    updateState.error = (err as Error).message || String(err);
+    throw err;
+  }
   updateState.latest = latest;
   updateState.checkedAt = new Date();
+  updateState.error = null;
   if (!latest || !newer(latest.version, config.version)) return null;
   const first = await one(`INSERT INTO update_notices (version) VALUES ($1) ON CONFLICT DO NOTHING RETURNING version`, [latest.version]);
   if (!first) return null;
@@ -138,17 +158,34 @@ async function updater(method: "GET" | "POST", path: string, body?: object) {
 }
 
 export async function updateRoutes(app: FastifyInstance) {
-  // The version running and, when the check is on, the latest one published; whether I may update in one click.
-  app.get("/version", async (req) => {
-    const latest = updateCheckOn() ? updateState.latest : null;
+  /**
+   * The version running and, when the check is on, the latest one published; whether I may update in one click.
+   * Administrators also learn when it was last checked, and why it failed if it did.
+   */
+  const versionInfo = async (req: FastifyRequest) => {
+    const on = updateCheckOn();
+    const latest = on ? updateState.latest : null;
     const updateAvailable = Boolean(latest && newer(latest.version, config.version));
+    const admin = await requestIsAdmin(req);
     return {
       current: config.version,
       latest,
       updateAvailable,
       checkedAt: updateState.checkedAt,
-      canUpdate: updateAvailable && updaterConfigured() && (await requestIsAdmin(req)),
+      canUpdate: updateAvailable && updaterConfigured() && admin,
+      ...(admin ? { checkOn: on, error: on ? updateState.error : null } : {}),
     };
+  };
+  app.get("/version", async (req) => versionInfo(req));
+
+  // Opening About asks for a fresh check: done at once unless one was made in the last minute.
+  app.post("/version/check", rateLimited({ name: "version-check", max: 30, timeWindow: 10 * 60_000, keyGenerator: perPerson }), async (req) => {
+    if (!req.user) throw forbidden();
+    const stale = !updateState.checkedAt || Date.now() - updateState.checkedAt.getTime() > FRESH_MS;
+    if (updateCheckOn() && stale) {
+      await checkForUpdate().catch((err) => req.log.warn({ err }, "Checking for a new version failed"));
+    }
+    return versionInfo(req);
   });
 
   // Starts the update to the latest release (administrators; that version only, never one chosen freely).

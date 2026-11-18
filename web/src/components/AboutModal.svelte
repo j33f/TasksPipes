@@ -4,23 +4,38 @@
   import { app } from "../lib/app.svelte";
   import Modal from "./Modal.svelte";
   import Icon from "./Icon.svelte";
+  import { relativeTime } from "../lib/constants";
 
   let { onclose }: { onclose: () => void } = $props();
 
   const REPO = "https://github.com/j33f/TasksPipes";
   const SITE = "https://taskspipes.com";
 
-  // A newer version published (the server checks every hour, unless an administrator turned it off).
+  // A newer version published. The server checks every hour (unless an administrator turned it off), and again when
+  // About is opened (at most once a minute for the whole instance).
+  interface VersionInfo {
+    latest: { version: string; url: string } | null;
+    updateAvailable: boolean;
+    canUpdate?: boolean;
+    checkedAt: string | null;
+    /** Administrators only: whether checking is on, and why the last check failed. */
+    checkOn?: boolean;
+    error?: string | null;
+  }
   let latest = $state<{ version: string; url: string } | null>(null);
   /** An administrator, with the updater set up: one click installs it. */
   let canUpdate = $state(false);
+  let checking = $state(true);
+  let info = $state<VersionInfo | null>(null);
   $effect(() => {
-    api.get<{ latest: { version: string; url: string } | null; updateAvailable: boolean; canUpdate?: boolean }>("/version")
+    api.post<VersionInfo>("/version/check")
       .then((v) => {
+        info = v;
         latest = v.updateAvailable ? v.latest : null;
         canUpdate = Boolean(v.canUpdate);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => (checking = false));
   });
 
   // The update under way: asked to the updater, then followed until the new version answers.
@@ -63,6 +78,19 @@
     <svg width="48" height="48" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><rect x="7" y="8" width="5" height="16" rx="2" fill="var(--modal-background)"/><rect x="14" y="8" width="5" height="11" rx="2" fill="var(--modal-background)" opacity=".75"/><rect x="21" y="8" width="5" height="7" rx="2" fill="var(--modal-background)" opacity=".5"/></svg>
     <h2>TasksPipes</h2>
     <div class="muted">{t("Version {version}", { version: __APP_VERSION__ })}</div>
+    {#if app.me?.admin}
+      <div class="small muted check" aria-live="polite">
+        {#if checking}
+          {t("Looking for a new version…")}
+        {:else if info?.checkOn === false}
+          {t("Checking for new versions is turned off (Administration › Settings).")}
+        {:else if info?.error}
+          <span class="error-text">{t("Could not check for a new version: {error}", { error: info.error })}</span>
+        {:else if info?.checkedAt && !latest}
+          {t("Up to date · checked {when}", { when: relativeTime(info.checkedAt) })}
+        {/if}
+      </div>
+    {/if}
     {#if latest}
       <div class="callout update" role="status">
         <Icon name="bolt" size={18} />
@@ -108,6 +136,7 @@
 <style>
   .about { text-align: center; padding: 8px 8px 0; }
   .about svg { color: var(--text); }
+  .check { margin-top: 4px; min-height: 1.4em; }
   h2 { font-size: 22px; margin: 10px 0 2px; }
   p { margin: 14px 0 0; line-height: 1.5; }
   .update { margin: 16px 0 0; text-align: left; align-items: center; box-shadow: inset 0 0 0 1px var(--accent); }
