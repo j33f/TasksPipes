@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 import { signIn, startApp, stopApp, type Agent } from "./helpers.js";
 import { closeUserConnections, isOnline } from "../../src/realtime.js";
-import { migrate } from "../../src/db.js";
+import { migrate, pool } from "../../src/db.js";
 
 let other: ChildProcess, otherBase: string, alice: Agent, bob: Agent, bobId: string;
 
@@ -94,6 +94,20 @@ describe("several instances on one database", () => {
     b.ws.close();
     await b.closed;
     await eventually(async () => !(await isOnline(bobId)));
+  });
+
+  it("ignore what else is sent on their channel, without stopping", async () => {
+    for (const junk of ["null", "not json", "42", '{"kind":"user","userId":{},"message":[]}', '{"kind":"space","spaceId":1}'])
+      await pool.query(`SELECT pg_notify('taskspipes_live', $1)`, [junk]);
+    // The other instance still serves its pages, and still hears this one.
+    const b = connectToOther(bob.cookie);
+    await b.next("hello");
+    const bobSpace = (await bob.get("/api/me")).body.personalSpaceId;
+    await alice.post("/api/tasks", { title: "After the junk", spaceId: bobSpace });
+    expect((await b.next("task.sent")).task.title).toBe("After the junk");
+    b.ws.close();
+    await b.closed;
+    expect(other.exitCode).toBeNull();
   });
 
   it("close the pages of someone whose access ended, on every instance", async () => {

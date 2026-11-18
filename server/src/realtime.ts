@@ -92,6 +92,7 @@ export async function realtime(app: FastifyInstance) {
       }
     }
     refreshPresence();
+    void closeDisabled();
   }, 30_000);
   timer.unref();
 
@@ -139,18 +140,24 @@ function publish(m: Shared) {
   query(`SELECT pg_notify($1, $2)`, [CHANNEL, payload]).catch(() => {});
 }
 
-/** An event from another instance, for the pages connected here. */
+const isText = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+
+/**
+ * An event from another instance, for the pages connected here. Anything else that can NOTIFY on the database could
+ * send one too: whatever does not have the expected shape is ignored, and nothing here may throw (it would stop the
+ * process from the LISTEN connection's handler).
+ */
 function receive(payload: string) {
-  let m: Shared & { from?: string };
   try {
-    m = JSON.parse(payload);
+    const m = JSON.parse(payload) as { from?: unknown; kind?: unknown; message?: unknown; userId?: unknown; spaceId?: unknown; except?: unknown } | null;
+    if (!m || typeof m !== "object" || m.from === INSTANCE) return; // already delivered here
+    if (m.kind === "user" && isText(m.userId) && isText(m.message)) sendToUser(m.userId, m.message);
+    else if (m.kind === "space" && isText(m.spaceId) && isText(m.message)) {
+      void sendToSpace(m.spaceId, m.message, isText(m.except) ? m.except : undefined);
+    } else if (m.kind === "close" && isText(m.userId)) closeLocal(m.userId);
   } catch {
-    return;
+    /* not an event of ours */
   }
-  if (m.from === INSTANCE) return; // already delivered here
-  if (m.kind === "user") sendToUser(m.userId, m.message);
-  else if (m.kind === "space") void sendToSpace(m.spaceId, m.message, m.except);
-  else if (m.kind === "close") closeLocal(m.userId);
 }
 
 /** LISTENs on its own connection, and keeps trying when it is lost. */
@@ -165,7 +172,9 @@ function listen(log: FastifyBaseLogger) {
   };
   const connect = async () => {
     const c = new pg.Client({ connectionString: config.listenDatabaseUrl });
-    c.on("notification", (n) => n.channel === CHANNEL && n.payload && receive(n.payload));
+    c.on("notification", (n) => {
+      if (n.channel === CHANNEL && n.payload) receive(n.payload);
+    });
     c.on("error", () => {}); // followed by "end"
     c.on("end", () => {
       if (client !== c) return;
@@ -214,6 +223,21 @@ function presence(state: "on" | "off", userId: string) {
   query(sql, [INSTANCE, userId]).catch(() => {});
 }
 
+/**
+ * Every 30 s: pages of accounts disabled meanwhile are closed, should the word from the instance that disabled them
+ * have been lost (LISTEN connection down, a payload too large).
+ */
+async function closeDisabled() {
+  const here = [...sockets.keys()];
+  if (!here.length) return;
+  try {
+    const { rows } = await query(`SELECT id FROM users WHERE id = ANY($1::uuid[]) AND disabled_at IS NOT NULL`, [here]);
+    for (const r of rows) closeLocal(r.id);
+  } catch {
+    /* next time */
+  }
+}
+
 /** Every 30 s: the people with a page open here are still here; anyone else recorded for this instance is not. */
 function refreshPresence() {
   if (!config.realtimeShared) return;
@@ -225,6 +249,8 @@ function refreshPresence() {
      ON CONFLICT (user_id, instance_id) DO UPDATE SET seen_at = now()`,
     [INSTANCE, here]
   ).catch(() => {});
+  // What instances that stopped without a word (a crash) left behind.
+  query(`DELETE FROM live_presence WHERE seen_at < now() - interval '1 hour'`).catch(() => {});
 }
 
 // ---- What the rest of the app calls -----------------------------------------------------------------------------
