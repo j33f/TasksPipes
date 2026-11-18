@@ -1,4 +1,6 @@
 <script lang="ts" module>
+  import { LUCIDE } from "../lib/lucide";
+
   const PATHS = {
     home: "M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z",
     inbox: "M4 13h4.5l1.5 2.5h4l1.5-2.5H20M6.5 5h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-5z",
@@ -55,8 +57,9 @@
     bell: "M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2H4.5zM10 20.5a2 2 0 0 0 4 0",
     history: "M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4M12 8v4l3 2",
   } as const;
-  export type IconName = keyof typeof PATHS;
-  export const isIconName = (v: string): v is IconName => v in PATHS;
+  /** The app's own icons (drawn here), or a Lucide icon of lib/lucide.ts (pipes and task types may use them). */
+  export type IconName = keyof typeof PATHS | (string & {});
+  export const isIconName = (v: string): v is IconName => v in PATHS || v in LUCIDE;
   /** A catalog icon name (task type…), with a fallback. */
   export const iconOf = (v: string | null | undefined, fallback: IconName = "check"): IconName => (v && isIconName(v) ? v : fallback);
 </script>
@@ -65,7 +68,16 @@
   let { name, size = 20 }: { name: IconName; size?: number } = $props();
 </script>
 
-<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0">
-  <path d={PATHS[name]} />
-</svg>
+{#if name in PATHS}
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0">
+    <path d={PATHS[name as keyof typeof PATHS]} />
+  </svg>
+{:else if LUCIDE[name]}
+  {@const Glyph = LUCIDE[name]}
+  <span class="lucide" aria-hidden="true"><Glyph {size} strokeWidth={1.8} /></span>
+{/if}
+
+<style>
+  .lucide { display: inline-flex; flex-shrink: 0; line-height: 0; }
+</style>

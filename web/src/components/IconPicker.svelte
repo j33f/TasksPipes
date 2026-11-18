@@ -1,7 +1,7 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
-  import { PALETTE, PIPE_ICONS } from "../lib/constants";
-  import Icon from "./Icon.svelte";
+  import { PALETTE } from "../lib/constants";
+  import IconChoices from "./IconChoices.svelte";
   import PipeIcon from "./PipeIcon.svelte";
   import { t } from "../lib/i18n.svelte";
 
@@ -49,12 +49,7 @@
           <input type="color" value={color ?? "#2BC2FF"} onchange={(e) => pick({ color: (e.currentTarget as HTMLInputElement).value })} />
         </label>
       </div>
-      <div class="icons">
-        {#each PIPE_ICONS as name (name)}
-          <button type="button" class="icon-btn" class:selected={current === name} title={name} style="color:{color || 'var(--text-secondary)'}"
-            onclick={() => pick({ icon: name })}><Icon {name} size={20} /></button>
-        {/each}
-      </div>
+      <div class="choices"><IconChoices selected={current} {color} onpick={(name) => pick({ icon: name })} /></div>
       <div class="row emoji-row">
         <input class="input" placeholder={t("Or an emoji: 🎓")} bind:value={emoji} maxlength="16"
           onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); useEmoji(); } }} />
@@ -68,6 +63,7 @@
 </div>
 
 <style>
+  .choices { margin: 12px 0; }
   .icon-picker { position: relative; display: inline-flex; }
   .trigger { border: 0; background: none; padding: 4px; border-radius: 6px; display: inline-flex; color: inherit; }
   .trigger.editable { cursor: pointer; }
@@ -83,10 +79,6 @@
   .swatch.selected { box-shadow: 0 0 0 2px var(--modal-background), 0 0 0 4px var(--text); }
   .custom { position: relative; overflow: hidden; }
   .custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-  .icons { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; margin: 12px 0; }
-  .icon-btn { border: 0; background: none; padding: 6px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-  .icon-btn:hover { background: var(--list-hover); }
-  .icon-btn.selected { background: var(--background-tertiary); }
   .emoji-row .input { flex: 1; min-height: 32px; font-size: 14px; }
   .reset { margin-top: 8px; width: 100%; }
 </style>
