@@ -445,7 +445,7 @@ async function sendImmediate(now: Date, send: Send): Promise<number> {
     const u = users.get(rows[0].user_id)!;
     // A mention or a release already seen live (the person is in the app) needs no e-mail.
     const live = (r: Row) => (r.kind === "mention" || r.kind === "unblocked") && u.prefs[prefKind(r.kind)] === "immediate";
-    const seen = isOnline(u.id) ? rows.filter(live) : [];
+    const seen = (await isOnline(u.id)) ? rows.filter(live) : [];
     if (seen.length) await settle(seen.map((r) => Number(r.id)), "online", true);
     const ready = rows.filter((r) => u.prefs[prefKind(r.kind)] === "immediate" && !seen.includes(r));
     if (!ready.length || now.getTime() - new Date(ready[0].created_at).getTime() < GROUP_DELAY_MS) continue;
@@ -585,7 +585,7 @@ export async function runPush(now = new Date()): Promise<number> {
   let pushed = 0;
   for (const r of rows) {
     const u = users.get(r.user_id);
-    if (!u || u.prefs[prefKind(r.kind)] !== "immediate" || isOnline(u.id)) continue;
+    if (!u || u.prefs[prefKind(r.kind)] !== "immediate" || (await isOnline(u.id))) continue;
     const t = await visibleTask(r.task_id, u.id);
     if (!t) continue;
     const masked = isConfidential(t);

@@ -55,7 +55,7 @@ Outline through its RPC-style API.
 | `reports.ts`, `time.ts` | Time per step, daily and weekly reports (computed from the history), their e-mails and scheduled sending; local times and periods. |
 | `git.ts` | GitHub / GitLab webhooks: task keys, signatures, what events mean (the routes are in `routes.ts`). |
 | `fields.ts` | Validation of task field values. |
-| `realtime.ts` | WebSocket at `/api/events`, notifying people of tasks sent to them or refused. |
+| `realtime.ts` | WebSocket at `/api/events`: live updates to the pages open, and who has one open. With several instances, events and presence are shared through PostgreSQL (`NOTIFY` on `taskspipes_live`, table `live_presence`); each instance delivers to its own pages first. |
 | `calendar.ts` | iCalendar feed at `/cal/<token>.ics`. |
 | `mail.ts`, `totp.ts` | E-mail sending (nodemailer) and TOTP codes. |
 | `i18n.ts` | Server-side translations, read from the language files of `locales/` (see [TRANSLATION.md](TRANSLATION.md)). |

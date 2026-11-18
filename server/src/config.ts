@@ -13,6 +13,16 @@ const version: string = JSON.parse(readFileSync(new URL("../package.json", impor
 export const config = {
   version,
   port: Number(process.env.PORT || 3000),
+  /** Address the server listens on: every interface by default (a container); 127.0.0.1 behind a proxy on the same machine. */
+  host: process.env.HOST || "0.0.0.0",
+  /**
+   * Several instances of the app on one database (docs/KUBERNETES.md): live updates and presence go through
+   * PostgreSQL (LISTEN/NOTIFY), so that a page open on one instance hears what happens on another. On by default,
+   * harmless with a single instance; REALTIME_SHARED=false turns it off.
+   */
+  realtimeShared: process.env.REALTIME_SHARED !== "false",
+  /** Connection used to LISTEN, when DATABASE_URL goes through a pooler that does not support it (PgBouncer in transaction mode). */
+  listenDatabaseUrl: process.env.LISTEN_DATABASE_URL || process.env.DATABASE_URL || "",
   logLevel: process.env.LOG_LEVEL || "info",
   prettyLogs: process.env.NODE_ENV !== "production",
   appUrl,
