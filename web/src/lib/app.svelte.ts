@@ -46,6 +46,20 @@ class AppState {
     }
   }
 
+  /**
+   * Reads the account again, keeping the current one if that fails: what the instance offers (features: AI agents,
+   * invitations, e-mail notifications) may have changed since the page was opened, e.g. by an administrator.
+   */
+  async refreshMe() {
+    if (!this.me) return;
+    try {
+      const me = await api.get<Me>("/me");
+      if (me && typeof me === "object" && "user" in me) this.me = me;
+    } catch {
+      /* the page goes on with what it knew */
+    }
+  }
+
   async loadShared() {
     if (!this.me) return;
     const [spaces, users, catalog, sidebar] = await Promise.all([
