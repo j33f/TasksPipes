@@ -151,7 +151,7 @@ the setting in the app. Those settings are: `SMTP_*`, `MAIL_FROM`, `OUTLINE_ENAB
 | `HOST` | Address the server listens on: `0.0.0.0` by default (all interfaces, as in a container). Set `127.0.0.1` when the server runs without Docker behind a proxy on the same machine. |
 | `REALTIME_SHARED` | `false` turns off what lets [several instances](#several-instances) share one database: live updates and "who has a page open" go through PostgreSQL (`LISTEN`/`NOTIFY`). On by default, harmless with a single instance. |
 | `LISTEN_DATABASE_URL` | Connection used to `LISTEN` for the other instances, when `DATABASE_URL` goes through a pooler that does not support it (PgBouncer in transaction mode). Default: `DATABASE_URL`. |
-| `MCP_ENABLED` | `true` turns on the MCP endpoint (`/mcp`), where AI agents act for people with an agent token: never more than their owner may, only the spaces chosen, never confidential content. Off by default; also in Administration › Settings. |
+| `MCP_ENABLED` | `true` turns on the MCP endpoint (`/mcp`), where AI agents act for people with an agent token: never more than their owner may, only the spaces chosen, never confidential content. Off by default; also in Administration › Settings. See [MCP.md](MCP.md). |
 
 ## Several instances
 

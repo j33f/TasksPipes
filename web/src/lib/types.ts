@@ -43,7 +43,7 @@ export interface Me {
   /** Administrator of the instance (ADMIN_EMAILS): the administration page is offered. */
   admin?: boolean;
   /** What this instance allows. */
-  features: { invitations: boolean; notifications: boolean; outline?: boolean };
+  features: { invitations: boolean; notifications: boolean; outline?: boolean; mcp?: boolean };
   /** E-mail notification choices, when e-mail is set up on the instance. */
   notificationPrefs?: NotificationPrefs;
 }
@@ -203,6 +203,8 @@ export interface TaskEvent {
   } | null;
   createdAt: string;
   actor: UserRef;
+  /** Done through an access token or an AI agent: its name. */
+  via?: { name: string; kind: "personal" | "agent" } | null;
   from: EventSide;
   to: EventSide;
 }
@@ -530,11 +532,18 @@ export interface ImportPreview {
 }
 
 /** A personal access token of the public API (its value is only shown at creation). */
+/** What an agent token may do over MCP (server: api.ts MCP_SCOPES); reading always. */
+export type McpScope = "tasks:read" | "tasks:write" | "comments:write" | "time:write" | "tasks:send";
+
 export interface AccessToken {
   id: string;
   name: string;
   prefix: string;
   scope: "read" | "write";
+  /** "agent": for an AI agent over MCP, with its scopes and, optionally, the only spaces it may reach. */
+  kind: "personal" | "agent";
+  scopes: McpScope[];
+  spaceIds: string[] | null;
   expiresAt: string;
   lastUsedAt: string | null;
   createdAt: string;

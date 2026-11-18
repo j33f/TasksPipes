@@ -3,7 +3,7 @@
 /** One setting of the instance, as the server shows it (a secret's value never comes back). */
 export interface Setting {
   key: string;
-  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push" | "updates";
+  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push" | "updates" | "mcp";
   kind: "string" | "url" | "bool" | "int" | "list" | "secret";
   locked: boolean;
   env: string;
@@ -43,6 +43,7 @@ export const LABELS: Record<string, [string, string?]> = {
   "push.vapidPrivateKey": ["Private key (VAPID)"],
   "push.vapidSubject": ["Contact for push services", "A mailto: or https: address; defaults to the app's address"],
   "updates.check": ["Check for new versions", "Asks GitHub for the latest release every hour; administrators are told of a new one"],
+  "mcp.enabled": ["Allow AI agents", "People can make agent tokens for AI assistants (Claude, Cursor…) acting for them over MCP"],
 };
 export const SECTIONS: { id: Setting["section"]; title: string; intro: string }[] = [
   { id: "smtp", title: "E-mail (SMTP)", intro: "Sign-in links, invitations, notifications and reports." },
@@ -52,4 +53,8 @@ export const SECTIONS: { id: Setting["section"]; title: string; intro: string }[
   { id: "oidc", title: "Company sign-in (OpenID Connect)", intro: "Any OpenID Connect provider (Keycloak, Okta, Entra ID…): register a confidential client with this redirect URL." },
   { id: "push", title: "Push notifications", intro: "Notifications on people's devices, next to e-mail. Without a key pair, one is derived from the app's secret." },
   { id: "updates", title: "Updates", intro: "New versions of TasksPipes, published on GitHub." },
+  {
+    id: "mcp", title: "AI agents (MCP)",
+    intro: "Agents act with the rights of the person who made their token, only in the spaces chosen, and never see confidential pipes. Nothing they do deletes.",
+  },
 ];

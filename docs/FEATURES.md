@@ -217,6 +217,11 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   `Authorization: Bearer tp_…`. Its OpenAPI description is at `/api/v1/openapi.json`, browsable at **`/api/v1/docs`**
   (Swagger UI). Tokens are accepted on `/api/v1` only, and never manage tokens, account settings, data export,
   deletion or administration: those need a signed-in session.
+- **AI agents (MCP)** (*Settings › AI agents*, once an administrator turned them on) — let an AI assistant (Claude,
+  Cursor…) work on your tasks over MCP, at `/mcp`. It acts with your rights, reads, and does only what you allow
+  besides (create and change tasks, comment, log time, send tasks to others), in all your spaces or only those you
+  pick; it never sees confidential or team-only pipes and deletes nothing. What it does shows in the history as done
+  *via* it; tasks changed through an access token show it too. See [MCP.md](MCP.md).
 - **Webhooks** (*a pipe's page › Webhooks*, members of its space) — task events of the pipe are POSTed as JSON to an
   https address: task created, moved (column or pipe), given an owner, commented, done. Each delivery carries the
   task (key, title, column, owner, due date, link), who acted and the change, and is signed:
@@ -480,6 +485,7 @@ sending nothing but the server's version in its User-Agent; it can be turned off
 | Make a task wait for another one, or stop it | those who may edit the task, among the tasks they can open |
 | See a linked task one cannot open | its title and owner only; nothing of a confidential or team-only one |
 | Use the API with a token | the token's owner, with their own rights (read only for a read token) |
+| Act through an AI agent (MCP) | the token's owner, with their own rights, limited to its scopes and spaces; never confidential or team-only pipes |
 | Manage a pipe's webhooks | members of its space (not on confidential pipes) |
 | Add or remove a pipe's linked documents | members of its space (Outline documents: Outline accounts) |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
