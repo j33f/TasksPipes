@@ -124,3 +124,36 @@ describe("One-click updates", () => {
     expect(res.body.error).toBe("The updater cannot be reached.");
   });
 });
+
+describe("Opening About", () => {
+  it("checks again, at most once a minute, and tells administrators why a check failed", async () => {
+    const { overrideSetting } = await import("../../src/settings-store.js");
+    overrideSetting("updates.check", true);
+    let calls = 0;
+    // A version already announced: no e-mail is sent again.
+    updateState.fetch = async () => (calls++, release("99.0.0"));
+    updateState.checkedAt = null;
+    const first = (await alice.post("/api/version/check")).body;
+    expect(first).toMatchObject({ latest: { version: "99.0.0" }, updateAvailable: true, checkOn: true, error: null });
+    expect(calls).toBe(1);
+    // Within the minute: the result just learnt, without asking GitHub again.
+    await bob.post("/api/version/check");
+    expect(calls).toBe(1);
+
+    updateState.fetch = async () => {
+      throw new Error("GitHub answered 403");
+    };
+    updateState.checkedAt = new Date(Date.now() - 120_000);
+    expect((await alice.post("/api/version/check")).body.error).toBe("GitHub answered 403");
+    // Others see the version, not the error.
+    const forBob = (await bob.get("/api/version")).body;
+    expect(forBob).not.toHaveProperty("error");
+    expect(forBob).not.toHaveProperty("checkOn");
+    // Signed out, nothing is checked.
+    expect((await (await import("./helpers.js")).agent().post("/api/version/check")).status).toBe(401);
+
+    updateState.fetch = async () => published;
+    updateState.error = null;
+    overrideSetting("updates.check", undefined);
+  });
+});
