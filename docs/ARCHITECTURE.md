@@ -56,6 +56,8 @@ Outline through its RPC-style API.
 | `git.ts` | GitHub / GitLab webhooks: task keys, signatures, what events mean (the routes are in `routes.ts`). |
 | `fields.ts` | Validation of task field values. |
 | `realtime.ts` | WebSocket at `/api/events`: live updates to the pages open, and who has one open. With several instances, events and presence are shared through PostgreSQL (`NOTIFY` on `taskspipes_live`, table `live_presence`); each instance delivers to its own pages first. |
+| `mcp.ts` | MCP endpoint (`/mcp`, stateless) for AI agents with an agent token: its tools call `/api/v1` with that token, limited to the token's scopes and spaces; confidential content is never returned. |
+| `via.ts` | The access token of the request being handled (AsyncLocalStorage), recorded in the history as "via" it. |
 | `calendar.ts` | iCalendar feed at `/cal/<token>.ics`. |
 | `mail.ts`, `totp.ts` | E-mail sending (nodemailer) and TOTP codes. |
 | `i18n.ts` | Server-side translations, read from the language files of `locales/` (see [TRANSLATION.md](TRANSLATION.md)). |

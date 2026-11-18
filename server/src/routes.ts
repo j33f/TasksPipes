@@ -21,6 +21,7 @@ import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
 import { isEmail, sendLinkMail, sendOutlineInvite } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
 import { inboxRoutes } from "./inbox.js";
+import { viaToken } from "./via.js";
 import { calendarUrl } from "./calendar.js";
 import { adminRoutes, requestIsAdmin } from "./admin.js";
 import { accountRoutes } from "./account.js";
@@ -346,8 +347,8 @@ async function recordEvent(
     `INSERT INTO task_events (task_id, actor_id, type, comment,
        from_space_id, to_space_id, from_pipe_id, to_pipe_id, from_status, to_status,
        from_assignee_id, to_assignee_id, from_due_date, to_due_date, from_doc, to_doc,
-       from_stage, to_stage, details)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+       from_stage, to_stage, details, via_token_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
     [
       taskId, actorId, type, comment || null,
       before?.space_id ?? null, after.space_id,
@@ -359,6 +360,7 @@ async function recordEvent(
       after.doc ? JSON.stringify(after.doc) : null,
       before?.stage ?? null, after.stage,
       details ? JSON.stringify(details) : null,
+      viaToken(),
     ]
   );
   // E-mail notifications it causes, in the same transaction.
@@ -405,8 +407,10 @@ export async function getEvents(taskId: string, lang: Locale) {
     `SELECT e.*, a.name AS actor_name, a.avatar_url AS actor_avatar,
             COALESCE(fsu.name, fs.name) AS from_space_name, COALESCE(tsu.name, ts.name) AS to_space_name,
             fp.name AS from_pipe_name, tp.name AS to_pipe_name,
-            fa.name AS from_assignee_name, ta.name AS to_assignee_name
+            fa.name AS from_assignee_name, ta.name AS to_assignee_name,
+            vt.name AS via_name, vt.kind AS via_kind
      FROM task_events e
+     LEFT JOIN api_tokens vt ON vt.id = e.via_token_id
      JOIN users a ON a.id = e.actor_id
      LEFT JOIN spaces fs ON fs.id = e.from_space_id LEFT JOIN users fsu ON fsu.id = fs.user_id
      LEFT JOIN spaces ts ON ts.id = e.to_space_id LEFT JOIN users tsu ON tsu.id = ts.user_id
@@ -440,6 +444,8 @@ export async function getEvents(taskId: string, lang: Locale) {
     details: e.details && localizeDetails(lang, e.details),
     createdAt: e.created_at,
     actor: { id: e.actor_id, name: e.actor_name, avatarUrl: e.actor_avatar },
+    // Done through an access token or an AI agent (MCP): its name, as its owner gave it.
+    via: e.via_token_id ? { name: e.via_name, kind: e.via_kind } : null,
     from: side(e, "from"),
     to: side(e, "to"),
   }));

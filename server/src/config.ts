@@ -67,6 +67,10 @@ export const config = {
   get outlineAllowedHosts() {
     return s<string[]>("outline.allowedHosts");
   },
+  /** The MCP endpoint (/mcp) for AI agents acting for people, with agent tokens: off by default. */
+  get mcpEnabled() {
+    return s<boolean>("mcp.enabled");
+  },
   /** Lets other Outline servers be on an internal address or in plain http (self-hosting, tests). */
   get outlineAllowPrivate() {
     return s<boolean>("outline.allowPrivate");

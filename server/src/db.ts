@@ -551,6 +551,13 @@ CREATE TABLE IF NOT EXISTS api_tokens (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id);
+-- Agent tokens (mcp.ts): for an AI agent acting for its owner over MCP, never on /api/v1 directly. Finer scopes
+-- (MCP_SCOPES) and, optionally, the only spaces it may reach (NULL: all those of its owner).
+ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'personal' CHECK (kind IN ('personal', 'agent'));
+ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS scopes text[];
+ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS space_ids uuid[];
+-- What was done through an access token or an agent: shown as "via" it in the history (via.ts).
+ALTER TABLE task_events ADD COLUMN IF NOT EXISTS via_token_id uuid REFERENCES api_tokens(id) ON DELETE SET NULL;
 
 -- Outgoing webhooks of a pipe (webhooks.ts): the secret signing the deliveries is encrypted with APP_SECRET.
 CREATE TABLE IF NOT EXISTS pipe_webhooks (

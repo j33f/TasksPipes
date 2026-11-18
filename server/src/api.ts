@@ -15,11 +15,28 @@ import { LIMITS, enforceLimit, rateLimited } from "./rate-limit.js";
 export const V1 = "/api/v1";
 const TOKEN = /^tp_[A-Za-z0-9_-]{43}$/;
 export const MAX_TOKEN_DAYS = 366;
+/** Agent tokens (MCP) live shorter: they sit in an AI client's configuration. */
+export const MAX_AGENT_TOKEN_DAYS = 90;
+/** What an agent token may do over MCP (mcp.ts); reading is always among them. */
+export const MCP_SCOPES = ["tasks:read", "tasks:write", "comments:write", "time:write", "tasks:send"] as const;
+export type McpScope = (typeof MCP_SCOPES)[number];
+/**
+ * The MCP endpoint calls /api/v1 itself (app.inject) with the agent's token and this header: agent tokens are refused
+ * on /api/v1 otherwise, so that the limits of mcp.ts (scopes, spaces, confidential tasks) cannot be bypassed.
+ */
+export const INTERNAL_HEADER = "x-taskspipes-internal";
+export const INTERNAL_SECRET = crypto.randomBytes(32).toString("hex");
 const hash = (v: string) => crypto.createHash("sha256").update(v).digest("hex");
 
 export interface ApiToken {
   id: string;
   scope: "read" | "write";
+  kind: "personal" | "agent";
+  /** The name its owner gave it (an agent's, shown in the history). */
+  name: string;
+  /** Agent tokens: what they may do, and the only spaces they may reach (null: all their owner's). */
+  scopes: McpScope[];
+  spaceIds: string[] | null;
 }
 
 declare module "fastify" {
@@ -39,7 +56,7 @@ export async function tokenUser(header: string | undefined) {
     `UPDATE api_tokens t SET last_used_at = CASE WHEN t.last_used_at > now() - interval '1 minute' THEN t.last_used_at ELSE now() END
      FROM users u
      WHERE t.token_hash = $1 AND t.revoked_at IS NULL AND t.expires_at > now() AND u.id = t.user_id AND u.disabled_at IS NULL
-     RETURNING t.id, t.scope, u.id AS user_id, u.name, u.email, u.avatar_url, u.auth_kind, u.totp_secret IS NOT NULL AS totp, u.locale, u.theme`,
+     RETURNING t.id, t.scope, t.kind, t.name AS token_name, t.scopes, t.space_ids, u.id AS user_id, u.name, u.email, u.avatar_url, u.auth_kind, u.totp_secret IS NOT NULL AS totp, u.locale, u.theme`,
     [hash(m[1])]
   );
   return row ?? null;
@@ -179,6 +196,12 @@ export const V1_ROUTES: Record<string, Doc> = {
   "DELETE /items/:id": { tag: "Sub-tasks", summary: "Delete a sub-task", params: idParams, response: ok },
 };
 
+/** A call made by the MCP endpoint itself (mcp.ts), not by a client. */
+function internalCall(req: FastifyRequest) {
+  const h = req.headers[INTERNAL_HEADER];
+  return typeof h === "string" && h.length === INTERNAL_SECRET.length && crypto.timingSafeEqual(Buffer.from(h), Buffer.from(INTERNAL_SECRET));
+}
+
 const hidden: RouteOptions["handler"] = async () => {
   throw notFound("Not found");
 };
@@ -231,7 +254,9 @@ export async function publicApi(app: FastifyInstance, apiRoutes: (app: FastifyIn
         await enforceLimit(LIMITS.api, `refused:${req.ip}`);
         throw new HttpError(401, "This access token is invalid, expired or revoked");
       }
-      await enforceLimit(LIMITS.api, req.apiToken?.id ?? req.user?.id ?? req.ip);
+      // Calls of the MCP endpoint were counted there, once per tool call.
+      if (!internalCall(req)) await enforceLimit(LIMITS.api, req.apiToken?.id ?? req.user?.id ?? req.ip);
+      if (req.apiToken?.kind === "agent" && !internalCall(req)) throw forbidden("This token is for AI agents, on the MCP endpoint (/mcp)");
       if (req.apiToken?.scope === "read" && req.method !== "GET" && req.method !== "HEAD") throw forbidden("This access token can only read");
     });
     await v1.register(apiRoutes);
@@ -244,31 +269,54 @@ export async function publicApi(app: FastifyInstance, apiRoutes: (app: FastifyIn
 export async function tokenRoutes(app: FastifyInstance) {
   app.get("/me/tokens", async (req: FastifyRequest) => {
     const { rows } = await query(
-      `SELECT id, name, prefix, scope, expires_at, last_used_at, created_at FROM api_tokens
+      `SELECT id, name, prefix, scope, kind, scopes, space_ids, expires_at, last_used_at, created_at FROM api_tokens
        WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`,
       [req.user!.id]
     );
     return rows.map((t) => ({
-      id: t.id, name: t.name, prefix: t.prefix, scope: t.scope, expiresAt: t.expires_at, lastUsedAt: t.last_used_at, createdAt: t.created_at,
+      id: t.id, name: t.name, prefix: t.prefix, scope: t.scope, kind: t.kind, scopes: t.scopes ?? [], spaceIds: t.space_ids,
+      expiresAt: t.expires_at, lastUsedAt: t.last_used_at, createdAt: t.created_at,
       expired: new Date(t.expires_at) <= new Date(),
     }));
   });
 
   // The token is in this answer only: what is kept is its hash.
-  app.post<{ Body: { name?: string; scope?: string; days?: number } }>("/me/tokens", rateLimited(LIMITS.apiTokens), async (req) => {
+  type TokenBody = { name?: string; scope?: string; days?: number; kind?: string; scopes?: unknown; spaceIds?: unknown };
+  app.post<{ Body: TokenBody }>("/me/tokens", rateLimited(LIMITS.apiTokens), async (req) => {
     const name = String(req.body?.name ?? "").trim().slice(0, 100);
     if (!name) throw bad("{label} is required", { label: "Name" });
-    const scope = req.body?.scope === "write" ? "write" : req.body?.scope === "read" ? "read" : null;
-    if (!scope) throw bad("Choose what the token may do");
+    const agent = req.body?.kind === "agent";
+    let scope: "read" | "write" | null;
+    let scopes: McpScope[] | null = null;
+    let spaceIds: string[] | null = null;
+    if (agent) {
+      if (!config.mcpEnabled) throw forbidden("AI agents are not enabled on this instance");
+      // Reading always; the rest as chosen.
+      const asked = Array.isArray(req.body?.scopes) ? req.body.scopes : [];
+      scopes = MCP_SCOPES.filter((x) => x === "tasks:read" || asked.includes(x));
+      scope = scopes.length > 1 ? "write" : "read";
+      if (req.body?.spaceIds != null) {
+        const ids = Array.isArray(req.body.spaceIds) ? [...new Set(req.body.spaceIds.map(String))] : [];
+        if (!ids.length || ids.length > 100 || ids.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) throw bad("Choose the spaces the agent may reach");
+        const { rows } = await query(`SELECT id FROM spaces WHERE id = ANY($1::uuid[]) AND space_visible($2, id)`, [ids, req.user!.id]);
+        if (rows.length !== ids.length) throw bad("Choose the spaces the agent may reach");
+        spaceIds = ids;
+      }
+    } else {
+      scope = req.body?.scope === "write" ? "write" : req.body?.scope === "read" ? "read" : null;
+      if (!scope) throw bad("Choose what the token may do");
+    }
+    const maxDays = agent ? MAX_AGENT_TOKEN_DAYS : MAX_TOKEN_DAYS;
     const days = Number(req.body?.days);
-    if (!Number.isInteger(days) || days < 1 || days > MAX_TOKEN_DAYS) throw bad("A token expires within {n} days", { n: MAX_TOKEN_DAYS });
+    if (!Number.isInteger(days) || days < 1 || days > maxDays) throw bad("A token expires within {n} days", { n: maxDays });
     const token = `tp_${crypto.randomBytes(32).toString("base64url")}`;
     const row = await one(
-      `INSERT INTO api_tokens (user_id, name, token_hash, prefix, scope, expires_at) VALUES ($1, $2, $3, $4, $5, now() + make_interval(days => $6))
+      `INSERT INTO api_tokens (user_id, name, token_hash, prefix, scope, kind, scopes, space_ids, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + make_interval(days => $9))
        RETURNING id, expires_at`,
-      [req.user!.id, name, hash(token), token.slice(0, 10), scope, days]
+      [req.user!.id, name, hash(token), token.slice(0, 10), scope, agent ? "agent" : "personal", scopes, spaceIds, days]
     );
-    req.log.info({ tokenId: row!.id, scope }, "Access token created");
+    req.log.info({ tokenId: row!.id, scope, kind: agent ? "agent" : "personal", scopes }, "Access token created");
     return { id: row!.id, token, expiresAt: row!.expires_at };
   });
 
