@@ -72,6 +72,24 @@ describe("incoming webhooks", () => {
     expect(form.statusCode).toBe(201);
   });
 
+  it("never let another application @mention people, or send huge bodies, or race a retry into two tasks", async () => {
+    await alice.patch(`/api/pipes/${pipe}/integrations/incoming`, { templates: {} });
+    const bobId = (await bob.get("/api/me")).body.user.id;
+    const res = await post({ title: "Hi @[Bob](mention:" + bobId + ")", description: "See @[Bob Durand](mention:" + bobId + ")" });
+    const t = (await alice.get(`/api/tasks/${res.json().task.id}`)).body;
+    expect(t.title).toBe("Hi @Bob");
+    expect(t.description).toBe("See @Bob Durand");
+    expect(t.events[0].details?.mentioned).toBeUndefined();
+
+    expect((await post({ title: "x", description: "y".repeat(300 * 1024) })).statusCode).toBe(413);
+
+    const same = { title: "Twice at once", externalId: "race-1" };
+    const [a, b] = await Promise.all([post(same), post(same)]);
+    const ids = new Set([a.json().task.id, b.json().task.id]);
+    expect(ids.size).toBe(1);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 201]);
+  });
+
   it("say what is wrong", async () => {
     await alice.patch(`/api/pipes/${pipe}/integrations/incoming`, { templates: {} });
     expect((await post({ description: "no title" })).json().error).toMatch(/No title/);
