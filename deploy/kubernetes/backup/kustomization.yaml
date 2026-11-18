@@ -1,0 +1,8 @@
+# Optional: a daily pg_dump of the database into a volume, keeping 14 days. Add it to your overlay:
+#   resources: [ ../base, ../backup ]   (or the GitHub URL, as for the base)
+# Keep APP_SECRET too, elsewhere: without it, the secrets stored in the database cannot be read.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - pvc.yaml
+  - cronjob.yaml

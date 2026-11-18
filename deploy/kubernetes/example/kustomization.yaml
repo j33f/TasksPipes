@@ -1,0 +1,24 @@
+# A complete example to try TasksPipes on a cluster (kind, minikube…): the app, a PostgreSQL and a Redis of its own,
+# and an Ingress. For production, use the base with your own (managed) database and a real Secret.
+#   kubectl apply -k deploy/kubernetes/example
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: taskspipes
+resources:
+  - namespace.yaml
+  - ../base
+  - ../backup
+  - postgres.yaml
+  - redis.yaml
+  - ingress.yaml
+secretGenerator:
+  - name: taskspipes
+    # Replace every value (openssl rand -hex 32 for APP_SECRET); in production, keep it out of git.
+    literals:
+      - APP_URL=http://tasks.localhost
+      - APP_SECRET=change-me-change-me-change-me-change-me
+      - DATABASE_URL=postgres://taskspipes:change-me@postgres:5432/taskspipes
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_PASSWORD=change-me
+generatorOptions:
+  disableNameSuffixHash: true
