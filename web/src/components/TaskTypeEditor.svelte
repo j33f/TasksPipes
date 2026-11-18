@@ -2,7 +2,8 @@
   import { untrack } from "svelte";
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
-  import { FIELD_TYPE_LABELS, PIPE_ICONS, moved } from "../lib/constants";
+  import { FIELD_TYPE_LABELS, moved } from "../lib/constants";
+  import IconChoices from "./IconChoices.svelte";
   import type { FieldType, TaskType } from "../lib/types";
   import Modal from "./Modal.svelte";
   import Icon, { iconOf } from "./Icon.svelte";
@@ -140,12 +141,7 @@
         </div>
         <div class="field">
           <span class="label-text">{t("Icon")}</span>
-          <div class="icons">
-            {#each PIPE_ICONS as name (name)}
-              <button type="button" class="icon-btn" class:selected={draft.icon === name} title={name}
-                onclick={() => (draft.icon = name)}><Icon {name} size={18} /></button>
-            {/each}
-          </div>
+          <IconChoices selected={draft.icon} size={18} onpick={(name) => (draft.icon = name)} />
         </div>
 
         <div class="field">
@@ -206,10 +202,6 @@
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr); gap: 24px; }
   .preview { background: var(--background-secondary); border-radius: 8px; padding: 16px; align-self: start; position: sticky; top: 0; }
-  .icons { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; }
-  .icon-btn { border: 0; background: none; padding: 5px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
-  .icon-btn:hover { background: var(--list-hover); }
-  .icon-btn.selected { background: var(--background-tertiary); color: var(--text); }
   .rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 6px; }
   .field-card { border: 1px solid var(--divider); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
   .field-card .input { min-height: 32px; padding: 4px 8px; font-size: 14px; }

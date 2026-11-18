@@ -11,6 +11,7 @@ import { GIT_STATE_LABEL } from "./git";
 import { GIT_ACTIONS } from "./events";
 import { PRIORITIES } from "./labels";
 import { LABELS, SECTIONS } from "./admin-settings";
+import { LUCIDE_GROUPS } from "./lucide";
 
 const FR = LOCALE_FILES.fr.web ?? {};
 
@@ -48,6 +49,9 @@ const used = new Set<string>([
   ...PRIORITIES.map((p) => p.label),
   ...Object.values(LABELS).flatMap(([label, hint]) => (hint ? [label, hint] : [label])),
   ...SECTIONS.flatMap((s) => [s.title, s.intro]),
+  // Groups of the icon picker (IconChoices).
+  "Basics",
+  ...LUCIDE_GROUPS.map((g) => g.label),
   // Theme choices (AccountModal: t(label) over a literal list).
   "Automatic", "Light", "Dark",
 ]);
