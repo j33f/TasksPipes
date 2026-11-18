@@ -13,12 +13,9 @@ resources:
   - ingress.yaml
 secretGenerator:
   - name: taskspipes
-    # Replace every value (openssl rand -hex 32 for APP_SECRET); in production, keep it out of git.
-    literals:
-      - APP_URL=http://tasks.localhost
-      - APP_SECRET=change-me-change-me-change-me-change-me
-      - DATABASE_URL=postgres://taskspipes:change-me@postgres:5432/taskspipes
-      - REDIS_URL=redis://redis:6379
-      - POSTGRES_PASSWORD=change-me
+    # Your values, never in git: cp secret.env.example secret.env, then fill it in (openssl rand -hex 32 for the
+    # secret and the password). Without secret.env, nothing is applied: no instance runs with a known secret.
+    envs:
+      - secret.env
 generatorOptions:
   disableNameSuffixHash: true
