@@ -87,7 +87,8 @@ describe("several instances on one database", () => {
   });
 
   it("know who has a page open on another instance, and when it is closed", async () => {
-    expect(await isOnline(bobId)).toBe(false);
+    // The page of the test before is gone, once the other instance has said so (it does not wait for it).
+    await eventually(async () => !(await isOnline(bobId)));
     const b = connectToOther(bob.cookie);
     await b.next("hello");
     await eventually(() => isOnline(bobId));

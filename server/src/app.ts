@@ -12,6 +12,7 @@ import { oidcRoutes } from "./oidc.js";
 import { apiRoutes, gitWebhooks } from "./routes.js";
 import { publicApi } from "./api.js";
 import { mcpRoutes } from "./mcp.js";
+import { oauthRoutes } from "./oauth.js";
 import { trackVia } from "./via.js";
 import { realtime } from "./realtime.js";
 import { calendarRoutes } from "./calendar.js";
@@ -93,6 +94,8 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   await publicApi(app, apiRoutes);
   // AI agents acting for people (off unless enabled): their tools go through /api/v1.
   await mcpRoutes(app);
+  // OAuth for remote MCP clients (connectors): discovery, registration, consent, tokens.
+  await oauthRoutes(app);
   await app.register(apiRoutes, { prefix: "/api" });
   await app.register(gitWebhooks);
 
