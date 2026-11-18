@@ -52,6 +52,10 @@ at least one admin.
 Pipes are extended kanban boards with drag and drop. Each column belongs to a generic state — *Backlog, Ready to
 start, Started, In progress, Blocked, Done, Dropped* — which the dashboard, due dates and archiving rely on.
 
+**Dropping a task on a pipe of the sidebar** passes it on: to a pipe of the same space, it moves there (its first
+column); to a pipe of another space, it is sent to that space's incoming once you confirm — its members are told,
+and accept or refuse it. A confidential task cannot leave its space.
+
 - **Personal** / **Team** (private): only the person, or the team's members, see the pipe.
 - **Open** (public): everyone sees it; anyone can add tasks and comment, only the space's members move them forward.
 - Every personal space has a **Personal** pipe for general tasks, which cannot be archived or deleted.

@@ -19,13 +19,15 @@ Manifests (Kustomize) are in [`deploy/kubernetes/`](../deploy/kubernetes):
 
 ```shell
 kind create cluster
+cp deploy/kubernetes/example/secret.env.example deploy/kubernetes/example/secret.env
+# fill secret.env in: APP_SECRET and POSTGRES_PASSWORD from `openssl rand -hex 32`, the password in DATABASE_URL too
 kubectl apply -k deploy/kubernetes/example
 kubectl -n taskspipes rollout status deployment/taskspipes
 kubectl -n taskspipes port-forward svc/taskspipes 8080:80     # then http://localhost:8080
 ```
 
-The example's Secret holds placeholder values, and its PostgreSQL has no replication: it is for trying, not for
-production.
+The example's Secret comes from `secret.env`, which git ignores: without it, nothing is applied, so no instance runs
+with a secret written in the repository. Its PostgreSQL has no replication: it is for trying, not for production.
 
 ## In production
 
@@ -46,12 +48,12 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: taskspipes
 resources:
-  - github.com/j33f/TasksPipes//deploy/kubernetes/base?ref=v0.28.0
-  - github.com/j33f/TasksPipes//deploy/kubernetes/backup?ref=v0.28.0   # optional
+  - github.com/j33f/TasksPipes//deploy/kubernetes/base?ref=v0.28.1
+  - github.com/j33f/TasksPipes//deploy/kubernetes/backup?ref=v0.28.1   # optional
   - ingress.yaml                                                        # yours
 images:
   - name: ghcr.io/j33f/taskspipes
-    newTag: "0.28.0"
+    newTag: "0.28.1"
 ```
 
 ### The Secret

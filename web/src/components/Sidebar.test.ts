@@ -50,3 +50,52 @@ describe("sidebar pipe menu", () => {
     await vi.waitFor(() => expect(calls.some((c) => c.method === "PUT" && c.url.endsWith("/api/pipes/p1/pin"))).toBe(true));
   });
 });
+
+describe("dropping a task on a pipe of the sidebar", () => {
+  // After a drop the app reloads what it shares (catalog, spaces…): each URL its own answer.
+  beforeEach(() => {
+    // Earlier tests' refreshes leave the shared catalog as their generic answer had it.
+    app.pipeTypes = [];
+    app.taskTypes = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? "GET", url });
+      const answer = url.endsWith("/catalog") ? { pipeTypes: [], taskTypes: [] }
+        : url.endsWith("/sidebar") ? { mine: app.sidebar.mine, pinned: [], teams: [] }
+        : url.endsWith("/spaces") ? app.spaces
+        : url.endsWith("/users") ? [] : { ok: true };
+      return new Response(JSON.stringify(answer), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+  });
+  const drop = (data: object | null) => {
+    const store: Record<string, string> = data ? { "application/x-taskspipes-task": JSON.stringify(data) } : { "text/plain": "x" };
+    return { types: Object.keys(store), getData: (k: string) => store[k] ?? "", dropEffect: "none" };
+  };
+  const target = async () => (await screen.findByText("Projet démo")).closest(".pipe-link") as HTMLElement;
+
+  it("moves a task of the same space into the pipe", async () => {
+    render(Sidebar, { open: true, onclose: () => {} });
+    const el = await target();
+    await fireEvent.dragOver(el, { dataTransfer: drop({ id: "t1", title: "Fix", pipeId: "other", spaceId: PERSONAL }) });
+    expect(el.classList.contains("drop-target")).toBe(true);
+    await fireEvent.drop(el, { dataTransfer: drop({ id: "t1", title: "Fix", pipeId: "other", spaceId: PERSONAL }) });
+    expect(calls).toContainEqual({ method: "POST", url: "/api/tasks/t1/move" });
+  });
+
+  it("sends a task of another space to the pipe's space incoming, once confirmed", async () => {
+    const asked = vi.fn(() => true);
+    vi.stubGlobal("confirm", asked);
+    render(Sidebar, { open: true, onclose: () => {} });
+    await fireEvent.drop(await target(), { dataTransfer: drop({ id: "t2", title: "Quote", pipeId: "team-pipe", spaceId: "team-space" }) });
+    expect(asked).toHaveBeenCalled();
+    expect(calls).toContainEqual({ method: "POST", url: "/api/tasks/t2/send" });
+  });
+
+  it("does nothing with anything else dragged, or a task dropped on its own pipe", async () => {
+    render(Sidebar, { open: true, onclose: () => {} });
+    const el = await target();
+    await fireEvent.dragOver(el, { dataTransfer: drop(null) });
+    expect(el.classList.contains("drop-target")).toBe(false);
+    await fireEvent.drop(el, { dataTransfer: drop({ id: "t3", title: "Same", pipeId: "p1", spaceId: PERSONAL }) });
+    expect(calls.filter((c) => c.method === "POST")).toEqual([]);
+  });
+});
