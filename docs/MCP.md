@@ -42,7 +42,19 @@ Other clients take the same two things: the address (Streamable HTTP transport) 
 `Authorization: Bearer tp_…`. Clients that only speak stdio can go through a bridge such as
 [`mcp-remote`](https://www.npmjs.com/package/mcp-remote).
 
-Remote connectors that sign in with OAuth (such as those added in claude.ai) are not supported yet.
+### Without a token: connectors that sign in (OAuth)
+
+Clients that sign in by themselves — **claude.ai** custom connectors (also used by Claude Desktop and mobile), and
+other MCP clients supporting OAuth — need no token to copy: give them the address `https://<your instance>/mcp` only.
+
+1. In claude.ai: *Settings › Connectors › Add custom connector*, the address above, then *Connect*.
+2. TasksPipes opens: sign in if needed, then the consent page shows **which application asks** and **where it will
+   send you back** (for claude.ai, `claude.ai`). Choose what it may do besides reading, and where, as for an agent
+   token, then **Allow**.
+3. The connection shows in *Settings › AI agents*, marked *Connected with OAuth*; *Disconnect* ends it.
+
+Only allow a connection you started yourself: a name such as "Claude" is chosen by the application, the address it
+sends you back to is what tells it apart (applications that registered on the fly are marked *unverified name*).
 
 ## Tools
 
@@ -60,6 +72,13 @@ Remote connectors that sign in with OAuth (such as those added in claude.ai) are
 | `send_task` | Send a task to someone's incoming | *Send tasks to other people* |
 
 ## For administrators
+
+- **OAuth.** TasksPipes is the authorization server of its own `/mcp` (OAuth 2.1): protected resource metadata at
+  `/.well-known/oauth-protected-resource/mcp`, server metadata at `/.well-known/oauth-authorization-server`, clients
+  by metadata document (CIMD) or registered on the fly (`/oauth/register`), the authorization code with PKCE (S256),
+  access tokens of an hour for `/mcp` only and rotated refresh tokens (90 days unused). A refresh token or a code
+  used twice disconnects the connection. Everything answers 404 while AI agents are off. Claude reaches the instance
+  from `160.79.104.0/21`: a firewall must let it reach `/mcp`, `/.well-known/…` and `/oauth/…`.
 
 - The endpoint is `POST /mcp`, stateless: it works the same with [several instances](HOSTING.md#several-instances).
 - It only takes agent tokens; personal access tokens are refused there, and agent tokens are refused on `/api/v1`.

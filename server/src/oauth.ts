@@ -85,6 +85,16 @@ export function redirectMatches(registered: string[], asked: string): boolean {
   });
 }
 
+/**
+ * The name a client gives itself, shown on the consent screen: never the instance's own name, which would make an
+ * unknown client look like part of TasksPipes.
+ */
+function clientName(asked: unknown, fallback: string) {
+  const name = typeof asked === "string" ? asked.replace(/[\p{Cc}\p{Cf}]/gu, "").trim().slice(0, 100) : "";
+  if (!name || /tasks\s*-?\s*pipes/i.test(name)) return fallback;
+  return name;
+}
+
 const toClient = (r: Record<string, unknown>): Client => ({
   id: r.id as string, clientId: r.client_id as string, kind: r.kind as Client["kind"], name: r.name as string,
   redirectUris: r.redirect_uris as string[],
@@ -101,18 +111,30 @@ function metadataUrl(clientId: string): URL | null {
   }
 }
 
-/** The client a client_id names, its metadata document fetched (or taken from the cache) when it is a URL. */
-async function findClient(clientId: unknown): Promise<Client | null> {
+/**
+ * The client a client_id names. A metadata document (a URL) is fetched only when `fetch` is set — at the authorization
+ * request, the start of a connection — and then again once a day; elsewhere (the token endpoint, which anyone can
+ * call) the client must be known already, so that nobody can make the server fetch documents and store clients at
+ * will. Should a fetch fail, what was fetched before keeps working.
+ */
+async function findClient(clientId: unknown, fetch = false): Promise<Client | null> {
   if (typeof clientId !== "string" || !clientId) return null;
   if (!metadataUrl(clientId)) {
     const row = await one(`SELECT * FROM oauth_clients WHERE client_id = $1 AND kind = 'dcr'`, [clientId]);
     return row ? toClient(row) : null;
   }
-  const cached = await one(
-    `SELECT * FROM oauth_clients WHERE client_id = $1 AND kind = 'cimd' AND fetched_at > now() - interval '${CIMD_CACHE}'`,
+  const known = await one(
+    `SELECT *, fetched_at > now() - interval '${CIMD_CACHE}' AS fresh FROM oauth_clients WHERE client_id = $1 AND kind = 'cimd'`,
     [clientId]
   );
-  if (cached) return toClient(cached);
+  if (known && (known.fresh || !fetch)) return toClient(known);
+  if (!fetch) return null;
+  const fetched = await fetchMetadata(clientId);
+  return fetched ?? (known ? toClient(known) : null);
+}
+
+/** A client's metadata document, checked and stored; null when it cannot be had or is not right. */
+async function fetchMetadata(clientId: string): Promise<Client | null> {
   try {
     // Never an internal address (SSRF), no redirect followed, a small answer, quickly.
     const res = await getText(clientId, { accept: "application/json" }, guardedLookup(config.webhookAllowPrivate), {
@@ -124,7 +146,7 @@ async function findClient(clientId: unknown): Promise<Client | null> {
     const uris = doc.redirect_uris;
     if (!Array.isArray(uris) || !uris.length || uris.length > 20 || !uris.every(validRedirect)) return null;
     if (doc.token_endpoint_auth_method !== undefined && doc.token_endpoint_auth_method !== "none") return null;
-    const name = typeof doc.client_name === "string" && doc.client_name.trim() ? doc.client_name.trim().slice(0, 100) : new URL(clientId).hostname;
+    const name = clientName(doc.client_name, new URL(clientId).hostname);
     const row = await one(
       `INSERT INTO oauth_clients (client_id, kind, name, redirect_uris, fetched_at) VALUES ($1, 'cimd', $2, $3, now())
        ON CONFLICT (client_id) DO UPDATE SET name = EXCLUDED.name, redirect_uris = EXCLUDED.redirect_uris, fetched_at = now()
@@ -183,10 +205,11 @@ export async function cleanupOAuth() {
   await query(`DELETE FROM oauth_requests WHERE created_at < now() - interval '1 hour'`);
   await query(`DELETE FROM oauth_codes WHERE expires_at < now() - interval '1 hour'`);
   await query(`DELETE FROM oauth_tokens WHERE expires_at < now() OR used_at < now() - interval '1 day'`);
-  // Clients registered on the fly for a connection never completed, and metadata documents no grant uses.
+  // Clients of connections never completed. Those that had a grant stay, disconnected or not: the history shows
+  // what was done via them.
   await query(
-    `DELETE FROM oauth_clients c WHERE c.created_at < now() - interval '1 day'
-     AND NOT EXISTS (SELECT 1 FROM api_tokens t WHERE t.oauth_client_id = c.id AND t.revoked_at IS NULL)`
+    `DELETE FROM oauth_clients c WHERE c.created_at < now() - interval '1 hour'
+     AND NOT EXISTS (SELECT 1 FROM api_tokens t WHERE t.oauth_client_id = c.id)`
   );
 }
 
@@ -246,7 +269,7 @@ export async function oauthRoutes(app: FastifyInstance) {
       if (!grants.every((g) => g === "authorization_code" || g === "refresh_token")) return invalid("grant_types: authorization_code, refresh_token");
       const responses = Array.isArray(b.response_types) ? b.response_types : ["code"];
       if (!responses.every((r) => r === "code")) return invalid("response_types: code");
-      const name = typeof b.client_name === "string" && b.client_name.trim() ? b.client_name.trim().slice(0, 100) : "MCP client";
+      const name = clientName(b.client_name, "MCP client");
       const clientId = `tpc_${crypto.randomBytes(18).toString("base64url")}`;
       const row = await one(
         `INSERT INTO oauth_clients (client_id, kind, name, redirect_uris) VALUES ($1, 'dcr', $2, $3) RETURNING created_at`,
@@ -267,10 +290,11 @@ export async function oauthRoutes(app: FastifyInstance) {
     { preHandler: enabled, ...rateLimited({ name: "oauth-authorize", max: 60, timeWindow: MIN }) },
     async (req, reply) => {
       const q = req.query ?? {};
-      const client = await findClient(q.client_id);
+      const client = await findClient(q.client_id, true);
       // Without a known client and one of its redirect URIs, nothing is sent back to the client: an error is shown.
+      // The redirect URI is always asked for (OAuth 2.1 allows it), and compared again at the token endpoint.
       if (!client) throw bad("This application is unknown: connect it again from where you started");
-      const redirect = q.redirect_uri ?? (client.redirectUris.length === 1 ? client.redirectUris[0] : undefined);
+      const redirect = q.redirect_uri;
       if (!redirect || !redirectMatches(client.redirectUris, redirect)) throw bad("This application gave a return address it did not register");
       const state = typeof q.state === "string" ? q.state.slice(0, 1000) : undefined;
       const back = (error: string, description?: string) =>
@@ -305,7 +329,12 @@ export async function oauthRoutes(app: FastifyInstance) {
     const r = await pending(req.params.id);
     if (!r) throw notFound("This request has expired: connect the application again");
     return {
-      client: { name: r.client_name, url: r.client_kind === "cimd" ? r.client_ref : null, redirectHost: new URL(r.redirect_uri).host },
+      // A registered client (DCR) is whoever registered it: its name is unverified. A metadata document is at least
+      // served by the host of its URL.
+      client: {
+        name: r.client_name, verified: r.client_kind === "cimd", url: r.client_kind === "cimd" ? r.client_ref : null,
+        redirectHost: new URL(r.redirect_uri).host,
+      },
       scopes: r.scopes,
     };
   });

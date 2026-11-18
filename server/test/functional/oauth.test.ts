@@ -108,6 +108,12 @@ describe("discovery", () => {
 });
 
 describe("registering a client", () => {
+  it("never shows a client under the instance's own name", async () => {
+    const id = (await register(CALLBACK, { client_name: "TasksPipes official" })).json().client_id;
+    const a = await authorize(id);
+    expect((await alice.get(`/api/oauth/requests/${a.request}`)).body.client).toMatchObject({ name: "MCP client", verified: false });
+  });
+
   it("takes public clients with https or loopback redirect URIs only", async () => {
     const ok = await register();
     expect(ok.statusCode).toBe(201);
@@ -187,6 +193,10 @@ describe("the authorization code flow", () => {
     expect(unregistered.res.statusCode).toBe(400);
     expect(unregistered.location).toBe("");
     expect((await authorize("tpc_unknown")).res.statusCode).toBe(400);
+    // The redirect URI is always asked for.
+    const { challenge } = pkce();
+    const without = await get(`/oauth/authorize?${new URLSearchParams({ response_type: "code", client_id: clientId, code_challenge: challenge, code_challenge_method: "S256" })}`);
+    expect(without.statusCode).toBe(400);
   });
 
   it("lets the person refuse", async () => {
@@ -250,6 +260,17 @@ describe("clients known by their metadata document (CIMD)", () => {
     const a = await authorize(clientId);
     expect(a.location).toMatch(/\/oauth\/consent\?request=/);
     expect((await alice.get(`/api/oauth/requests/${a.request}`)).body.client).toMatchObject({ name: "Doc client", url: clientId });
+  });
+
+  it("are never fetched from the token endpoint, which anyone can call", async () => {
+    let hits = 0;
+    metadataDoc = (url) => {
+      hits++;
+      return { client_id: url, client_name: "Doc", redirect_uris: [CALLBACK] };
+    };
+    const res = await form("/oauth/token", { grant_type: "authorization_code", code: "x", client_id: `${metadataBase}/never-seen.json`, code_verifier: pkce().verifier });
+    expect(res.json().error).toBe("invalid_client");
+    expect(hits).toBe(0);
   });
 
   it("are refused when the document names another client, or other redirect URIs", async () => {

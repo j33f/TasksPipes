@@ -306,12 +306,14 @@ export async function publicApi(app: FastifyInstance, apiRoutes: (app: FastifyIn
 export async function tokenRoutes(app: FastifyInstance) {
   app.get("/me/tokens", async (req: FastifyRequest) => {
     const { rows } = await query(
-      `SELECT id, name, prefix, scope, kind, scopes, space_ids, expires_at, last_used_at, created_at FROM api_tokens
+      `SELECT id, name, prefix, scope, kind, scopes, space_ids, expires_at, last_used_at, created_at, oauth_client_id FROM api_tokens
        WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`,
       [req.user!.id]
     );
     return rows.map((t) => ({
       id: t.id, name: t.name, prefix: t.prefix, scope: t.scope, kind: t.kind, scopes: t.scopes ?? [], spaceIds: t.space_ids,
+      // Connected with OAuth (an application's own sign-in, oauth.ts) rather than with a token one copied.
+      oauth: t.oauth_client_id !== null,
       expiresAt: t.expires_at, lastUsedAt: t.last_used_at, createdAt: t.created_at,
       expired: t.expires_at !== null && new Date(t.expires_at) <= new Date(),
     }));

@@ -544,6 +544,8 @@ export interface AccessToken {
   kind: "personal" | "agent";
   scopes: McpScope[];
   spaceIds: string[] | null;
+  /** An agent connected with OAuth (the application signed in), not with a copied token. */
+  oauth?: boolean;
   /** null: never expires. */
   expiresAt: string | null;
   lastUsedAt: string | null;
