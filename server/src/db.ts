@@ -558,6 +558,48 @@ ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS scopes text[];
 ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS space_ids uuid[];
 -- A token may never expire (NULL): its owner chose so; it stays revocable.
 ALTER TABLE api_tokens ALTER COLUMN expires_at DROP NOT NULL;
+-- OAuth for remote MCP clients (oauth.ts). A client is registered (DCR) or known by its metadata document's URL
+-- (CIMD); people consent to a pending request; the grant is an agent row of api_tokens (scopes, spaces, "via",
+-- disconnecting), whose short-lived access tokens and rotated refresh tokens are in oauth_tokens.
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  client_id text NOT NULL UNIQUE,
+  kind text NOT NULL CHECK (kind IN ('dcr', 'cimd')),
+  name text NOT NULL,
+  redirect_uris text[] NOT NULL,
+  fetched_at timestamptz,
+  last_used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS oauth_requests (
+  id text PRIMARY KEY,
+  client_id uuid NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+  redirect_uri text NOT NULL,
+  state text,
+  code_challenge text NOT NULL,
+  scopes text[] NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS oauth_client_id uuid REFERENCES oauth_clients(id) ON DELETE CASCADE;
+CREATE TABLE IF NOT EXISTS oauth_codes (
+  code_hash text PRIMARY KEY,
+  grant_id uuid NOT NULL REFERENCES api_tokens(id) ON DELETE CASCADE,
+  client_id uuid NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+  redirect_uri text NOT NULL,
+  code_challenge text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  token_hash text PRIMARY KEY,
+  grant_id uuid NOT NULL REFERENCES api_tokens(id) ON DELETE CASCADE,
+  kind text NOT NULL CHECK (kind IN ('access', 'refresh')),
+  expires_at timestamptz NOT NULL,
+  -- Refresh tokens: used once (rotation); a second use revokes the grant.
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS oauth_tokens_grant_idx ON oauth_tokens(grant_id);
 -- What was done through an access token or an agent: shown as "via" it in the history (via.ts).
 ALTER TABLE task_events ADD COLUMN IF NOT EXISTS via_token_id uuid REFERENCES api_tokens(id) ON DELETE SET NULL;
 

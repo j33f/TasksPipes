@@ -12,6 +12,7 @@ import { oidcRoutes } from "./oidc.js";
 import { apiRoutes, gitWebhooks } from "./routes.js";
 import { publicApi } from "./api.js";
 import { mcpRoutes } from "./mcp.js";
+import { oauthRoutes } from "./oauth.js";
 import { trackVia } from "./via.js";
 import { realtime } from "./realtime.js";
 import { calendarRoutes } from "./calendar.js";
@@ -76,6 +77,10 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   // Every API answer carries the server's version: an open page built for another version reloads itself.
   app.addHook("onSend", async (req, reply) => {
     if (req.url.startsWith("/api/")) reply.header("X-App-Version", config.version);
+    // The OAuth consent page is never shown in another site's frame (clickjacking the Allow button).
+    if (req.url.startsWith("/oauth/consent")) {
+      reply.header("X-Frame-Options", "DENY").header("Content-Security-Policy", "frame-ancestors 'none'").header("Referrer-Policy", "no-referrer");
+    }
   });
 
   // Before the routes: it limits those that ask for it.
@@ -93,6 +98,8 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   await publicApi(app, apiRoutes);
   // AI agents acting for people (off unless enabled): their tools go through /api/v1.
   await mcpRoutes(app);
+  // OAuth for remote MCP clients (connectors): discovery, registration, consent, tokens.
+  await oauthRoutes(app);
   await app.register(apiRoutes, { prefix: "/api" });
   await app.register(gitWebhooks);
 

@@ -10,6 +10,7 @@
   import Icon from "./components/Icon.svelte";
   import Login from "./pages/Login.svelte";
   import MagicLogin from "./pages/MagicLogin.svelte";
+  import OAuthConsent from "./pages/OAuthConsent.svelte";
   import AccountModal from "./components/AccountModal.svelte";
   import CalendarModal from "./components/CalendarModal.svelte";
   import AboutModal from "./components/AboutModal.svelte";
@@ -86,11 +87,49 @@
     (n ? nav.setAppBadge?.(n) : nav.clearAppBadge?.())?.catch(() => {});
   });
 
+  /**
+   * Where to go back after signing in: only the consent page of an OAuth connection (a link from an application),
+   * never anywhere else, so that a crafted sign-in link cannot send people to another site.
+   */
+  const CONSENT = /^\/oauth\/consent\?request=[A-Za-z0-9_-]+$/;
+  // Also kept in the tab: signing in with Outline or the company's provider leaves the page and comes back to "/".
+  const NEXT_KEY = "tp:oauth-next";
+  const remember = (next: string) => {
+    try {
+      sessionStorage.setItem(NEXT_KEY, next);
+    } catch {
+      /* the next parameter remains */
+    }
+  };
+  const recall = () => {
+    try {
+      const next = sessionStorage.getItem(NEXT_KEY) ?? "";
+      sessionStorage.removeItem(NEXT_KEY);
+      return CONSENT.test(next) ? next : null;
+    } catch {
+      return null;
+    }
+  };
+  const returnTo = () => {
+    const next = router.params.get("next") ?? "";
+    return CONSENT.test(next) ? next : recall() ?? "/";
+  };
+
   // Logged out users are sent to the login page, logged in users away from it.
   $effect(() => {
     if (router.path === "/login/magic") return;
+    if (app.me === null && router.path === "/oauth/consent") {
+      remember(router.path + router.search);
+      navigate(`/login?next=${encodeURIComponent(router.path + router.search)}`, { replace: true });
+      return;
+    }
+    // Back from a sign-in that left the page, on the way to a consent.
+    if (app.me && router.path === "/") {
+      const next = recall();
+      if (next) navigate(next, { replace: true });
+    }
     if (app.me === null && router.path !== "/login") navigate(`/login${router.search}`, { replace: true });
-    if (app.me && router.path === "/login") navigate("/", { replace: true });
+    if (app.me && router.path === "/login") navigate(returnTo(), { replace: true });
   });
 
   $effect(() => {
@@ -134,6 +173,8 @@
 
 {#if router.path === "/login/magic"}
   {#if app.me !== undefined}<MagicLogin />{/if}
+{:else if router.path === "/oauth/consent"}
+  {#if app.me}<OAuthConsent />{/if}
 {:else if router.path === "/account/delete"}
   {#if app.me !== undefined}<AccountDelete />{/if}
 {:else if app.me === null && router.path === "/login"}

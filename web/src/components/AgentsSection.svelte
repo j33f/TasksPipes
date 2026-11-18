@@ -87,7 +87,8 @@
   {#each agents as tk (tk.id)}
     <div class="row token-row">
       <span class="grow">
-        <strong>{tk.name}</strong> <code>{tk.prefix}…</code>
+        <strong>{tk.name}</strong>
+        {#if tk.oauth}<span class="badge">{t("Connected with OAuth")}</span>{:else}<code>{tk.prefix}…</code>{/if}
         <span class="badge">{t("Reads")}</span>
         {#if tk.scopes.includes("tasks:write")}<span class="badge">{t("Creates and changes tasks")}</span>{/if}
         {#if tk.scopes.includes("comments:write")}<span class="badge">{t("Comments")}</span>{/if}
