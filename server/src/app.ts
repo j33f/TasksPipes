@@ -11,6 +11,8 @@ import { authPlugin, loginError } from "./auth.js";
 import { oidcRoutes } from "./oidc.js";
 import { apiRoutes, gitWebhooks } from "./routes.js";
 import { publicApi } from "./api.js";
+import { mcpRoutes } from "./mcp.js";
+import { trackVia } from "./via.js";
 import { realtime } from "./realtime.js";
 import { calendarRoutes } from "./calendar.js";
 import { deletionLinkRoutes } from "./account.js";
@@ -78,6 +80,8 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
 
   // Before the routes: it limits those that ask for it.
   await rateLimits(app);
+  // Before the routes: what is done through an access token is recorded as done via it.
+  trackVia(app);
   await app.register(cookie);
   await app.register(authPlugin);
   await app.register(oidcRoutes);
@@ -87,6 +91,8 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   await app.register(deletionLinkRoutes);
   // The public API (/api/v1, documented, with access tokens) is made of the same routes as the app.
   await publicApi(app, apiRoutes);
+  // AI agents acting for people (off unless enabled): their tools go through /api/v1.
+  await mcpRoutes(app);
   await app.register(apiRoutes, { prefix: "/api" });
   await app.register(gitWebhooks);
 

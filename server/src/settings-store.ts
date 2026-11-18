@@ -11,7 +11,7 @@ export interface SettingDef {
   key: string;
   env: string;
   kind: SettingKind;
-  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push" | "updates";
+  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push" | "updates" | "mcp";
   default: string | number | boolean | string[] | null;
 }
 
@@ -53,6 +53,9 @@ export const SETTINGS: SettingDef[] = [
   { key: "push.vapidSubject", env: "VAPID_SUBJECT", kind: "string", section: "push", default: "" },
 
   { key: "updates.check", env: "UPDATE_CHECK", kind: "bool", section: "updates", default: true },
+
+  // AI agents acting for people over MCP (mcp.ts): off until an administrator turns it on.
+  { key: "mcp.enabled", env: "MCP_ENABLED", kind: "bool", section: "mcp", default: false },
 ];
 
 export const settingDef = (key: string) => SETTINGS.find((d) => d.key === key);
