@@ -299,7 +299,8 @@ async function auth(app: FastifyInstance) {
   app.decorateRequest("apiToken", null);
   app.decorateRequest("apiTokenRefused", false);
   app.addHook("onRequest", async (req) => {
-    if (req.url.startsWith(`${V1}/`) && req.headers.authorization) {
+    const path = req.url.split("?")[0];
+    if ((req.url.startsWith(`${V1}/`) || path === "/mcp") && req.headers.authorization) {
       const t = await tokenUser(req.headers.authorization);
       if (t === null) req.apiTokenRefused = true;
       if (t) {
@@ -307,7 +308,7 @@ async function auth(app: FastifyInstance) {
           id: t.user_id, name: t.name, email: t.email, avatarUrl: t.avatar_url,
           kind: t.auth_kind, totp: t.totp, locale: t.locale, theme: t.theme,
         };
-        req.apiToken = { id: t.id, scope: t.scope };
+        req.apiToken = { id: t.id, scope: t.scope, kind: t.kind, name: t.token_name, scopes: t.scopes ?? [], spaceIds: t.space_ids ?? null };
       }
       if (t !== undefined) return;
     }
