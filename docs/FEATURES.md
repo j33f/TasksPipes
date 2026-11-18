@@ -153,7 +153,7 @@ those types keep working. This is a personal choice: others still see every type
   owner and author are told, in the app at once and by e-mail if they are not in the app then. A linked task someone
   cannot open shows them only its title and owner, without a link; a confidential or team-only one shows as *Task not
   accessible*. Those who may edit the task can unlink any task it waits for, even one they cannot open.
-- **Repeat** (a task in a pipe, for those who manage it): a new task is made on each date of a rule —
+- **Repeat** — recurring tasks (a task in a pipe, for those who manage it): a new task is made on each date of a rule —
   - every *n* days;
   - every *n* weeks, on chosen days;
   - every *n* months, on a day of the month (the 31st falls on the last day of shorter months), on the first,
