@@ -10,6 +10,7 @@
   import Icon from "./Icon.svelte";
   import IconPicker from "./IconPicker.svelte";
   import GitIntegrations from "./GitIntegrations.svelte";
+  import IncomingWebhook from "./IncomingWebhook.svelte";
   import { t, tn } from "../lib/i18n.svelte";
 
   let { spaceId, pipe = null, onclose }: { spaceId: string; pipe?: Pipe | null; onclose: () => void } = $props();
@@ -168,6 +169,10 @@
       <details class="field git-section">
         <summary class="label-text">{t("GitHub / GitLab")}</summary>
         <GitIntegrations pipeId={pipe.id} />
+      </details>
+      <details class="field git-section">
+        <summary class="label-text">{t("Incoming webhook")}</summary>
+        <IncomingWebhook pipeId={pipe.id} />
       </details>
     {/if}
     {#if error}<div class="error-text">{error}</div>{/if}

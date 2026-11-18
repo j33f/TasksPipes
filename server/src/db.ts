@@ -285,6 +285,18 @@ CREATE TABLE IF NOT EXISTS pipe_integrations (
   last_event_at timestamptz,
   UNIQUE (pipe_id, provider)
 );
+-- Incoming webhooks (incoming.ts): another application creates tasks in the pipe; settings hold its templates.
+ALTER TABLE pipe_integrations DROP CONSTRAINT IF EXISTS pipe_integrations_provider_check;
+ALTER TABLE pipe_integrations ADD CONSTRAINT pipe_integrations_provider_check CHECK (provider IN ('github', 'gitlab', 'incoming'));
+ALTER TABLE pipe_integrations ADD COLUMN IF NOT EXISTS settings jsonb;
+-- What an incoming webhook already made, by the other application's id: sent again, it makes no second task.
+CREATE TABLE IF NOT EXISTS incoming_items (
+  integration_id uuid NOT NULL REFERENCES pipe_integrations(id) ON DELETE CASCADE,
+  external_id text NOT NULL,
+  task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (integration_id, external_id)
+);
 
 -- Pull/merge requests and commits that name a task (TP-123).
 CREATE TABLE IF NOT EXISTS task_links (
