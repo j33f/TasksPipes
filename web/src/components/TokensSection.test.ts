@@ -42,6 +42,16 @@ describe("access tokens", () => {
     expect(screen.getByText("Copy this token now: it will not be shown again.")).toBeTruthy();
   });
 
+  it("may never expire, and say so", async () => {
+    tokens = [{ ...tokens[0], expiresAt: null }];
+    render(TokensSection, {});
+    expect(await screen.findByText("never expires", { exact: false })).toBeTruthy();
+    await userEvent.type(screen.getByLabelText("Token name"), "Forever");
+    await userEvent.selectOptions(screen.getByLabelText("Valid for"), "Never expires");
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(calls.find((c) => c.method === "POST")!.body).toMatchObject({ name: "Forever", days: null });
+  });
+
   it("are revoked", async () => {
     render(TokensSection, {});
     await userEvent.click(await screen.findByRole("button", { name: "Revoke" }));

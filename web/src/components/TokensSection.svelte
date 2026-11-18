@@ -9,7 +9,8 @@
   let tokens = $state<AccessToken[]>([]);
   let name = $state("");
   let scope = $state<"read" | "write">("read");
-  let days = $state(90);
+  /** null: never expires. */
+  let days = $state<number | null>(90);
   let created = $state<string | null>(null);
   let error = $state("");
 
@@ -59,7 +60,7 @@
         <strong>{tk.name}</strong> <code>{tk.prefix}…</code>
         <span class="badge">{tk.scope === "write" ? t("Read and write") : t("Read only")}</span>
         <span class="small muted">
-          {tk.expired ? t("expired") : t("expires on {date}", { date: formatDate(tk.expiresAt) })}
+          {tk.expired ? t("expired") : tk.expiresAt ? t("expires on {date}", { date: formatDate(tk.expiresAt) }) : t("never expires")}
           · {tk.lastUsedAt ? t("used {when}", { when: relativeTime(tk.lastUsedAt) }) : t("never used")}
         </span>
       </span>
@@ -76,6 +77,7 @@
       <option value={30}>{t("30 days")}</option>
       <option value={90}>{t("90 days")}</option>
       <option value={365}>{t("1 year")}</option>
+      <option value={null}>{t("Never expires")}</option>
     </select>
     <button class="btn small" disabled={!name.trim()}>{t("Create")}</button>
   </form>

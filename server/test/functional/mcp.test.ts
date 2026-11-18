@@ -104,6 +104,12 @@ describe("the MCP endpoint", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("lets an agent token never expire", async () => {
+    const created = (await alice.post("/api/me/tokens", { name: "Forever agent", kind: "agent", scopes: [], days: null })).body;
+    expect(created.expiresAt).toBeNull();
+    expect((await rpc(created.token, "tools/list")).status).toBe(200);
+  });
+
   it("refuses agent tokens on /api/v1, where its limits would not apply", async () => {
     const token = (await agentToken([])).body.token;
     const res = await app.inject({ method: "GET", url: "/api/v1/me/tasks", headers: { authorization: `Bearer ${token}` } });

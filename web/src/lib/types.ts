@@ -544,7 +544,8 @@ export interface AccessToken {
   kind: "personal" | "agent";
   scopes: McpScope[];
   spaceIds: string[] | null;
-  expiresAt: string;
+  /** null: never expires. */
+  expiresAt: string | null;
   lastUsedAt: string | null;
   createdAt: string;
   expired: boolean;

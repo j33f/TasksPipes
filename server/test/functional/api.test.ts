@@ -47,6 +47,18 @@ describe("access tokens", () => {
     expect((await alice.post("/api/me/tokens", { name: "x", scope: "read", days: 400 })).body.error).toBe("A token expires within 366 days");
   });
 
+  it("may never expire, and still work and be revoked", async () => {
+    const created = (await alice.post("/api/me/tokens", { name: "Forever", scope: "read", days: null })).body;
+    expect(created.expiresAt).toBeNull();
+    const listed = (await alice.get("/api/me/tokens")).body.find((t: { id: string }) => t.id === created.id);
+    expect(listed).toMatchObject({ expiresAt: null, expired: false });
+    expect((await api(created.token, "GET", "/api/v1/me/tasks")).status).toBe(200);
+    // Leaving the expiry out is not "never".
+    expect((await alice.post("/api/me/tokens", { name: "x", scope: "read" })).status).toBe(400);
+    await alice.del(`/api/me/tokens/${created.id}`);
+    expect((await api(created.token, "GET", "/api/v1/me/tasks")).status).toBe(401);
+  });
+
   it("act with the rights of their owner", async () => {
     expect((await api(read, "GET", "/api/v1/me")).body.user.name).toBe("Alice Martin");
     expect((await api(read, "GET", `/api/v1/tasks/${task}`)).body.title).toBe("Private to Alice");
