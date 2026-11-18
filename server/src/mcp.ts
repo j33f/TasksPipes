@@ -19,6 +19,7 @@ import { config } from "./config.js";
 import { isConfidential } from "./access.js";
 import { INTERNAL_HEADER, INTERNAL_SECRET, V1, type McpScope } from "./api.js";
 import { LIMITS, enforceLimit } from "./rate-limit.js";
+import { resourceMetadataUrl } from "./oauth.js";
 
 /** Who a request acts for, given to the per-request server. */
 interface Caller {
@@ -318,8 +319,13 @@ function buildServer(app: FastifyInstance, c: Caller) {
 }
 
 /** The answer to a request without a usable agent token (the header in plain ASCII, the message in the body). */
-function unauthorized(reply: FastifyReply, message: string) {
-  return reply.code(401).header("www-authenticate", 'Bearer realm="TasksPipes", error="invalid_token"').send({ error: message });
+/**
+ * The 401 a client without a usable token gets: the challenge points to the protected resource metadata (RFC 9728),
+ * from where OAuth clients find how to get a token; `invalid` adds the error of a token that was given (RFC 6750).
+ */
+function unauthorized(reply: FastifyReply, message: string, invalid: boolean) {
+  const challenge = `Bearer resource_metadata="${resourceMetadataUrl()}"${invalid ? ', error="invalid_token"' : ""}`;
+  return reply.code(401).header("www-authenticate", challenge).send({ error: message });
 }
 
 export async function mcpRoutes(app: FastifyInstance) {
@@ -336,12 +342,12 @@ export async function mcpRoutes(app: FastifyInstance) {
     if (origin && origin !== new URL(config.appUrl).origin) return reply.code(403).send({ error: "Forbidden" });
     if (req.apiTokenRefused) {
       await enforceLimit(LIMITS.api, `refused:${req.ip}`);
-      return unauthorized(reply, "This token is invalid, expired or revoked");
+      return unauthorized(reply, "This token is invalid, expired or revoked", true);
     }
     const t = req.apiToken;
     if (!t || t.kind !== "agent" || !req.user) {
       await enforceLimit(LIMITS.api, `anonymous:${req.ip}`);
-      return unauthorized(reply, "An agent token is needed (Settings › Access tokens)");
+      return unauthorized(reply, "An agent token is needed (Settings › AI agents), or sign in with OAuth", Boolean(req.headers.authorization));
     }
     await enforceLimit(LIMITS.api, t.id);
     // One tool call per request, so that each one counts in the rate limit (JSON-RPC batches are refused).

@@ -221,7 +221,8 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   Cursor…) work on your tasks over MCP, at `/mcp`. It acts with your rights, reads, and does only what you allow
   besides (create and change tasks, comment, log time, send tasks to others), in all your spaces or only those you
   pick; it never sees confidential or team-only pipes and deletes nothing. What it does shows in the history as done
-  *via* it; tasks changed through an access token show it too. See [MCP.md](MCP.md).
+  *via* it; tasks changed through an access token show it too. Connect it with an agent token, or let a connector
+  that signs in (claude.ai, OAuth) ask for your consent. See [MCP.md](MCP.md).
 - **Webhooks** (*a pipe's page › Webhooks*, members of its space) — task events of the pipe are POSTed as JSON to an
   https address: task created, moved (column or pipe), given an owner, commented, done. Each delivery carries the
   task (key, title, column, owner, due date, link), who acted and the change, and is signed:

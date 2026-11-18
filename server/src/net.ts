@@ -40,6 +40,37 @@ export function guardedLookup(allowPrivate: boolean): LookupFunction {
 
 const MAX_RESPONSE = 20 * 1024 * 1024;
 
+/** GETs a URL through `lookup`, without following redirects; the answer is capped. */
+export function getText(
+  url: string, headers: Record<string, string>, lookup: LookupFunction, { timeoutMs = 15_000, maxResponse = MAX_RESPONSE } = {}
+): Promise<{ status: number; text: string; headers: http.IncomingHttpHeaders }> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    // A deadline for the whole exchange, not only between two packets: a server sending a byte now and then is cut off.
+    const deadline = setTimeout(() => req.destroy(new Error("timeout")), timeoutMs);
+    const req = (u.protocol === "https:" ? https : http).request(u, { method: "GET", headers, lookup, timeout: timeoutMs }, (res) => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on("data", (c: Buffer) => {
+        size += c.length;
+        if (size > maxResponse) req.destroy(new Error("response too large"));
+        else chunks.push(c);
+      });
+      res.on("end", () => {
+        clearTimeout(deadline);
+        resolve({ status: res.statusCode ?? 502, text: Buffer.concat(chunks).toString("utf8"), headers: res.headers });
+      });
+      res.on("error", reject);
+    });
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+    req.on("error", (err) => {
+      clearTimeout(deadline);
+      reject(err);
+    });
+    req.end();
+  });
+}
+
 /** POSTs a body through `lookup`, without following redirects; the answer is capped. */
 export function postJson(
   url: string, headers: Record<string, string>, body: string | Buffer, lookup: LookupFunction, { timeoutMs = 15_000, maxResponse = MAX_RESPONSE } = {}

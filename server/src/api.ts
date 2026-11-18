@@ -48,9 +48,26 @@ declare module "fastify" {
   }
 }
 
-/** The account and scope of a bearer token, or null. Last use is recorded at most once a minute. */
+/** An access token issued by OAuth (oauth.ts) for /mcp: it acts with the agent grant it belongs to. */
+export const OAUTH_ACCESS_TOKEN = /^tpo_[A-Za-z0-9_-]{43}$/;
+
+/**
+ * The account and scope of a bearer token, or null. Last use is recorded at most once a minute. An OAuth access
+ * token answers with its grant (an agent row of api_tokens), so that it has the same scopes, spaces and "via".
+ */
 export async function tokenUser(header: string | undefined) {
   const m = String(header ?? "").match(/^Bearer\s+(\S+)$/i);
+  if (m && OAUTH_ACCESS_TOKEN.test(m[1])) {
+    const row = await one(
+      `UPDATE api_tokens t SET last_used_at = CASE WHEN t.last_used_at > now() - interval '1 minute' THEN t.last_used_at ELSE now() END
+       FROM oauth_tokens o, users u
+       WHERE o.token_hash = $1 AND o.kind = 'access' AND o.expires_at > now() AND t.id = o.grant_id
+         AND t.revoked_at IS NULL AND t.kind = 'agent' AND u.id = t.user_id AND u.disabled_at IS NULL
+       RETURNING t.id, t.scope, t.kind, t.name AS token_name, t.scopes, t.space_ids, u.id AS user_id, u.name, u.email, u.avatar_url, u.auth_kind, u.totp_secret IS NOT NULL AS totp, u.locale, u.theme`,
+      [hash(m[1])]
+    );
+    return row ?? null;
+  }
   if (!m || !TOKEN.test(m[1])) return m ? null : undefined;
   const row = await one(
     `UPDATE api_tokens t SET last_used_at = CASE WHEN t.last_used_at > now() - interval '1 minute' THEN t.last_used_at ELSE now() END
@@ -197,6 +214,25 @@ export const V1_ROUTES: Record<string, Doc> = {
   "DELETE /items/:id": { tag: "Sub-tasks", summary: "Delete a sub-task", params: idParams, response: ok },
 };
 
+/**
+ * What an agent may do and where, as its owner chose (a new agent token, or an OAuth consent): reading always, the
+ * other MCP scopes asked for, and either all the owner's spaces (spaceIds null) or some they can see.
+ */
+export async function agentChoice(userId: string, askedScopes: unknown, askedSpaces: unknown) {
+  const asked = Array.isArray(askedScopes) ? askedScopes : [];
+  const scopes: McpScope[] = MCP_SCOPES.filter((x) => x === "tasks:read" || asked.includes(x));
+  const scope: "read" | "write" = scopes.length > 1 ? "write" : "read";
+  let spaceIds: string[] | null = null;
+  if (askedSpaces != null) {
+    const ids = Array.isArray(askedSpaces) ? [...new Set(askedSpaces.map(String))] : [];
+    if (!ids.length || ids.length > 100 || ids.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) throw bad("Choose the spaces the agent may reach");
+    const { rows } = await query(`SELECT id FROM spaces WHERE id = ANY($1::uuid[]) AND space_visible($2, id)`, [ids, userId]);
+    if (rows.length !== ids.length) throw bad("Choose the spaces the agent may reach");
+    spaceIds = ids;
+  }
+  return { scopes, scope, spaceIds };
+}
+
 /** A call made by the MCP endpoint itself (mcp.ts), not by a client. */
 function internalCall(req: FastifyRequest) {
   const h = req.headers[INTERNAL_HEADER];
@@ -270,12 +306,14 @@ export async function publicApi(app: FastifyInstance, apiRoutes: (app: FastifyIn
 export async function tokenRoutes(app: FastifyInstance) {
   app.get("/me/tokens", async (req: FastifyRequest) => {
     const { rows } = await query(
-      `SELECT id, name, prefix, scope, kind, scopes, space_ids, expires_at, last_used_at, created_at FROM api_tokens
+      `SELECT id, name, prefix, scope, kind, scopes, space_ids, expires_at, last_used_at, created_at, oauth_client_id FROM api_tokens
        WHERE user_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`,
       [req.user!.id]
     );
     return rows.map((t) => ({
       id: t.id, name: t.name, prefix: t.prefix, scope: t.scope, kind: t.kind, scopes: t.scopes ?? [], spaceIds: t.space_ids,
+      // Connected with OAuth (an application's own sign-in, oauth.ts) rather than with a token one copied.
+      oauth: t.oauth_client_id !== null,
       expiresAt: t.expires_at, lastUsedAt: t.last_used_at, createdAt: t.created_at,
       expired: t.expires_at !== null && new Date(t.expires_at) <= new Date(),
     }));
@@ -292,17 +330,7 @@ export async function tokenRoutes(app: FastifyInstance) {
     let spaceIds: string[] | null = null;
     if (agent) {
       if (!config.mcpEnabled) throw forbidden("AI agents are not enabled on this instance");
-      // Reading always; the rest as chosen.
-      const asked = Array.isArray(req.body?.scopes) ? req.body.scopes : [];
-      scopes = MCP_SCOPES.filter((x) => x === "tasks:read" || asked.includes(x));
-      scope = scopes.length > 1 ? "write" : "read";
-      if (req.body?.spaceIds != null) {
-        const ids = Array.isArray(req.body.spaceIds) ? [...new Set(req.body.spaceIds.map(String))] : [];
-        if (!ids.length || ids.length > 100 || ids.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) throw bad("Choose the spaces the agent may reach");
-        const { rows } = await query(`SELECT id FROM spaces WHERE id = ANY($1::uuid[]) AND space_visible($2, id)`, [ids, req.user!.id]);
-        if (rows.length !== ids.length) throw bad("Choose the spaces the agent may reach");
-        spaceIds = ids;
-      }
+      ({ scopes, scope, spaceIds } = await agentChoice(req.user!.id, req.body?.scopes, req.body?.spaceIds));
     } else {
       scope = req.body?.scope === "write" ? "write" : req.body?.scope === "read" ? "read" : null;
       if (!scope) throw bad("Choose what the token may do");
