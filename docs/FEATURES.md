@@ -231,6 +231,13 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   deliveries show in the dialog, with their answer. A *Test* button sends a `ping`. Addresses on internal networks
   are refused (`WEBHOOK_ALLOW_PRIVATE` lifts it). **Confidential and team-only pipes have no webhooks**: their
   content stays in the app.
+- **Incoming webhook** (*a pipe's settings › Incoming webhook*, members of its space) — another application (a form, a
+  CRM, Zapier, n8n, a script…) creates tasks in the pipe by POSTing JSON to an address of its own, with the secret in
+  `X-TasksPipes-Token` (or `Authorization: Bearer`), or a signature of the body in `X-TasksPipes-Signature:
+  sha256=<HMAC-SHA256 of the body with the secret>`. The body's `title`, `description`, `dueDate`, `priority` and
+  `externalId` are used, or **templates** pick them out of any body (`Lead: {{contact.name}}`); an `externalId`
+  already received makes no second task. Tasks are made as the member who set it up (or last changed its templates),
+  with their rights: once they may no longer add to the pipe, the webhook is refused. At most 60 tasks a minute.
 - **Slack, Mattermost, Microsoft Teams, Discord** — a webhook can post to a chat channel instead: choose its format
   and paste the channel's incoming webhook address (for Teams, a *Workflows* webhook). Each event becomes a short
   message with a link to the task (*Alice moved TP-12 “Quote” to Done*), comments quoted up to 300 characters, in the
