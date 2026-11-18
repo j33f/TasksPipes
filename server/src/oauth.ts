@@ -38,7 +38,8 @@ export const issuer = () => config.appUrl;
 export const mcpResource = () => `${config.appUrl}/mcp`;
 /** Where clients learn how to get a token for /mcp (in the 401 challenge). */
 export const resourceMetadataUrl = () => `${config.appUrl}/.well-known/oauth-protected-resource/mcp`;
-const sameResource = (r: string) => r.replace(/\/+$/, "") === mcpResource();
+/** Whether a client's `resource` names /mcp (with or without a trailing slash). Compared, never parsed with a regex. */
+const sameResource = (r: string) => r === mcpResource() || r === `${mcpResource()}/`;
 
 // ---- Clients ------------------------------------------------------------------------------------------------------
 
