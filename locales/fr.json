@@ -144,6 +144,7 @@
     "Copy a branch name for this task": "Copier un nom de branche pour cette tâche",
     "Copy the link": "Copier le lien",
     "Copy this token now: it will not be shown again.": "Copiez ce jeton maintenant : il ne sera plus affiché.",
+    "asked": "demandé",
     "Connected with OAuth": "Connecté avec OAuth",
     "Connect an application": "Connecter une application",
     "“{name}” asks to work on your tasks as an AI agent, with your rights.": "« {name} » demande à travailler sur vos tâches en tant qu'agent IA, avec vos droits.",
