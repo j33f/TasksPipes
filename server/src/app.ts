@@ -90,6 +90,10 @@ export async function buildApp({ logger = true, web = true }: AppOptions = {}) {
   await app.register(apiRoutes, { prefix: "/api" });
   await app.register(gitWebhooks);
 
+  // Liveness: the process answers. Reaches nothing else, so that a database outage does not get every instance
+  // restarted (Kubernetes liveness probes); readiness is /healthz.
+  app.get("/livez", async () => ({ ok: true }));
+
   // Container health checks call it every 30 s; it reaches the database, so it is limited too.
   app.get("/healthz", rateLimited({ name: "healthz", max: 120, timeWindow: 60_000 }), async () => {
     await pool.query("SELECT 1");

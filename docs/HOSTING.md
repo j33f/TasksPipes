@@ -148,6 +148,24 @@ the setting in the app. Those settings are: `SMTP_*`, `MAIL_FROM`, `OUTLINE_ENAB
 | `LOCALES_DIR` | Folder of the language files, when they are not next to the server (`locales/`, found by default). |
 | `SESSION_DAYS` | Session length, 30 days by default. |
 | `LOG_LEVEL` | `info` by default. |
+| `HOST` | Address the server listens on: `0.0.0.0` by default (all interfaces, as in a container). Set `127.0.0.1` when the server runs without Docker behind a proxy on the same machine. |
+| `REALTIME_SHARED` | `false` turns off what lets [several instances](#several-instances) share one database: live updates and "who has a page open" go through PostgreSQL (`LISTEN`/`NOTIFY`). On by default, harmless with a single instance. |
+| `LISTEN_DATABASE_URL` | Connection used to `LISTEN` for the other instances, when `DATABASE_URL` goes through a pooler that does not support it (PgBouncer in transaction mode). Default: `DATABASE_URL`. |
+
+## Several instances
+
+TasksPipes can run as several instances on one PostgreSQL database (several containers behind a load balancer, or Kubernetes),
+with nothing to turn on:
+
+- Sessions, pictures and settings live in the database; no instance keeps files of its own, and requests need no sticky sessions.
+- Background work (recurring tasks, e-mails, push messages, webhooks, reports) is claimed in the database, so each item is handled once.
+- Live updates reach the pages open on every instance: each instance passes them on to the others through PostgreSQL
+  (`LISTEN`/`NOTIFY`), along with who has a page open (no e-mail is sent to someone already in the app).
+- Instances starting together take turns to bring the database schema up to date.
+
+Give every instance the same `APP_SECRET`, and the same `REDIS_URL` so that rate limits are counted once for all. Health checks:
+`/livez` answers as long as the process runs (liveness), `/healthz` also reaches the database (readiness).
+[One-click updates](#one-click-updates) only apply to the Docker Compose setup.
 
 ## Signing in with Outline
 

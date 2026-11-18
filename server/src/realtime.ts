@@ -2,15 +2,31 @@
  * Live notifications over WebSocket (GET /api/events), authenticated by the session cookie.
  * The page closes its socket when left idle and reopens it on return; nothing is queued meanwhile:
  * on reconnecting, the page reloads its data.
+ *
+ * Several instances of the app (docs/KUBERNETES.md): each one delivers to the pages connected to it first, as a
+ * single instance does, then passes the event on to the others through PostgreSQL (NOTIFY on one channel, every
+ * instance LISTENs), which deliver it to theirs. Who has a page open is kept in `live_presence` the same way.
+ * REALTIME_SHARED=false turns both off; a lost LISTEN connection only stops what comes from the other instances.
  */
-import type { FastifyInstance } from "fastify";
+import { randomUUID } from "node:crypto";
+import pg from "pg";
+import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import websocket from "@fastify/websocket";
 import type { WebSocket } from "@fastify/websocket";
 import { config } from "./config.js";
-import { query } from "./db.js";
+import { one, query } from "./db.js";
 
 const sockets = new Map<string, Set<WebSocket>>();
 const alive = new WeakSet<WebSocket>();
+
+/** This process, among the instances sharing the database. */
+const INSTANCE = randomUUID();
+const CHANNEL = "taskspipes_live";
+/** NOTIFY payloads are limited to 8000 bytes. */
+const MAX_PAYLOAD = 7900;
+/** A page counts as open on another instance while that instance saw it within this delay (it refreshes every 30 s). */
+const PRESENCE_TTL = "90 seconds";
+const RETRY_MS = 5_000;
 
 export interface LiveEvent {
   /**
@@ -24,6 +40,12 @@ export interface LiveEvent {
   reason?: string;
 }
 
+/** What instances pass on to each other. */
+type Shared =
+  | { kind: "user"; userId: string; message: string }
+  | { kind: "space"; spaceId: string; except?: string; message: string }
+  | { kind: "close"; userId: string };
+
 export async function realtime(app: FastifyInstance) {
   await app.register(websocket, { options: { maxPayload: 1024 } });
 
@@ -36,7 +58,10 @@ export async function realtime(app: FastifyInstance) {
     }
     const userId = req.user.id;
     let set = sockets.get(userId);
-    if (!set) sockets.set(userId, (set = new Set()));
+    if (!set) {
+      sockets.set(userId, (set = new Set()));
+      presence("on", userId);
+    }
     set.add(socket);
     alive.add(socket);
     socket.on("pong", () => alive.add(socket));
@@ -45,11 +70,16 @@ export async function realtime(app: FastifyInstance) {
     socket.on("message", () => {}); // nothing is expected from the page
     socket.on("close", () => {
       set!.delete(socket);
-      if (!set!.size) sockets.delete(userId);
+      // The set may already be gone (closeUserConnections) and replaced by a newer page's.
+      if (!set!.size && sockets.get(userId) === set) {
+        sockets.delete(userId);
+        presence("off", userId);
+      }
     });
   });
 
-  // Drops connections that stopped answering (sleeping phone, lost network).
+  // Drops connections that stopped answering (sleeping phone, lost network), and tells the other instances who
+  // is still here.
   const timer = setInterval(() => {
     for (const set of sockets.values()) {
       for (const s of set) {
@@ -61,37 +91,179 @@ export async function realtime(app: FastifyInstance) {
         s.ping();
       }
     }
+    refreshPresence();
   }, 30_000);
   timer.unref();
+
+  if (config.realtimeShared) {
+    const shared = listen(app.log);
+    app.addHook("onClose", async () => {
+      await shared.stop();
+      await query(`DELETE FROM live_presence WHERE instance_id = $1`, [INSTANCE]).catch(() => {});
+    });
+  }
   app.addHook("onClose", async () => clearInterval(timer));
 }
 
-/** Notifies one person (all their open pages). */
-export function notifyUser(userId: string, event: LiveEvent) {
-  const message = JSON.stringify(event);
+// ---- Delivery to the pages connected to this instance ----------------------------------------------------------
+
+function sendToUser(userId: string, message: string) {
   for (const s of sockets.get(userId) ?? []) if (s.readyState === s.OPEN) s.send(message);
 }
 
-/** Notifies the members of a space (but not the person who acted). Never throws. */
-export async function notifySpace(spaceId: string, event: Omit<LiveEvent, "spaceId">, exceptUserId?: string) {
+async function sendToSpace(spaceId: string, message: string, exceptUserId?: string) {
   if (!sockets.size) return;
   try {
     const { rows } = await query(`SELECT user_id FROM space_members WHERE space_id = $1`, [spaceId]);
-    const message = JSON.stringify({ ...event, spaceId });
-    for (const { user_id } of rows) {
-      if (user_id === exceptUserId) continue;
-      for (const s of sockets.get(user_id) ?? []) if (s.readyState === s.OPEN) s.send(message);
-    }
+    for (const { user_id } of rows) if (user_id !== exceptUserId) sendToUser(user_id, message);
   } catch {
     // Live updates are a convenience: the page also reloads its data when it comes back.
   }
 }
 
-/** Closes the open pages of someone whose access ended (disabled, deleted, signed out by Outline). */
-export function closeUserConnections(userId: string) {
-  for (const s of sockets.get(userId) ?? []) s.close(4401, "unauthorized");
+function closeLocal(userId: string) {
+  const set = sockets.get(userId);
+  if (!set) return;
   sockets.delete(userId);
+  presence("off", userId);
+  for (const s of set) s.close(4401, "unauthorized");
 }
 
-/** Whether someone has a page of the app open and in use (pages close their connection when left idle). */
-export const isOnline = (userId: string) => (sockets.get(userId)?.size ?? 0) > 0;
+// ---- Sharing with the other instances ---------------------------------------------------------------------------
+
+/** Passes an event on to the other instances. Never throws, never waits. */
+function publish(m: Shared) {
+  if (!config.realtimeShared) return;
+  const payload = JSON.stringify({ from: INSTANCE, ...m });
+  if (Buffer.byteLength(payload) > MAX_PAYLOAD) return;
+  query(`SELECT pg_notify($1, $2)`, [CHANNEL, payload]).catch(() => {});
+}
+
+/** An event from another instance, for the pages connected here. */
+function receive(payload: string) {
+  let m: Shared & { from?: string };
+  try {
+    m = JSON.parse(payload);
+  } catch {
+    return;
+  }
+  if (m.from === INSTANCE) return; // already delivered here
+  if (m.kind === "user") sendToUser(m.userId, m.message);
+  else if (m.kind === "space") void sendToSpace(m.spaceId, m.message, m.except);
+  else if (m.kind === "close") closeLocal(m.userId);
+}
+
+/** LISTENs on its own connection, and keeps trying when it is lost. */
+function listen(log: FastifyBaseLogger) {
+  let client: pg.Client | undefined;
+  let retry: NodeJS.Timeout | undefined;
+  let stopped = false;
+  let failing = false;
+
+  const later = () => {
+    if (!stopped) retry = setTimeout(connect, RETRY_MS).unref();
+  };
+  const connect = async () => {
+    const c = new pg.Client({ connectionString: config.listenDatabaseUrl });
+    c.on("notification", (n) => n.channel === CHANNEL && n.payload && receive(n.payload));
+    c.on("error", () => {}); // followed by "end"
+    c.on("end", () => {
+      if (client !== c) return;
+      client = undefined;
+      if (stopped) return;
+      failing = true;
+      log.warn("Live updates from the other instances interrupted, reconnecting");
+      later();
+    });
+    try {
+      await c.connect();
+      await c.query(`LISTEN ${CHANNEL}`);
+      if (stopped) return void c.end().catch(() => {});
+      client = c;
+      if (failing) log.info("Live updates from the other instances back");
+      failing = false;
+    } catch (err) {
+      c.end().catch(() => {});
+      // Said once, not every 5 seconds.
+      if (!failing) log.warn({ err }, "Cannot listen for the other instances' live updates (REALTIME_SHARED, LISTEN_DATABASE_URL), retrying");
+      failing = true;
+      later();
+    }
+  };
+  void connect();
+
+  return {
+    async stop() {
+      stopped = true;
+      clearTimeout(retry);
+      const c = client;
+      client = undefined;
+      await c?.end().catch(() => {});
+    },
+  };
+}
+
+/** Records, for the other instances, that someone has a page open here or no longer. Never throws, never waits. */
+function presence(state: "on" | "off", userId: string) {
+  if (!config.realtimeShared) return;
+  const sql =
+    state === "on"
+      ? `INSERT INTO live_presence (instance_id, user_id) VALUES ($1, $2)
+         ON CONFLICT (user_id, instance_id) DO UPDATE SET seen_at = now()`
+      : `DELETE FROM live_presence WHERE instance_id = $1 AND user_id = $2`;
+  query(sql, [INSTANCE, userId]).catch(() => {});
+}
+
+/** Every 30 s: the people with a page open here are still here; anyone else recorded for this instance is not. */
+function refreshPresence() {
+  if (!config.realtimeShared) return;
+  const here = [...sockets.keys()];
+  query(
+    `WITH gone AS (DELETE FROM live_presence WHERE instance_id = $1 AND NOT (user_id = ANY($2::uuid[])))
+     INSERT INTO live_presence (instance_id, user_id) SELECT $1, u FROM unnest($2::uuid[]) AS u
+     WHERE EXISTS (SELECT 1 FROM users WHERE id = u)
+     ON CONFLICT (user_id, instance_id) DO UPDATE SET seen_at = now()`,
+    [INSTANCE, here]
+  ).catch(() => {});
+}
+
+// ---- What the rest of the app calls -----------------------------------------------------------------------------
+
+/** Notifies one person (all their open pages, on every instance). */
+export function notifyUser(userId: string, event: LiveEvent) {
+  const message = JSON.stringify(event);
+  sendToUser(userId, message);
+  publish({ kind: "user", userId, message });
+}
+
+/** Notifies the members of a space (but not the person who acted), on every instance. Never throws. */
+export async function notifySpace(spaceId: string, event: Omit<LiveEvent, "spaceId">, exceptUserId?: string) {
+  const message = JSON.stringify({ ...event, spaceId });
+  await sendToSpace(spaceId, message, exceptUserId);
+  publish({ kind: "space", spaceId, except: exceptUserId, message });
+}
+
+/** Closes the open pages of someone whose access ended (disabled, deleted, signed out by Outline), on every instance. */
+export function closeUserConnections(userId: string) {
+  closeLocal(userId);
+  publish({ kind: "close", userId });
+}
+
+/**
+ * Whether someone has a page of the app open and in use (pages close their connection when left idle), here or on
+ * another instance.
+ */
+export async function isOnline(userId: string): Promise<boolean> {
+  if ((sockets.get(userId)?.size ?? 0) > 0) return true;
+  if (!config.realtimeShared) return false;
+  try {
+    return Boolean(
+      await one(
+        `SELECT 1 FROM live_presence WHERE user_id = $1 AND instance_id <> $2 AND seen_at > now() - interval '${PRESENCE_TTL}'`,
+        [userId, INSTANCE]
+      )
+    );
+  } catch {
+    return false;
+  }
+}
