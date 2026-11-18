@@ -144,6 +144,8 @@
     "Copy a branch name for this task": "Copiar um nome de branch para esta tarefa",
     "Copy the link": "Copiar o link",
     "Copy this token now: it will not be shown again.": "Copie este token agora: ele não será mostrado de novo.",
+    "Never expires": "Nunca expira",
+    "never expires": "nunca expira",
     "A space": "Um espaço",
     "Disconnect the agent “{name}”? It can no longer reach your tasks.": "Desconectar o agente “{name}”? Ele não poderá mais acessar suas tarefas.",
     "AI agents (MCP)": "Agentes de IA (MCP)",

@@ -18,7 +18,8 @@
   let send = $state(false);
   let everywhere = $state(true);
   let chosen = $state<string[]>([]);
-  let days = $state(30);
+  /** null: never expires. */
+  let days = $state<number | null>(30);
   let created = $state<string | null>(null);
   let error = $state("");
 
@@ -94,7 +95,7 @@
         {#if tk.scopes.includes("tasks:send")}<span class="badge warn">{t("Sends tasks to others")}</span>{/if}
         <span class="small muted">
           {tk.spaceIds ? tk.spaceIds.map(spaceName).join(", ") : t("All my spaces")}
-          · {tk.expired ? t("expired") : t("expires on {date}", { date: formatDate(tk.expiresAt) })}
+          · {tk.expired ? t("expired") : tk.expiresAt ? t("expires on {date}", { date: formatDate(tk.expiresAt) }) : t("never expires")}
           · {tk.lastUsedAt ? t("used {when}", { when: relativeTime(tk.lastUsedAt) }) : t("never used")}
         </span>
       </span>
@@ -128,6 +129,7 @@
         <option value={7}>{t("7 days")}</option>
         <option value={30}>{t("30 days")}</option>
         <option value={90}>{t("90 days")}</option>
+        <option value={null}>{t("Never expires")}</option>
       </select>
       <button class="btn small" disabled={!name.trim() || (!everywhere && !chosen.length)}>{t("Connect an agent")}</button>
     </div>

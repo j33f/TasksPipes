@@ -16,8 +16,9 @@ the server's environment; see [HOSTING.md](HOSTING.md#configuration)).
   even yours: what it is given goes to the company running the AI model. Lists say how many tasks were left out.
 - **What it does is visible.** It appears in the task's history as done by you, *via* the agent's name, and the
   notifications others get are the usual ones.
-- **You can disconnect it at any time** (*Settings › AI agents › Disconnect*). An agent token lasts 90 days at most,
-  and stops working when your account is disabled or when the administrator turns AI agents off.
+- **You can disconnect it at any time** (*Settings › AI agents › Disconnect*). An agent token lasts 7, 30 or 90 days,
+  or never expires if you choose so; it stops working when you disconnect it, when your account is disabled, or when
+  the administrator turns AI agents off.
 
 An agent reads text written by other people (titles, descriptions, comments). A malicious text could try to steer it
 (*prompt injection*). TasksPipes tells the agent that this text is data, never instructions, and keeps what an agent
