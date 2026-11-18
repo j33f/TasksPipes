@@ -14,6 +14,8 @@ import { HttpError, bad } from "./errors.js";
 import { createTask } from "./routes.js";
 import { enforceLimit } from "./rate-limit.js";
 import { tr, type Locale } from "./i18n.js";
+import { plainMentions } from "./mentions.js";
+import { pool } from "./db.js";
 
 /** Templates of a webhook: for each field of the task, text with {{paths}} into the body. Empty: the field of that name. */
 export interface IncomingTemplates {
@@ -24,6 +26,8 @@ export interface IncomingTemplates {
 }
 const FIELDS = ["title", "description", "dueDate", "externalId"] as const;
 const MAX_TEMPLATE = 2000;
+/** A task's worth of text: far more is not a task (and is not parsed). */
+const MAX_BODY = 256 * 1024;
 
 /** The templates as one may set them: known fields only, text, not too long. */
 export function cleanTemplates(input: unknown): IncomingTemplates {
@@ -61,9 +65,10 @@ export function taskFrom(body: unknown, templates: IncomingTemplates) {
   const pick = (f: (typeof FIELDS)[number]) => (templates[f] !== undefined ? render(templates[f]!, body) : asText(at(body, f)));
   const due = pick("dueDate").trim();
   const priority = Number(at(body, "priority"));
+  // Text from another application cannot @mention people: mentions become plain text, notifying no one.
   return {
-    title: pick("title").trim().slice(0, 300),
-    description: pick("description").trim().slice(0, 20000),
+    title: plainMentions(pick("title")).trim().slice(0, 300),
+    description: plainMentions(pick("description")).trim().slice(0, 20000),
     // A date, or a date and time (its day).
     dueDate: /^\d{4}-\d{2}-\d{2}/.test(due) ? due.slice(0, 10) : null,
     priority: Number.isInteger(priority) && priority >= 1 && priority <= 4 ? priority : null,
@@ -94,6 +99,7 @@ export async function receive(
   raw: Buffer,
   headers: Record<string, string | string[] | undefined>
 ): Promise<{ status: number; body: object }> {
+  if (raw.length > MAX_BODY) return { status: 413, body: { error: "The body is too large (256 kB at most)" } };
   if (!authorized(decrypt(integ.secret)!, raw, headers)) return { status: 401, body: { error: "Invalid secret or signature" } };
   // Many tasks quickly is a loop on the other side: at most a few a minute per webhook.
   await enforceLimit({ name: "incoming-tasks", max: 60, timeWindow: 60_000 }, integ.id);
@@ -113,6 +119,25 @@ export async function receive(
     : null;
   if (!author) return { status: 403, body: { error: "The person who set up this webhook can no longer create tasks" } };
 
+  // The same externalId sent twice at once (a retry while the first is handled) makes one task: one at a time.
+  const lock = t.externalId ? await pool.connect() : null;
+  try {
+    if (lock) await lock.query(`SELECT pg_advisory_lock(hashtextextended($1, 0))`, [`incoming:${integ.id}:${t.externalId}`]);
+    return await createOnce(integ, t, author as { id: string; name: string; locale: string | null });
+  } finally {
+    if (lock) {
+      await lock.query(`SELECT pg_advisory_unlock(hashtextextended($1, 0))`, [`incoming:${integ.id}:${t.externalId}`]).catch(() => {});
+      lock.release();
+    }
+  }
+}
+
+/** The task, unless this externalId was already received. */
+async function createOnce(
+  integ: { id: string; pipe_id: string },
+  t: ReturnType<typeof taskFrom>,
+  author: { id: string; name: string; locale: string | null }
+): Promise<{ status: number; body: object }> {
   if (t.externalId) {
     const seen = await one(
       `SELECT i.task_id, t.number FROM incoming_items i JOIN tasks t ON t.id = i.task_id WHERE i.integration_id = $1 AND i.external_id = $2`,

@@ -19,13 +19,15 @@ Manifests (Kustomize) are in [`deploy/kubernetes/`](../deploy/kubernetes):
 
 ```shell
 kind create cluster
+cp deploy/kubernetes/example/secret.env.example deploy/kubernetes/example/secret.env
+# fill secret.env in: APP_SECRET and POSTGRES_PASSWORD from `openssl rand -hex 32`, the password in DATABASE_URL too
 kubectl apply -k deploy/kubernetes/example
 kubectl -n taskspipes rollout status deployment/taskspipes
 kubectl -n taskspipes port-forward svc/taskspipes 8080:80     # then http://localhost:8080
 ```
 
-The example's Secret holds placeholder values, and its PostgreSQL has no replication: it is for trying, not for
-production.
+The example's Secret comes from `secret.env`, which git ignores: without it, nothing is applied, so no instance runs
+with a secret written in the repository. Its PostgreSQL has no replication: it is for trying, not for production.
 
 ## In production
 

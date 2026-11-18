@@ -9,6 +9,9 @@ import { notifyUser } from "./realtime.js";
 const MENTION = /@\[([^\]\n]{1,100})\]\(mention:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
 
 /** The people a text mentions, each once. */
+/** Mentions turned into plain text ("@Name"): for what comes from outside (incoming webhooks), which may not notify people. */
+export const plainMentions = (text: string) => text.replace(MENTION, (_m, name: string) => `@${name}`);
+
 export function mentionedIds(text: string | null | undefined): string[] {
   return [...new Set([...String(text ?? "").matchAll(MENTION)].map((m) => m[2].toLowerCase()))];
 }
