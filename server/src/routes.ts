@@ -577,7 +577,11 @@ export async function apiRoutes(app: FastifyInstance) {
     outlineUrl: req.outlineUrl,
     // Administrator of the instance (ADMIN_EMAILS): the administration page is offered.
     admin: await requestIsAdmin(req),
-    features: { invitations: config.allowEmailInvitations, notifications: notificationState.enabled, outline: config.outlineEnabled },
+    features: {
+      invitations: config.allowEmailInvitations, notifications: notificationState.enabled, outline: config.outlineEnabled,
+      // AI agents over MCP (mcp.ts): agent tokens can be made.
+      mcp: config.mcpEnabled,
+    },
     // Choices of notifications: by e-mail when it is set up, and for push notifications.
     notificationPrefs: prefsOf((await one(`SELECT notification_prefs FROM users WHERE id = $1`, [me(req)]))?.notification_prefs),
   }));

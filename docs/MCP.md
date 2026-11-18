@@ -1,0 +1,64 @@
+# AI agents (MCP)
+
+TasksPipes can let an AI assistant (Claude, Cursor, any client of the [Model Context Protocol](https://modelcontextprotocol.io))
+work on your tasks for you: find what is due, sum up a pipe, create and update tasks, comment, log time.
+
+It is **off until an administrator turns it on** (*Administration › Settings › AI agents*, or `MCP_ENABLED=true` in
+the server's environment; see [HOSTING.md](HOSTING.md#configuration)).
+
+## What an agent can and cannot do
+
+- **It acts as you, never more.** Every tool goes through the same routes and checks as the app, with your rights.
+- **It reads; the rest is up to you.** When you connect an agent you choose what it may do besides reading: create
+  and change tasks, comment, log your time, send tasks to other people. Nothing it can do deletes anything.
+- **Only where you allow it.** All your spaces, or only the ones you pick: the others do not exist for it.
+- **Confidential content stays in the app.** Tasks of confidential and team-only pipes are never shown to an agent,
+  even yours: what it is given goes to the company running the AI model. Lists say how many tasks were left out.
+- **What it does is visible.** It appears in the task's history as done by you, *via* the agent's name, and the
+  notifications others get are the usual ones.
+- **You can disconnect it at any time** (*Settings › AI agents › Disconnect*). An agent token lasts 90 days at most,
+  and stops working when your account is disabled or when the administrator turns AI agents off.
+
+An agent reads text written by other people (titles, descriptions, comments). A malicious text could try to steer it
+(*prompt injection*). TasksPipes tells the agent that this text is data, never instructions, and keeps what an agent
+may do small, but cannot rule it out: give an agent no more than it needs, and keep an eye on its history.
+
+## Connecting an agent
+
+1. *Account menu › Settings › AI agents (MCP)*: name the agent, choose what it may do and where, then *Connect an agent*.
+2. Copy the token: it is shown once.
+3. Give your client the MCP address, `https://<your instance>/mcp`, and the token as a bearer token.
+
+With **Claude Code**:
+
+```shell
+claude mcp add --transport http taskspipes https://tasks.example.com/mcp --header "Authorization: Bearer tp_…"
+```
+
+Other clients take the same two things: the address (Streamable HTTP transport) and the header
+`Authorization: Bearer tp_…`. Clients that only speak stdio can go through a bridge such as
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote).
+
+Remote connectors that sign in with OAuth (such as those added in claude.ai) are not supported yet.
+
+## Tools
+
+| Tool | What it does | Needs |
+| --- | --- | --- |
+| `whoami` | Who the agent acts for, and what it may do | — |
+| `list_spaces`, `get_space` | Your spaces and their pipes | — |
+| `get_pipe` | A pipe, its stages and tasks | — |
+| `my_tasks` | Your tasks still to do | — |
+| `search_tasks` | Search the tasks you can see | — |
+| `get_task` | A task with its description, sub-tasks and history | — |
+| `create_task`, `update_task`, `move_task` | Create a task in a pipe, change it, move it to another pipe | *Create and change tasks* |
+| `add_comment` | Comment on a task | *Comment* |
+| `log_time` | Log your time on a task | *Log my time* |
+| `send_task` | Send a task to someone's incoming | *Send tasks to other people* |
+
+## For administrators
+
+- The endpoint is `POST /mcp`, stateless: it works the same with [several instances](HOSTING.md#several-instances).
+- It only takes agent tokens; personal access tokens are refused there, and agent tokens are refused on `/api/v1`.
+- Agent requests count in the API rate limit of their token.
+- Turning AI agents off makes `/mcp` answer 404 at once; existing agent tokens stop working until it is turned on again.

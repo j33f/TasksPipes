@@ -10,6 +10,7 @@
   import InviteModal from "./InviteModal.svelte";
   import DataSection from "./DataSection.svelte";
   import TokensSection from "./TokensSection.svelte";
+  import AgentsSection from "./AgentsSection.svelte";
   import { LOCALES, prefs, t, type Locale, type Theme } from "../lib/i18n.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
@@ -344,6 +345,7 @@
     {/each}
   </div>
   <TokensSection />
+  {#if app.me?.features.mcp}<AgentsSection />{/if}
   <DataSection />
 </Modal>
 

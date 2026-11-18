@@ -277,7 +277,7 @@
               <span class="event-icon"><Icon name={eventIcon(e.type)} size={14} /></span>
               <div class="e-body">
                 <div class="e-head">
-                  <strong>{e.actor.name}</strong> {eventSummary(e)}
+                  <strong>{e.actor.name}</strong>{#if e.via}<span class="e-via" title={e.via.kind === "agent" ? t("Done by an AI agent acting for this person") : t("Done through an access token")}> {t("via {name}", { name: e.via.name })}</span>{/if} {eventSummary(e)}
                   <span class="e-time" title={formatDateTime(e.createdAt)}>{relativeTime(e.createdAt)}</span>
                 </div>
                 {#if eventChanges(e).length}
@@ -487,6 +487,7 @@
   .e-head { color: var(--text-secondary); }
   .e-head strong { color: var(--text); font-weight: 600; }
   .e-time { color: var(--text-tertiary); font-size: 12px; margin-left: 6px; }
+  .e-via { color: var(--text-tertiary); font-style: italic; }
   .e-changes { margin: 4px 0 0; padding: 0; list-style: none; color: var(--text-secondary); font-size: 13px; }
   .e-changes li::before { content: "→ "; color: var(--text-tertiary); }
   .e-comment { margin-top: 6px; background: var(--card-background); box-shadow: var(--card-shadow); border-radius: 8px; padding: 8px 12px; }
