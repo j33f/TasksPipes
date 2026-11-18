@@ -15,7 +15,7 @@ import { LIMITS, enforceLimit, rateLimited } from "./rate-limit.js";
 export const V1 = "/api/v1";
 const TOKEN = /^tp_[A-Za-z0-9_-]{43}$/;
 export const MAX_TOKEN_DAYS = 366;
-/** Agent tokens (MCP) live shorter: they sit in an AI client's configuration. */
+/** Agent tokens (MCP) live 90 days at most when they expire; any token may also never expire (days: null). */
 export const MAX_AGENT_TOKEN_DAYS = 90;
 /** What an agent token may do over MCP (mcp.ts); reading is always among them. */
 export const MCP_SCOPES = ["tasks:read", "tasks:write", "comments:write", "time:write", "tasks:send"] as const;
@@ -55,7 +55,8 @@ export async function tokenUser(header: string | undefined) {
   const row = await one(
     `UPDATE api_tokens t SET last_used_at = CASE WHEN t.last_used_at > now() - interval '1 minute' THEN t.last_used_at ELSE now() END
      FROM users u
-     WHERE t.token_hash = $1 AND t.revoked_at IS NULL AND t.expires_at > now() AND u.id = t.user_id AND u.disabled_at IS NULL
+     WHERE t.token_hash = $1 AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > now())
+       AND u.id = t.user_id AND u.disabled_at IS NULL
      RETURNING t.id, t.scope, t.kind, t.name AS token_name, t.scopes, t.space_ids, u.id AS user_id, u.name, u.email, u.avatar_url, u.auth_kind, u.totp_secret IS NOT NULL AS totp, u.locale, u.theme`,
     [hash(m[1])]
   );
@@ -276,12 +277,12 @@ export async function tokenRoutes(app: FastifyInstance) {
     return rows.map((t) => ({
       id: t.id, name: t.name, prefix: t.prefix, scope: t.scope, kind: t.kind, scopes: t.scopes ?? [], spaceIds: t.space_ids,
       expiresAt: t.expires_at, lastUsedAt: t.last_used_at, createdAt: t.created_at,
-      expired: new Date(t.expires_at) <= new Date(),
+      expired: t.expires_at !== null && new Date(t.expires_at) <= new Date(),
     }));
   });
 
   // The token is in this answer only: what is kept is its hash.
-  type TokenBody = { name?: string; scope?: string; days?: number; kind?: string; scopes?: unknown; spaceIds?: unknown };
+  type TokenBody = { name?: string; scope?: string; days?: number | null; kind?: string; scopes?: unknown; spaceIds?: unknown };
   app.post<{ Body: TokenBody }>("/me/tokens", rateLimited(LIMITS.apiTokens), async (req) => {
     const name = String(req.body?.name ?? "").trim().slice(0, 100);
     if (!name) throw bad("{label} is required", { label: "Name" });
@@ -307,12 +308,14 @@ export async function tokenRoutes(app: FastifyInstance) {
       if (!scope) throw bad("Choose what the token may do");
     }
     const maxDays = agent ? MAX_AGENT_TOKEN_DAYS : MAX_TOKEN_DAYS;
-    const days = Number(req.body?.days);
-    if (!Number.isInteger(days) || days < 1 || days > maxDays) throw bad("A token expires within {n} days", { n: maxDays });
+    // days: null — the token never expires (it stays revocable, and dies with its owner's account).
+    const forever = req.body?.days === null;
+    const days = forever ? null : Number(req.body?.days);
+    if (!forever && (!Number.isInteger(days) || days! < 1 || days! > maxDays)) throw bad("A token expires within {n} days", { n: maxDays });
     const token = `tp_${crypto.randomBytes(32).toString("base64url")}`;
     const row = await one(
       `INSERT INTO api_tokens (user_id, name, token_hash, prefix, scope, kind, scopes, space_ids, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now() + make_interval(days => $9))
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $9::int IS NULL THEN NULL ELSE now() + make_interval(days => $9::int) END)
        RETURNING id, expires_at`,
       [req.user!.id, name, hash(token), token.slice(0, 10), scope, agent ? "agent" : "personal", scopes, spaceIds, days]
     );
