@@ -48,11 +48,12 @@ describe("OAuth consent", () => {
     expect(calls[0].url).toBe("/api/oauth/requests/abc");
   });
 
-  it("ticks what the application asked for, and sends what the person chose", async () => {
+  it("grants reading only unless the person ticks more, showing what was asked, and sends their choice", async () => {
     render(OAuthConsent, {});
-    const write = (await screen.findByLabelText("Create and change tasks")) as HTMLInputElement;
-    expect(write.checked).toBe(true);
-    expect((screen.getByLabelText("Comment") as HTMLInputElement).checked).toBe(false);
+    const write = (await screen.findByLabelText(/Create and change tasks/)) as HTMLInputElement;
+    expect(write.checked).toBe(false);
+    expect(screen.getAllByText("asked")).toHaveLength(1);
+    await userEvent.click(write);
     await userEvent.click(screen.getByLabelText("Only these:"));
     expect((screen.getByRole("button", { name: "Allow" }) as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(screen.getByLabelText("Design"));
