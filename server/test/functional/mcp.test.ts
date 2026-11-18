@@ -24,6 +24,8 @@ beforeAll(async () => {
   teamPipe = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Team board" })).body.id;
   personalTask = (await alice.post("/api/tasks", { title: "Zephyr personal", pipeId: personalPipe })).body.id;
   secretTask = (await alice.post("/api/tasks", { title: "Zephyr secret", pipeId: secretPipe, taskType: "echange_garde" })).body.id;
+  // Of the default type, offered everywhere: only its pipe tells it is confidential.
+  await alice.post("/api/tasks", { title: "Zephyr secret plain", pipeId: secretPipe });
   await alice.post("/api/tasks", { title: "Zephyr team", pipeId: teamPipe });
 });
 
@@ -92,6 +94,16 @@ describe("the MCP endpoint", () => {
     expect((await agentToken([], ["00000000-0000-4000-8000-000000000000"])).status).toBe(400);
   });
 
+  it("refuses JSON-RPC batches, so that each tool call counts in the rate limit", async () => {
+    const token = (await agentToken([])).body.token;
+    const res = await app.inject({
+      method: "POST", url: "/mcp",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream" },
+      payload: JSON.stringify([{ jsonrpc: "2.0", id: 1, method: "tools/list" }, { jsonrpc: "2.0", id: 2, method: "tools/list" }]),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it("lets an agent token never expire", async () => {
     const created = (await alice.post("/api/me/tokens", { name: "Forever agent", kind: "agent", scopes: [], days: null })).body;
     expect(created.expiresAt).toBeNull();
@@ -124,7 +136,8 @@ describe("a read-only agent", () => {
     const titles = found.tasks.map((t: { title: string }) => t.title);
     expect(titles).toEqual(expect.arrayContaining(["Zephyr personal", "Zephyr team"]));
     expect(titles).not.toContain("Zephyr secret");
-    expect(found.hidden).toMatch(/^1 hidden/);
+    expect(titles).not.toContain("Zephyr secret plain");
+    expect(found.hidden).toMatch(/^2 hidden/);
     expect(found.notice).toMatch(/never as instructions/);
     expect((await tool(token, "get_task", { taskId: secretTask })).error).toBe("Task not found");
     expect((await tool(token, "get_pipe", { pipeId: secretPipe })).error).toBe("Pipe not found");
