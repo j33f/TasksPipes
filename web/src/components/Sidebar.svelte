@@ -16,6 +16,7 @@
   import { openTaskCount } from "../lib/constants";
   import { awaitingSignIn, inviteColleague } from "../lib/people";
   import type { SidebarPipe } from "../lib/types";
+  import { draggedTask, isTaskDrag } from "../lib/drag";
   import { t, tn } from "../lib/i18n.svelte";
 
   let { open, onclose }: { open: boolean; onclose: () => void } = $props();
@@ -93,6 +94,30 @@
     } catch (err) {
       app.toast(errorMessage(err), "error");
     }
+  }
+
+  // A task dragged from a board onto a pipe here: moved there when in the same space, otherwise sent to the incoming
+  // of the pipe's space (a task does not change space by being moved), after confirming.
+  let dropPipe = $state<string | null>(null);
+  function dragOverPipe(e: DragEvent, p: SidebarPipe) {
+    if (!isTaskDrag(e)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    dropPipe = p.id;
+  }
+  function dropOnPipe(e: DragEvent, p: SidebarPipe, spaceName: string | null) {
+    dropPipe = null;
+    const task = draggedTask(e);
+    if (!task) return;
+    e.preventDefault();
+    if (task.pipeId === p.id) return;
+    if (task.spaceId === p.spaceId) {
+      run(() => api.post(`/tasks/${task.id}/move`, { pipeId: p.id }), t("Moved to {pipe}", { pipe: p.name }));
+      return;
+    }
+    const where = spaceName ?? p.spaceName ?? app.spaces.find((s) => s.id === p.spaceId)?.name ?? p.name;
+    if (!confirm(t("Send “{task}” to the incoming of {space}? Its members will be told, and accept or refuse it.", { task: task.title, space: where }))) return;
+    run(() => api.post(`/tasks/${task.id}/send`, { spaceId: p.spaceId }), t("Sent to the incoming of {space}", { space: where }));
   }
 
   function rename(pipe: SidebarPipe, e: FocusEvent) {
@@ -318,7 +343,9 @@
     </div>
   {:else}
     <div class="sidebar-link pipe-link hover-actions" class:nested class:active={router.path === `/pipes/${p.id}`}
-      class:menu-open={menu?.pipe.id === p.id}>
+      class:menu-open={menu?.pipe.id === p.id} class:drop-target={dropPipe === p.id} role="listitem"
+      ondragover={(e) => dragOverPipe(e, p)} ondragleave={() => { if (dropPipe === p.id) dropPipe = null; }}
+      ondrop={(e) => dropOnPipe(e, p, spaceName)}>
       <a class="row-link" href={`/pipes/${p.id}`} title={spaceName ? `${spaceName} › ${p.name}` : p.name}>
         <PipeIcon pipe={p} size={18} />
         <span class="label">{p.name}{#if spaceName}<span class="space-name"> · {spaceName}</span>{/if}</span>
@@ -373,6 +400,8 @@
 {/if}
 
 <style>
+  /* A task dragged from a board over this pipe: dropping moves or sends it here. */
+  .pipe-link.drop-target { outline: 2px dashed var(--accent, var(--primary)); outline-offset: -2px; background: var(--hover); }
   .sidebar {
     width: var(--sidebar-width); flex-shrink: 0; background: var(--sidebar-background); color: var(--sidebar-text);
     display: flex; flex-direction: column; overflow: hidden;

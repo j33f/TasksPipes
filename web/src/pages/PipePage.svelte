@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { TASK_DRAG } from "../lib/drag";
   import { untrack } from "svelte";
   import { t } from "../lib/i18n.svelte";
   import { api, errorMessage } from "../lib/api";
@@ -334,7 +335,12 @@
               {#each tasks.filter((x) => x.id !== draggedId) as x, i (x.id)}
                 {#if drop?.stage === s.id && drop.lane === lane.id && drop.index === i}<div class="drop-indicator"></div>{/if}
                 <TaskCard task={x} draggable={pipe.canManage}
-                  ondragstart={(e) => { e.dataTransfer?.setData("text/plain", x.id); setTimeout(() => (draggedId = x.id)); }}
+                  ondragstart={(e) => {
+                    e.dataTransfer?.setData("text/plain", x.id);
+                    // For a pipe of the sidebar to take it (Sidebar.svelte).
+                    e.dataTransfer?.setData(TASK_DRAG, JSON.stringify({ id: x.id, title: x.title, pipeId: pipe!.id, spaceId: pipe!.space.id }));
+                    setTimeout(() => (draggedId = x.id));
+                  }}
                   ondragend={() => { draggedId = null; drop = null; }} />
               {/each}
               {#if drop?.stage === s.id && drop.lane === lane.id && drop.index >= tasks.filter((x) => x.id !== draggedId).length}<div class="drop-indicator"></div>{/if}
