@@ -781,6 +781,15 @@ CREATE TABLE IF NOT EXISTS backup_runs (
   notified_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS backup_runs_started_idx ON backup_runs(started_at DESC);
+
+-- Who has a page open, on which instance of the app (realtime.ts, with several instances): kept fresh every 30 s,
+-- forgotten after 90. Nothing worth keeping across a crash, hence unlogged.
+CREATE UNLOGGED TABLE IF NOT EXISTS live_presence (
+  instance_id uuid NOT NULL,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  seen_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, instance_id)
+);
 `;
 
 /**
@@ -857,9 +866,16 @@ export async function loadSettings(db: Queryable = pool) {
   setStoredSettings(values);
 }
 
+/** Key of the advisory lock held while the schema is brought up to date (any number of its own). */
+const MIGRATION_LOCK = 7_291_830_412;
+
 export async function migrate(log: FastifyBaseLogger) {
   for (let attempt = 1; ; attempt++) {
+    let lock: pg.PoolClient | undefined;
     try {
+      // Several instances starting together (a rolling update) take turns: concurrent CREATE/ALTER can fail.
+      lock = await pool.connect();
+      await lock.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK]);
       await pool.query(SCHEMA);
       await loadSettings();
       // Accounts made before several Outline servers were possible come from the configured one.
@@ -879,6 +895,12 @@ export async function migrate(log: FastifyBaseLogger) {
       if (attempt >= 30 || !["ECONNREFUSED", "57P03", "ENOTFOUND", "EAI_AGAIN"].includes(code)) throw err;
       log.warn({ code, attempt }, "Database not ready, retrying");
       await new Promise((r) => setTimeout(r, 1000));
+    } finally {
+      if (lock) {
+        // Released with the session anyway; unlocking first lets the next instance go on at once.
+        await lock.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK]).catch(() => {});
+        lock.release();
+      }
     }
   }
 }

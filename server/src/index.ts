@@ -104,5 +104,5 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-await app.listen({ port: config.port, host: "0.0.0.0" });
+await app.listen({ port: config.port, host: config.host });
 app.log.info({ version: config.version, outline: config.outlineUrl, oauth: config.oauthEnabled }, "TasksPipes ready");
