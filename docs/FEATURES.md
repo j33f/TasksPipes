@@ -471,7 +471,8 @@ Every hour, the sessions of Outline accounts are checked with Outline: when Outl
 
 **New versions.** Every hour, the server asks GitHub for the latest release of TasksPipes. When a newer one comes out,
 the administrators are told once, by e-mail and on their devices (push notifications); the **About** dialog then shows
-the new version to everyone, with a link to its release notes. Opening About checks again at once (at most once a
+the new version to everyone, with a link to its release notes. A release is only offered (and told) once it can be installed: its
+images are published on ghcr.io, a few minutes after the release. Opening About checks again at once (at most once a
 minute for the instance); administrators see there when it last checked, or why it could not (GitHub unreachable,
 an error answer). Turn it off in Settings › Updates (or `UPDATE_CHECK=false`).
 Where the host set up the updater, an administrator installs it **in one click** from About: the app restarts with
@@ -484,7 +485,8 @@ The app's styles, scripts and font (Inter) are served by TasksPipes itself, so o
 address to a third party. The only other server the browser reaches is your Outline server, for the profile pictures
 of Outline accounts; links you click (Outline documents, France Compétences pages…) open other sites, of course.
 On the server side, the check for new versions asks GitHub (`api.github.com`) for the latest release every hour,
-sending nothing but the server's version in its User-Agent; it can be turned off.
+sending nothing but the server's version in its User-Agent, and, when there is a newer one, GitHub's registry
+(`ghcr.io`) whether its images are published, anonymously; it can be turned off.
 
 ## Access rules
 
