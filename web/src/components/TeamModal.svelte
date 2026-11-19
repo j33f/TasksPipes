@@ -6,6 +6,7 @@
   import { PALETTE } from "../lib/constants";
   import type { Member, SpaceDetail } from "../lib/types";
   import Modal from "./Modal.svelte";
+  import ColorSwatches from "./ColorSwatches.svelte";
   import { t } from "../lib/i18n.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import UserSelect from "./UserSelect.svelte";
@@ -105,11 +106,7 @@
     </div>
     <div class="field">
       <span class="label-text">{t("Colour")}</span>
-      <div class="swatches">
-        {#each PALETTE as c (c)}
-          <button type="button" class="swatch" class:selected={color === c} style="background:{c}" aria-label={c} onclick={() => (color = c)}></button>
-        {/each}
-      </div>
+      <ColorSwatches value={color} onpick={(c) => (color = c)} />
     </div>
 
     <div class="field">

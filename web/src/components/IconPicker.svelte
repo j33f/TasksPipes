@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
-  import { PALETTE } from "../lib/constants";
+  import ColorSwatches from "./ColorSwatches.svelte";
   import IconChoices from "./IconChoices.svelte";
   import PipeIcon from "./PipeIcon.svelte";
   import { t } from "../lib/i18n.svelte";
@@ -40,15 +40,7 @@
   </button>
   {#if open}
     <div class="popover">
-      <div class="swatches">
-        {#each PALETTE as c (c)}
-          <button type="button" class="swatch" class:selected={color === c} style="background:{c}" aria-label={c} onclick={() => pick({ color: c })}></button>
-        {/each}
-        <label class="swatch custom" class:selected={!!color && !PALETTE.includes(color)} title={t("Custom colour")}
-          style="background:{color && !PALETTE.includes(color) ? color : 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)'}">
-          <input type="color" value={color ?? "#2BC2FF"} onchange={(e) => pick({ color: (e.currentTarget as HTMLInputElement).value })} />
-        </label>
-      </div>
+      <ColorSwatches value={color} onpick={(c) => pick({ color: c })} />
       <div class="choices"><IconChoices selected={current} {color} onpick={(name) => pick({ icon: name })} /></div>
       <div class="row emoji-row">
         <input class="input" placeholder={t("Or an emoji: 🎓")} bind:value={emoji} maxlength="16"
@@ -74,11 +66,6 @@
     background: var(--modal-background); box-shadow: var(--menu-shadow); border-radius: 8px;
     font-size: 14px; font-weight: 400;
   }
-  .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
-  .swatch { width: 22px; height: 22px; border-radius: 50%; border: 0; cursor: pointer; padding: 0; }
-  .swatch.selected { box-shadow: 0 0 0 2px var(--modal-background), 0 0 0 4px var(--text); }
-  .custom { position: relative; overflow: hidden; }
-  .custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
   .emoji-row .input { flex: 1; min-height: 32px; font-size: 14px; }
   .reset { margin-top: 8px; width: 100%; }
 </style>

@@ -47,6 +47,9 @@ Everyone has a **personal space**; the personal spaces of the people you can see
 created by picking their members. Governance is shared by promoting other members to *admin*; a team always keeps
 at least one admin.
 
+A team's **colour** (its avatar's) is one of Outline's palette or any other: its admins change it from the avatar at the
+top of the team's page, or in its settings.
+
 ## Pipes
 
 Pipes are extended kanban boards with drag and drop. Each column belongs to a generic state — *Backlog, Ready to

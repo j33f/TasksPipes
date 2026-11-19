@@ -76,3 +76,19 @@ describe("invitations by e-mail", () => {
     expect((await query(`SELECT 1 FROM invitations WHERE invitee_id = $1`, [spoofer!.id])).rows).toHaveLength(0);
   });
 });
+
+describe("colours of teams and pipes", () => {
+  it("are #rgb or #rrggbb only: nothing that could restyle the page", async () => {
+    const team = (await alice.post("/api/spaces", { name: "Coloured team", color: "#FF5C80" })).body.id;
+    expect((await alice.get(`/api/spaces/${team}`)).body.color).toBe("#FF5C80");
+    expect((await alice.patch(`/api/spaces/${team}`, { color: "#3ad984" })).status).toBe(200);
+    expect((await alice.get(`/api/spaces/${team}`)).body.color).toBe("#3ad984");
+    for (const bad of ["red;display:none", "url(x)", "#12345", "expression(1)"]) {
+      expect((await alice.patch(`/api/spaces/${team}`, { color: bad })).status).toBe(400);
+    }
+    // None: the colour derived from the team's id.
+    expect((await alice.patch(`/api/spaces/${team}`, { color: null })).status).toBe(200);
+    const pipe = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Board", color: "#fff" })).body.id;
+    expect((await alice.patch(`/api/pipes/${pipe}`, { color: "blue;position:fixed" })).status).toBe(400);
+  });
+});
