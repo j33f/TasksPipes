@@ -78,6 +78,14 @@ describe("About", () => {
     expect(await screen.findByText("Checking for new versions is turned off (Administration › Settings).")).toBeTruthy();
   });
 
+  it("tells an administrator that a release is being published, without offering it yet", async () => {
+    admin(true);
+    serve({ current: "0.16.0", latest: null, updateAvailable: false, checkedAt: new Date().toISOString(), checkOn: true, error: null, pending: "0.17.0" });
+    render(AboutModal, { onclose: () => {} });
+    expect(await screen.findByText("Version 0.17.0 is being published: it will be offered once it can be installed.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Update to 0.17.0" })).toBeNull();
+  });
+
   it("tells others nothing about the check", async () => {
     admin(false);
     serve({ current: "0.16.0", latest: null, updateAvailable: false, checkedAt: new Date().toISOString() });
