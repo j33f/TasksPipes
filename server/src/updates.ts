@@ -60,13 +60,46 @@ export const updateState: {
   checkedAt: Date | null;
   /** Why the last check failed (GitHub unreachable, an error answer…), shown to administrators; null when it worked. */
   error: string | null;
+  /** A newer release whose images are not published yet: offered once they are (administrators are told it comes). */
+  pending: string | null;
   fetch: () => Promise<Release | null>;
+  /** Whether a release can be installed: its images are on the registry (replaced in tests). */
+  ready: (version: string) => Promise<boolean>;
 } = {
   latest: null,
   checkedAt: null,
   error: null,
+  pending: null,
   fetch: fetchLatest,
+  ready: imagesPublished,
 };
+
+/** What installing a release pulls: the app's image and the updater's (docker-compose.yml, one-click updates). */
+const IMAGES = ["j33f/taskspipes", "j33f/taskspipes-updater"];
+const MANIFESTS = [
+  "application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json",
+  "application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.v2+json",
+].join(", ");
+
+/**
+ * Whether both images of a version are on ghcr.io. A release is published on GitHub a few minutes before its images
+ * are built: offering it meanwhile made one-click updates fail ("nothing changed").
+ */
+async function imagesPublished(version: string): Promise<boolean> {
+  for (const repo of IMAGES) {
+    const auth = await fetch(`https://ghcr.io/token?scope=repository:${repo}:pull`, { signal: AbortSignal.timeout(10_000) });
+    if (!auth.ok) throw new Error(`ghcr.io answered ${auth.status}`);
+    const { token } = (await auth.json()) as { token?: string };
+    const res = await fetch(`https://ghcr.io/v2/${repo}/manifests/${encodeURIComponent(version)}`, {
+      method: "HEAD",
+      headers: { Authorization: `Bearer ${token ?? ""}`, Accept: MANIFESTS },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 404) return false;
+    if (!res.ok) throw new Error(`ghcr.io answered ${res.status}`);
+  }
+  return true;
+}
 
 /** Opening About checks again, but not more than once a minute for the whole instance (GitHub limits its API). */
 const FRESH_MS = 60_000;
@@ -117,9 +150,24 @@ export async function checkForUpdate(send: Send = sendHtmlMail): Promise<string 
     updateState.error = (err as Error).message || String(err);
     throw err;
   }
-  updateState.latest = latest;
   updateState.checkedAt = new Date();
   updateState.error = null;
+  updateState.pending = null;
+  if (latest && newer(latest.version, config.version)) {
+    // Offered (and told to administrators) only once it can be installed: its images are published.
+    let ready: boolean;
+    try {
+      ready = await updateState.ready(latest.version);
+    } catch (err) {
+      updateState.error = `${(err as Error).message || String(err)} (checking the images of ${latest.version})`;
+      throw err;
+    }
+    if (!ready) {
+      updateState.pending = latest.version;
+      return null;
+    }
+  }
+  updateState.latest = latest;
   if (!latest || !newer(latest.version, config.version)) return null;
   const first = await one(`INSERT INTO update_notices (version) VALUES ($1) ON CONFLICT DO NOTHING RETURNING version`, [latest.version]);
   if (!first) return null;
@@ -173,7 +221,7 @@ export async function updateRoutes(app: FastifyInstance) {
       updateAvailable,
       checkedAt: updateState.checkedAt,
       canUpdate: updateAvailable && updaterConfigured() && admin,
-      ...(admin ? { checkOn: on, error: on ? updateState.error : null } : {}),
+      ...(admin ? { checkOn: on, error: on ? updateState.error : null, pending: on ? updateState.pending : null } : {}),
     };
   };
   app.get("/version", async (req) => versionInfo(req));

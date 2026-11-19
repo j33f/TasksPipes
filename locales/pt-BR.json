@@ -144,6 +144,7 @@
     "Copy a branch name for this task": "Copiar um nome de branch para esta tarefa",
     "Copy the link": "Copiar o link",
     "Copy this token now: it will not be shown again.": "Copie este token agora: ele não será mostrado de novo.",
+    "Version {version} is being published: it will be offered once it can be installed.": "A versão {version} está sendo publicada: será oferecida assim que puder ser instalada.",
     "Search icons": "Buscar ícones",
     "No icon matches.": "Nenhum ícone corresponde.",
     "Basics": "Essenciais",

@@ -11,15 +11,19 @@ const send = async (_lang: string, to: string, subject: string) => void sent.pus
 const release = (version: string): Release => ({ version, url: `https://github.com/j33f/TasksPipes/releases/tag/v${version}`, publishedAt: null });
 let published: Release | null = null;
 const realFetch = updateState.fetch;
+const realReady = updateState.ready;
 
 beforeAll(async () => {
   await startApp();
   alice = await signIn("alice-token"); // an administrator (ADMIN_EMAILS)
   bob = await signIn("bob-token");
   updateState.fetch = async () => published;
+  // Never the real registry in tests: images are published unless a test says otherwise.
+  updateState.ready = async () => true;
 });
 afterAll(async () => {
   updateState.fetch = realFetch;
+  updateState.ready = realReady;
   updateState.latest = null;
   await stopApp();
 });
@@ -154,6 +158,28 @@ describe("Opening About", () => {
 
     updateState.fetch = async () => published;
     updateState.error = null;
+    overrideSetting("updates.check", undefined);
+  });
+});
+
+describe("A release whose images are not published yet", () => {
+  it("is neither offered nor told, until it can be installed", async () => {
+    const { overrideSetting } = await import("../../src/settings-store.js");
+    overrideSetting("updates.check", true);
+    updateState.latest = null;
+    published = release("98.0.0");
+    updateState.ready = async () => false;
+    const before = sent.length;
+    expect(await checkForUpdate(send)).toBeNull();
+    expect(sent.length).toBe(before);
+    const forAlice = (await alice.get("/api/version")).body;
+    expect(forAlice).toMatchObject({ updateAvailable: false, canUpdate: false, pending: "98.0.0" });
+    expect((await bob.get("/api/version")).body).not.toHaveProperty("pending");
+    // Its images are out: offered and told.
+    updateState.ready = async () => true;
+    expect(await checkForUpdate(send)).toBe("98.0.0");
+    expect((await alice.get("/api/version")).body).toMatchObject({ updateAvailable: true, latest: { version: "98.0.0" }, pending: null });
+    published = null;
     overrideSetting("updates.check", undefined);
   });
 });

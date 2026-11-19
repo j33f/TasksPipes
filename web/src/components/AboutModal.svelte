@@ -21,6 +21,8 @@
     /** Administrators only: whether checking is on, and why the last check failed. */
     checkOn?: boolean;
     error?: string | null;
+    /** A newer release whose images are still being published: not offered yet. */
+    pending?: string | null;
   }
   let latest = $state<{ version: string; url: string } | null>(null);
   /** An administrator, with the updater set up: one click installs it. */
@@ -84,6 +86,8 @@
           {t("Looking for a new version…")}
         {:else if info?.checkOn === false}
           {t("Checking for new versions is turned off (Administration › Settings).")}
+        {:else if info?.pending && !latest}
+          {t("Version {version} is being published: it will be offered once it can be installed.", { version: info.pending })}
         {:else if info?.error}
           <span class="error-text">{t("Could not check for a new version: {error}", { error: info.error })}</span>
         {:else if info?.checkedAt && !latest}
