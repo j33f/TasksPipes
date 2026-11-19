@@ -6,6 +6,7 @@
   import { STATUSES, formatDate, relativeTime } from "../lib/constants";
   import type { SpaceDetail, Task } from "../lib/types";
   import SpaceIcon from "../components/SpaceIcon.svelte";
+  import ColorSwatches from "../components/ColorSwatches.svelte";
   import Avatar from "../components/Avatar.svelte";
   import Icon from "../components/Icon.svelte";
   import Markdown from "../components/Markdown.svelte";
@@ -37,6 +38,20 @@
   const isMember = $derived(Boolean(space?.myRole));
   const isMine = $derived(id === app.me?.personalSpaceId);
   const isAdminOfTeam = $derived(space?.kind === "team" && space.myRole === "admin");
+
+  // The team's colour, changed from its avatar: saved at once.
+  let colorOpen = $state(false);
+  let colorRoot = $state<HTMLElement>();
+  async function setColor(color: string) {
+    if (!space) return;
+    colorOpen = false;
+    try {
+      await api.patch(`/spaces/${space.id}`, { color });
+      app.refresh();
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    }
+  }
   const tab = $derived(isMember && router.params.get("tab") === "incoming" ? "incoming" : "pipes");
   const showNewPipe = $derived(router.params.get("newPipe") === "1");
   const meId = $derived(app.me?.user.id);
@@ -59,12 +74,25 @@
   const total = (counts: Record<string, number | undefined>) => Object.values(counts).reduce<number>((a, b) => a + (b ?? 0), 0);
 </script>
 
+<svelte:window onmousedown={(e) => colorOpen && colorRoot && !colorRoot.contains(e.target as Node) && (colorOpen = false)} />
+
 {#if error}
   <div class="page"><div class="callout danger">{error}</div></div>
 {:else if space}
   <div class="page">
     <div class="page-header">
-      <SpaceIcon {space} size={44} />
+      {#if isAdminOfTeam}
+        <!-- Its admins change the team's colour from its avatar. -->
+        <div class="team-color" bind:this={colorRoot}>
+          <button type="button" class="avatar-btn" title={t("Change the team's colour")} aria-label={t("Change the team's colour")}
+            onclick={() => (colorOpen = !colorOpen)}><SpaceIcon {space} size={44} /></button>
+          {#if colorOpen}
+            <div class="color-popover"><ColorSwatches value={space.color} onpick={setColor} /></div>
+          {/if}
+        </div>
+      {:else}
+        <SpaceIcon {space} size={44} />
+      {/if}
       <div class="grow">
         <h1>
           {isMine ? t("My space") : space.name}
@@ -194,6 +222,13 @@
 {/if}
 
 <style>
+  .team-color { position: relative; display: inline-flex; }
+  .avatar-btn { border: 0; background: none; padding: 0; border-radius: 10px; cursor: pointer; display: inline-flex; }
+  .avatar-btn:hover { box-shadow: 0 0 0 2px var(--divider); }
+  .color-popover {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 50; width: 200px; padding: 10px;
+    background: var(--modal-background); box-shadow: var(--menu-shadow); border-radius: 8px;
+  }
   .actions { flex-shrink: 0; }
   .description { margin: -8px 0 24px; color: var(--text-secondary); }
   .pipe-card h3 { font-size: 16px; }

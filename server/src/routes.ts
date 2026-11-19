@@ -102,7 +102,15 @@ function docOrNull(doc: unknown): DocRef | null {
   };
 }
 
-const color = (v: unknown) => (typeof v === "string" && v ? v.slice(0, 20) : null);
+/**
+ * A colour of a team or a pipe: #rgb or #rrggbb, or none. It ends up in a style attribute: anything else is refused
+ * (a "colour" carrying CSS could restyle the page).
+ */
+const color = (v: unknown) => {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v.trim())) return v.trim();
+  throw bad("Invalid colour");
+};
 function taskType(value: unknown) {
   const t = taskTypeById(value === undefined || value === null || value === "" ? "task" : value);
   if (!t) throw bad("Invalid task type");
