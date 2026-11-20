@@ -46,6 +46,23 @@ afterEach(() => {
 });
 
 describe("pipe board", () => {
+  it("folds its filters into one button (shown on phones), which counts the filters that are on", async () => {
+    render(PipePage, { id: "p" });
+    await screen.findByText("Task t1");
+    const toggle = screen.getByRole("button", { name: /^Filters/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    const panel = document.getElementById("pipe-filters")!;
+    expect(panel.classList.contains("open")).toBe(false);
+    await fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.classList.contains("open")).toBe(true);
+    // The filters are in the panel; two on: counted.
+    await fireEvent.change(within(panel).getByLabelText("Task type"), { target: { value: "bug" } });
+    await fireEvent.click(within(panel).getByRole("button", { name: /Mine/ }));
+    expect(toggle.textContent).toMatch(/Filters\s*2/);
+    expect(screen.queryByText("Task t1")).toBeNull();
+  });
+
   it("warns when a column holds more tasks than its limit", async () => {
     render(PipePage, { id: "p" });
     await screen.findByText("Task t1");

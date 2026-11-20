@@ -9,6 +9,7 @@
   import type { PipeDetail, Task } from "../lib/types";
   import SpaceIcon from "../components/SpaceIcon.svelte";
   import Icon from "../components/Icon.svelte";
+  import Funnel from "@lucide/svelte/icons/funnel";
   import Markdown from "../components/Markdown.svelte";
   import TaskCard from "../components/TaskCard.svelte";
   import PipeModal from "../components/PipeModal.svelte";
@@ -40,6 +41,9 @@
   let priorityFilter = $state("");
   let ownerFilter = $state("");
   let typeFilter = $state("");
+  // The filters' panel, folded on a phone; how many filters are on (shown on its button).
+  let filtersOpen = $state(false);
+  const activeFilters = $derived([labelFilter, priorityFilter, ownerFilter, typeFilter].filter(Boolean).length + (mineOnly ? 1 : 0));
   const filters = $derived<TaskFilters>({
     labels: labelFilter ? [labelFilter] : [],
     priority: priorityFilter === "" ? undefined : (Number(priorityFilter) as TaskFilters["priority"]),
@@ -260,40 +264,47 @@
         </div>
         {#if pipeView === "board"}
         <input class="input filter" placeholder={t("Filter…")} bind:value={filter} />
-        {#if labelChoices.length}
-          <select class="input filter-select" bind:value={labelFilter} aria-label={t("Label")}>
-            <option value="">{t("Any label")}</option>
-            {#each labelChoices as l (l.name)}<option value={l.name}>{l.name}</option>{/each}
+        <!-- On a phone the filters fold into one button (they took four lines before the board). -->
+        <button class="btn neutral filters-toggle" class:active-toggle={activeFilters > 0} aria-expanded={filtersOpen} aria-controls="pipe-filters"
+          onclick={() => (filtersOpen = !filtersOpen)}>
+          <Funnel size={16} strokeWidth={1.8} />{t("Filters")}{#if activeFilters} <span class="count">{activeFilters}</span>{/if}
+        </button>
+        <div id="pipe-filters" class="filters" class:open={filtersOpen}>
+          {#if labelChoices.length}
+            <select class="input filter-select" bind:value={labelFilter} aria-label={t("Label")}>
+              <option value="">{t("Any label")}</option>
+              {#each labelChoices as l (l.name)}<option value={l.name}>{l.name}</option>{/each}
+            </select>
+          {/if}
+          <select class="input filter-select" bind:value={priorityFilter} aria-label={t("Priority")}>
+            <option value="">{t("Any priority")}</option>
+            {#each PRIORITIES as p (p.value)}<option value={String(p.value)}>{t(p.label)}</option>{/each}
+            <option value="0">{t("No priority")}</option>
           </select>
-        {/if}
-        <select class="input filter-select" bind:value={priorityFilter} aria-label={t("Priority")}>
-          <option value="">{t("Any priority")}</option>
-          {#each PRIORITIES as p (p.value)}<option value={String(p.value)}>{t(p.label)}</option>{/each}
-          <option value="0">{t("No priority")}</option>
-        </select>
-        {#if pipe.space.kind === "team" && ownerChoices.length}
-          <select class="input filter-select" bind:value={ownerFilter} aria-label={t("Owner")}>
-            <option value="">{t("Any owner")}</option>
-            {#each ownerChoices as u (u.id)}<option value={u.id}>{u.name}</option>{/each}
-            <option value="none">{t("Unassigned")}</option>
+          {#if pipe.space.kind === "team" && ownerChoices.length}
+            <select class="input filter-select" bind:value={ownerFilter} aria-label={t("Owner")}>
+              <option value="">{t("Any owner")}</option>
+              {#each ownerChoices as u (u.id)}<option value={u.id}>{u.name}</option>{/each}
+              <option value="none">{t("Unassigned")}</option>
+            </select>
+          {/if}
+          {#if typeChoices.length > 1}
+            <select class="input filter-select" bind:value={typeFilter} aria-label={t("Task type")}>
+              <option value="">{t("Any task type")}</option>
+              {#each typeChoices as tt (tt.id)}<option value={tt.id}>{tt.label}</option>{/each}
+            </select>
+          {/if}
+          {#if pipe.space.kind === "team"}
+            <button class="btn neutral" class:active-toggle={mineOnly} onclick={() => (mineOnly = !mineOnly)}>
+              <Icon name="user" size={16} />{t("Mine")}
+            </button>
+          {/if}
+          <select class="input filter-select" value={lanesBy} aria-label={t("Swimlanes")} onchange={(e) => setLanes((e.currentTarget as HTMLSelectElement).value as LanesBy)}>
+            <option value="none">{t("No swimlanes")}</option>
+            {#if pipe.space.kind === "team"}<option value="owner">{t("Swimlanes by owner")}</option>{/if}
+            <option value="type">{t("Swimlanes by task type")}</option>
           </select>
-        {/if}
-        {#if typeChoices.length > 1}
-          <select class="input filter-select" bind:value={typeFilter} aria-label={t("Task type")}>
-            <option value="">{t("Any task type")}</option>
-            {#each typeChoices as tt (tt.id)}<option value={tt.id}>{tt.label}</option>{/each}
-          </select>
-        {/if}
-        {#if pipe.space.kind === "team"}
-          <button class="btn neutral" class:active-toggle={mineOnly} onclick={() => (mineOnly = !mineOnly)}>
-            <Icon name="user" size={16} />{t("Mine")}
-          </button>
-        {/if}
-        <select class="input filter-select" value={lanesBy} aria-label={t("Swimlanes")} onchange={(e) => setLanes((e.currentTarget as HTMLSelectElement).value as LanesBy)}>
-          <option value="none">{t("No swimlanes")}</option>
-          {#if pipe.space.kind === "team"}<option value="owner">{t("Swimlanes by owner")}</option>{/if}
-          <option value="type">{t("Swimlanes by task type")}</option>
-        </select>
+        </div>
         {/if}
         <button class="btn neutral icon" class:active-toggle={app.isPinned(pipe.id)}
           title={app.isPinned(pipe.id) ? t("Unpin from the menu") : t("Pin to the menu")}
@@ -393,6 +404,20 @@
   .title-input:focus { background: none; box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
   .description { margin-top: 6px; color: var(--text-secondary); max-width: 760px; }
   .filter { width: 180px; min-height: 32px; height: 32px; font-size: 14px; }
+  /* Wide screens: the filters sit in the toolbar, as if the panel were not there. */
+  .filters { display: contents; }
+  .filters-toggle { display: none; }
+  .filters-toggle .count {
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; font-size: 11px; line-height: 18px;
+    background: var(--accent); color: #fff; text-align: center;
+  }
+  @media (max-width: 700px) {
+    .filter { flex: 1 1 140px; width: auto; }
+    .filters-toggle { display: inline-flex; }
+    .filters { display: none; }
+    .filters.open { display: flex; flex-wrap: wrap; gap: 8px; flex-basis: 100%; }
+    .filters.open > :global(*) { flex: 1 1 calc(50% - 4px); min-width: 0; }
+  }
   .filter-select { width: auto; min-height: 32px; height: 32px; padding: 2px 8px; font-size: 14px; }
   .active-toggle { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
   .board { overflow: auto; flex: 1; min-height: 0; padding-bottom: 8px; }
