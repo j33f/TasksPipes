@@ -116,9 +116,6 @@
   .toolbar { flex-wrap: wrap; }
   .toolbar .input { max-width: 320px; }
   .toolbar .narrow { width: auto; }
-  .seg { display: inline-flex; border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; }
-  .seg button { border: 0; background: none; color: var(--text-secondary); font: inherit; font-size: 13px; padding: 6px 12px; cursor: pointer; }
-  .seg button.active { background: var(--background-secondary); color: var(--text); font-weight: 500; }
   .hint-inline { font-weight: 400; }
   .section { margin-top: 24px; }
 </style>

@@ -244,7 +244,6 @@
   .link-title:hover { text-decoration: underline; }
   .excerpt { margin-top: 6px; max-height: 4.5em; overflow: hidden; color: var(--text-secondary); }
   @media (max-width: 700px) {
-    .page-header { flex-wrap: wrap; }
     .incoming-item { flex-wrap: wrap; }
   }
 </style>
