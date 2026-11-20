@@ -403,5 +403,4 @@
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .drop-indicator { height: 3px; background: var(--accent); border-radius: 2px; margin: -4px 0; }
   .add { justify-content: flex-start; color: var(--text-tertiary); width: 100%; }
-  @media (max-width: 900px) { .page-header { flex-wrap: wrap; } }
 </style>
