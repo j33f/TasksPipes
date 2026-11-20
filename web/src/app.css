@@ -137,14 +137,22 @@ button { font-family: inherit; }
 .mobile-bar { display: none; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--divider); }
 .page { padding: 32px 48px 64px; max-width: 1100px; width: 100%; margin: 0 auto; }
 .page.wide { max-width: none; padding: 24px 32px 24px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.page-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
+.page-header { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
 .page-header h1 { font-size: 28px; display: flex; align-items: center; gap: 10px; }
-.page-header .grow { flex: 1; min-width: 0; }
-.breadcrumb { font-size: 14px; color: var(--text-tertiary); margin-bottom: 6px; display: flex; gap: 6px; align-items: center; }
+/*
+ * The title's column keeps room: with a basis of 0 it only got what the actions left, a few pixels beside a pipe's
+ * long toolbar. Below that width the actions go to the next line instead.
+ */
+.page-header .grow { flex: 1 1 360px; min-width: 0; }
+.breadcrumb { font-size: 14px; color: var(--text-tertiary); margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: center; }
 .breadcrumb a { color: var(--text-tertiary); display: inline-flex; gap: 6px; align-items: center; }
 .subtitle { color: var(--text-tertiary); font-size: 14px; margin-top: 6px; }
 .row { display: flex; align-items: center; gap: 8px; }
 .row.wrap { flex-wrap: wrap; }
+/* A choice of a few views (Board / Agenda, Month / Week…): one control, the current one shaded. */
+.seg { display: inline-flex; border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: none; color: var(--text-secondary); font: inherit; font-size: 13px; padding: 6px 12px; cursor: pointer; }
+.seg button.active { background: var(--background-secondary); color: var(--text); font-weight: 500; }
 .spacer { flex: 1; }
 .muted { color: var(--text-tertiary); }
 .small { font-size: 13px; }
@@ -233,7 +241,8 @@ a.card:hover { text-decoration: none; box-shadow: var(--card-shadow), 0 4px 12px
   color: var(--text); cursor: pointer; background: none; border: 0; width: 100%; text-align: left; font: inherit;
 }
 .list-item:hover { background: var(--list-hover); text-decoration: none; }
-.list-item .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+/* The title comes first: it keeps at least a third of the row, what is around it gives way (it had a basis of 0). */
+.list-item .title { flex: 1 1 auto; min-width: 33%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .due.overdue { color: var(--danger); font-weight: 500; }
 .due.soon { color: var(--warning); font-weight: 500; }
 

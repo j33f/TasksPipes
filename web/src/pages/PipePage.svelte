@@ -3,6 +3,7 @@
   import { untrack } from "svelte";
   import { t } from "../lib/i18n.svelte";
   import { api, errorMessage } from "../lib/api";
+  import { autosize } from "../lib/autosize";
   import { app } from "../lib/app.svelte";
   import { openTaskCount } from "../lib/constants";
   import type { PipeDetail, Task } from "../lib/types";
@@ -147,7 +148,7 @@
 
   // Inline title, like an Outline document: saved on blur or Enter, Escape cancels.
   function rename(e: FocusEvent) {
-    const input = e.currentTarget as HTMLInputElement;
+    const input = e.currentTarget as HTMLTextAreaElement;
     const name = input.value.trim();
     if (!pipe || !name || name === pipe.name) {
       input.value = pipe?.name ?? "";
@@ -157,9 +158,12 @@
   }
 
   function titleKeydown(e: KeyboardEvent) {
-    const input = e.currentTarget as HTMLInputElement;
+    const input = e.currentTarget as HTMLTextAreaElement;
     if (e.key === "Escape") input.value = pipe?.name ?? "";
-    if (e.key === "Enter" || e.key === "Escape") input.blur();
+    if (e.key === "Enter" || e.key === "Escape") {
+      e.preventDefault();
+      input.blur();
+    }
   }
 
   async function setArchived(archived: boolean) {
@@ -211,13 +215,16 @@
           <span>›</span><span>{t("Pipe")}</span>
         </div>
         <h1>
-          <IconPicker icon={pipe.icon} color={pipe.color} kind={pipe.kind} editable={pipe.canManage} size={28}
-            onchange={(next) => save(next)} />
-          {#if pipe.canManage}
-            <input class="title-input" value={pipe.name} maxlength="120" aria-label={t("Pipe name")} onblur={rename} onkeydown={titleKeydown} />
-          {:else}
-            {pipe.name}
-          {/if}
+          <span class="title-row">
+            <IconPicker icon={pipe.icon} color={pipe.color} kind={pipe.kind} editable={pipe.canManage} size={28}
+              onchange={(next) => save(next)} />
+            {#if pipe.canManage}
+              <textarea class="title-input" rows="1" value={pipe.name} use:autosize={pipe.name} maxlength="120" aria-label={t("Pipe name")}
+                onblur={rename} onkeydown={titleKeydown}></textarea>
+            {:else}
+              <span>{pipe.name}</span>
+            {/if}
+          </span>
           {#if pipe.archived}<span class="badge"><Icon name="archive" size={12} />{t("Archived")}</span>{/if}
           {#if app.pipeType(pipe.kind)}<span class="badge">{app.pipeType(pipe.kind)?.label}</span>{/if}
           {#if pipe.visibility === "open"}
@@ -372,13 +379,17 @@
   .archived { margin-top: 10px; align-items: center; }
   /* Keep the button at its natural size on narrow widths; let the message column shrink instead. */
   .archived .btn { flex-shrink: 0; }
-  .page-header h1 { gap: 6px; flex-wrap: wrap; }
+  /* The icon and the name on one line (the name wraps); the badges below when they do not fit. */
+  .page-header h1 { gap: 6px; flex-wrap: wrap; align-items: flex-start; }
+  .title-row { display: flex; align-items: flex-start; gap: 6px; flex: 1 1 100%; min-width: 0; }
+  .title-row > :global(:first-child) { flex-shrink: 0; margin-top: 4px; }
   .page-header h1 :global(.badge) { margin-left: 4px; }
   .title-input {
     font: inherit; color: inherit; border: 0; outline: none; background: none; padding: 0 2px; margin: 0;
-    border-radius: 4px; min-width: 4ch; max-width: 100%; field-sizing: content;
+    border-radius: 4px; min-width: 0; flex: 1 1 auto; line-height: 1.2; resize: none; overflow: hidden; display: block;
   }
   .title-input:hover { background: var(--list-hover); }
+  @media (max-width: 600px) { .page-header h1 { font-size: 22px; } }
   .title-input:focus { background: none; box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
   .description { margin-top: 6px; color: var(--text-secondary); max-width: 760px; }
   .filter { width: 180px; min-height: 32px; height: 32px; font-size: 14px; }
@@ -403,5 +414,4 @@
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .drop-indicator { height: 3px; background: var(--accent); border-radius: 2px; margin: -4px 0; }
   .add { justify-content: flex-start; color: var(--text-tertiary); width: 100%; }
-  @media (max-width: 900px) { .page-header { flex-wrap: wrap; } }
 </style>

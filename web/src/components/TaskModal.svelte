@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, errorMessage } from "../lib/api";
+  import { autosize } from "../lib/autosize";
   import { app } from "../lib/app.svelte";
   import { STATUSES, dueState, formatDate, formatDateTime, relativeTime } from "../lib/constants";
   import TaskFields, { type FieldFile } from "./TaskFields.svelte";
@@ -196,9 +197,9 @@
             <a href={`/pipes/${task.pipe.id}`} onclick={onclose}>{task.pipe.name}</a>
             {#if task.pipe.visibility === "open"}<span class="badge open">{t("Open")}</span>{/if}
           {:else}
-            <a href={`/spaces/${task.space.id}?tab=incoming`} onclick={onclose}>Incoming</a>
+            <a href={`/spaces/${task.space.id}?tab=incoming`} onclick={onclose}>{t("Incoming")}</a>
           {/if}
-          <span class="muted">· #{task.number}</span>
+          <span class="muted" style="white-space:nowrap">· #{task.number}</span>
         </div>
 
         {#if task.inIncoming && task.sender}
@@ -218,8 +219,9 @@
           </div>
         {/if}
 
-        <input class="task-title-input" bind:value={title} onblur={saveTitle} readonly={!perms?.editContent}
-          onkeydown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()} aria-label={t("Title")} />
+        <textarea class="task-title-input" rows="1" bind:value={title} use:autosize={title} onblur={saveTitle} readonly={!perms?.editContent}
+          onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.currentTarget as HTMLTextAreaElement).blur(); } }}
+          aria-label={t("Title")}></textarea>
 
         {#if editingDescription}
           <MarkdownEditor bind:value={descriptionDraft} rows={10} autofocus mentions={mentionableOn(task.id)} />
@@ -471,7 +473,11 @@
   .task-detail { display: grid; grid-template-columns: 1fr 300px; min-height: 60vh; }
   .task-main { padding: 28px 32px; min-width: 0; }
   .task-side { border-left: 1px solid var(--divider); padding: 52px 20px 28px; background: var(--background-secondary); border-radius: 0 12px 12px 0; }
-  .task-title-input { font-size: 26px; font-weight: 600; border: 0; outline: none; background: none; color: var(--text); width: 100%; font-family: inherit; padding: 0; margin: 4px 0 12px; }
+  .task-title-input {
+    font-size: 26px; font-weight: 600; line-height: 1.25; border: 0; outline: none; background: none; color: var(--text); width: 100%;
+    font-family: inherit; padding: 0; margin: 4px 0 12px; resize: none; overflow: hidden; display: block;
+  }
+  @media (max-width: 600px) { .task-title-input { font-size: 21px; } }
   .description :global(.btn) { margin-top: 8px; }
   .prop { margin-bottom: 14px; }
   .prop .label-text { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-tertiary); }

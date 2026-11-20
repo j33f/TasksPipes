@@ -16,6 +16,7 @@
 {/each}
 
 <style>
-  .prio { display: inline-flex; align-items: center; }
-  .chip { display: inline-block; font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 8px; font-weight: 500; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+  /* Whole or not at all: squeezed in a list row, a chip became an unreadable sliver. */
+  .prio { display: inline-flex; align-items: center; flex-shrink: 0; }
+  .chip { display: inline-block; font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 8px; font-weight: 500; white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
 </style>
