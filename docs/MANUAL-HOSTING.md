@@ -23,7 +23,7 @@ As an unprivileged user (here `taskspipes`, home `/opt/taskspipes`), get the sou
 ```shell
 git clone https://github.com/j33f/TasksPipes.git /opt/taskspipes/app
 cd /opt/taskspipes/app
-git checkout v0.28.4          # the latest release: https://github.com/j33f/TasksPipes/releases
+git checkout v0.28.5          # the latest release: https://github.com/j33f/TasksPipes/releases
 
 cd web && npm ci && npm run build && cd ..
 cd server && npm ci && npm run build && npm prune --omit=dev && cd ..
