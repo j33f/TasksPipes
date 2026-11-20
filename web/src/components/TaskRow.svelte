@@ -13,7 +13,7 @@
 </script>
 
 <button class="list-item" data-task-id={task.id} onclick={() => app.openTask(task.id)}>
-  {#if task.inIncoming}<span class="badge">Incoming</span>{:else}<StatusBadge {task} />{/if}
+  {#if task.inIncoming}<span class="badge">{t("Incoming")}</span>{:else}<StatusBadge {task} />{/if}
   <span class="title">{task.title}</span>
   <TaskBadges priority={task.priority} labels={task.labels} />
   {#if showLocation}
@@ -27,5 +27,9 @@
 </button>
 
 <style>
-  .loc { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Where the task is gives way first: before the title, and alone on a phone's width. */
+  .loc { flex: 0 4 auto; min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .due { white-space: nowrap; flex-shrink: 0; }
+  /* On a phone the title and the date first: the labels show in the task. */
+  @media (max-width: 600px) { .loc, .list-item :global(.chip) { display: none; } }
 </style>

@@ -165,7 +165,7 @@
   {#if error}<div class="callout danger">{error}</div>{/if}
   {#if truncated}<div class="callout warning">{t("Too many tasks in this period: only the first ones are shown. Narrow the filters.")}</div>{/if}
 
-  <div class="grid" class:week={view === "week"} role="grid" aria-label={title}>
+  <div class="cal-grid" class:week={view === "week"} role="grid" aria-label={title}>
     <div class="head" role="row">
       {#each weeks[0] as day (day)}<div class="weekday" role="columnheader">{weekdayShort(day)}</div>{/each}
     </div>
@@ -219,14 +219,15 @@
 
 <style>
   .toolbar { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  /* Its controls may shrink to the page's width (else the spaces' list, as wide as its longest name, set it). */
+  .toolbar > .row { min-width: 0; max-width: 100%; }
   .period { font-size: 18px; margin: 0 0 0 8px; text-transform: capitalize; }
   .toolbar .btn.icon:first-child :global(svg) { transform: rotate(180deg); }
-  .seg { display: inline-flex; border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; }
-  .seg button { border: 0; background: none; color: var(--text-secondary); font: inherit; font-size: 13px; padding: 6px 12px; cursor: pointer; }
-  .seg button.active { background: var(--background-secondary); color: var(--text); font-weight: 500; }
-  .narrow { width: auto; min-height: 32px; padding: 2px 8px; font-size: 14px; }
+  /* As wide as its longest space's name, but never wider than the page (it went past a phone's edge). */
+  .narrow { width: auto; max-width: 100%; min-width: 0; min-height: 32px; padding: 2px 8px; font-size: 14px; }
   .check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
-  .grid { border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
+  /* Not .grid: that one (app.css) lays cards out, and made each week a card. */
+  .cal-grid { border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
   .head, .week-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .weekday { padding: 6px 8px; font-size: 12px; text-transform: uppercase; color: var(--text-tertiary); background: var(--background-secondary); }
   .day { min-height: 110px; border-top: 1px solid var(--divider); border-left: 1px solid var(--divider); padding: 4px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }

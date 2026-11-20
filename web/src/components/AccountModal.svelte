@@ -371,9 +371,6 @@
   .code { max-width: 140px; font-variant-numeric: tabular-nums; letter-spacing: 0.1em; }
   .prefs { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
   .pref .input { min-height: 32px; padding: 4px 8px; font-size: 14px; width: auto; }
-  .seg { display: inline-flex; border: 1px solid var(--input-border); border-radius: 6px; overflow: hidden; }
-  .seg button { border: 0; background: none; color: var(--text-secondary); font: inherit; font-size: 13px; padding: 6px 12px; cursor: pointer; }
-  .seg button.active { background: var(--background-secondary); color: var(--text); font-weight: 500; }
   .inv { padding: 8px 0; border-top: 1px solid var(--divider); }
   .notif { padding: 6px 0; gap: 12px; flex-wrap: wrap; }
   .notif .hour { min-height: 32px; padding: 4px 8px; font-size: 14px; width: auto; }
