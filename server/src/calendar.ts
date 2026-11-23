@@ -26,7 +26,7 @@ export async function calendarUrl(userId: string, { reset = false } = {}): Promi
 
 /** Text value of an iCalendar property: escaped, then folded at 75 octets. */
 export function prop(name: string, value: string): string {
-  const escaped = value.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  const escaped = value.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r\n|\r|\n/g, "\\n");
   return fold(`${name}:${escaped}`);
 }
 
