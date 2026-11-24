@@ -100,11 +100,31 @@ describe("Automatic publishing of a pipe's reports", () => {
     expect(await outlineDoc(manual.body.id)).toMatchObject({ parentDocumentId: "doc-2", createdBy: "Bob Durand" });
   });
 
+  it("lets only the person who gave the key point it at other documents", async () => {
+    const settings = `/api/pipes/${pipe}/outline-export`;
+    const own = "Give your own Outline API key to change where this pipe publishes";
+    // The form saved as it is (same parent, by id or by address), the key kept.
+    expect((await bob.put(settings, { parentDocumentId: "doc-2", daily: true })).status).toBe(200);
+    expect((await bob.put(settings, { parentDocumentId: "https://outline.test/doc/guide-onboarding-def456" })).status).toBe(200);
+    // Elsewhere, or under another weekly parent: his own key.
+    expect((await bob.put(settings, { parentDocumentId: "doc-1" })).body.error).toBe(own);
+    expect((await bob.put(settings, { parentDocumentId: "doc-404" })).body.error).toBe(own);
+    expect((await bob.put(settings, { weeklyParentDocumentId: "doc-1" })).body.error).toBe(own);
+    expect((await bob.get(settings)).body).toMatchObject({ parentDocId: "doc-2", weeklyParentDocId: null, mine: false });
+    // With it, the key and the e-mails are his.
+    expect((await bob.put(settings, { apiKey: "bob-token", parentDocumentId: "doc-1" })).body)
+      .toMatchObject({ parentDocId: "doc-1", setBy: "Bob Durand", outlineUser: "Bob Durand", mine: true });
+    expect((await alice.get(settings)).body.mine).toBe(false);
+    // Alice moves her own key freely.
+    expect((await alice.put(settings, { apiKey: "erin-token", parentDocumentId: "doc-1" })).body.mine).toBe(true);
+    expect((await alice.put(settings, { parentDocumentId: "doc-2" })).body).toMatchObject({ parentDocId: "doc-2", setBy: "Alice Martin" });
+  });
+
   it("publishes the daily activity once, after the report hour, with the pipe's key", async () => {
     const end = dailyPeriod(day, 18, "UTC").end;
-    expect(await runScheduledOutlineExports(new Date(end.getTime() - 60_000))).toBe(0);
-    expect(await runScheduledOutlineExports(new Date(end.getTime() + 60_000))).toBe(1);
-    expect(await runScheduledOutlineExports(new Date(end.getTime() + 120_000))).toBe(0);
+    expect((await runScheduledOutlineExports(new Date(end.getTime() - 60_000))).published).toBe(0);
+    expect((await runScheduledOutlineExports(new Date(end.getTime() + 60_000))).published).toBe(1);
+    expect((await runScheduledOutlineExports(new Date(end.getTime() + 120_000))).published).toBe(0);
     expect(await lastPublished(pipe)).toMatchObject({ parentDocumentId: "doc-2", createdBy: "Erin Moreau" });
   });
 
@@ -133,7 +153,7 @@ describe("Automatic publishing of a pipe's reports", () => {
       `UPDATE task_events SET created_at = $2 WHERE task_id IN (SELECT id FROM tasks WHERE pipe_id = $1)`,
       [pipe, new Date(end.getTime() - 3600_000)]
     );
-    expect(await runScheduledOutlineExports(new Date(end.getTime() + 60_000))).toBe(0);
+    expect(await runScheduledOutlineExports(new Date(end.getTime() + 60_000))).toMatchObject({ published: 0, failed: [{ pipeId: pipe }] });
     expect((await alice.get(`/api/pipes/${pipe}/outline-export`)).body).toMatchObject({ keyRefused: true, lastError: "Authentication required" });
     // A new key starts it again.
     const res = await alice.put(`/api/pipes/${pipe}/outline-export`, { apiKey: "alice-token" });
@@ -157,7 +177,7 @@ describe("Automatic publishing of a pipe's reports", () => {
     const end = dailyPeriod(friday, 18, "UTC").end;
     await pool.query(`UPDATE task_events SET created_at = $2 WHERE task_id IN (SELECT id FROM tasks WHERE pipe_id = $1)`, [pipe, new Date(end.getTime() - 3 * 86400_000)]);
     const thursday = dailyPeriod(addDays(friday, -1), 18, "UTC").end;
-    await pool.query(`DELETE FROM report_runs WHERE kind = 'outline-weekly'`);
+    await pool.query(`DELETE FROM report_runs WHERE kind LIKE 'outline-weekly:%'`);
     const before = (await alice.get(`/api/pipes/${pipe}/outline-export`)).body.lastExportUrl;
     await runScheduledOutlineExports(new Date(thursday.getTime() + 60_000));
     expect((await alice.get(`/api/pipes/${pipe}/outline-export`)).body.lastExportUrl).toBe(before);
@@ -176,5 +196,66 @@ describe("Automatic publishing of a pipe's reports", () => {
   it("is turned off by members", async () => {
     expect((await bob.del(`/api/pipes/${pipe}/outline-export`)).status).toBe(200);
     expect((await alice.get(`/api/pipes/${pipe}/outline-export`)).body).toBeNull();
+  });
+});
+
+describe("When Outline fails for a passing reason", () => {
+  let retried: string;
+  const settings = () => alice.get(`/api/pipes/${retried}/outline-export`);
+  const fail = (o: object) => fetch(`${config.outlineApiUrl}/test/fail`, { method: "POST", body: JSON.stringify(o) });
+  /** Something to report on the day that ends at `end`. */
+  const activityBefore = (end: Date) =>
+    pool.query(`UPDATE task_events SET created_at = $2 WHERE task_id IN (SELECT id FROM tasks WHERE pipe_id = $1)`, [retried, new Date(end.getTime() - 3600_000)]);
+  const published = async () => {
+    const res = await fetch(`${config.outlineApiUrl}/api/documents.list`, {
+      method: "POST", headers: { Authorization: "Bearer alice-token", "Content-Type": "application/json" }, body: JSON.stringify({ parentDocumentId: "doc-1" }),
+    });
+    return ((await res.json()) as { data: { title: string }[] }).data.filter((d) => d.title.startsWith("Activity of Retried"));
+  };
+
+  beforeAll(async () => {
+    retried = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Retried", kind: "dev" })).body.id;
+    const t = (await alice.post("/api/tasks", { title: "Something", pipeId: retried })).body.id;
+    await alice.patch(`/api/tasks/${t}`, { stage: "en_cours" });
+    await alice.put(`/api/pipes/${retried}/outline-export`, { apiKey: "frank-token", parentDocumentId: "doc-1", daily: true });
+  });
+
+  it("tries again ten minutes later, without a second document when Outline created the first one", async () => {
+    const end = dailyPeriod(addDays(day, 10), 18, "UTC").end;
+    const at = (minutes: number) => new Date(end.getTime() + minutes * 60_000);
+    await activityBefore(end);
+    await fail({ times: 1, status: 504, created: true });
+    expect(await runScheduledOutlineExports(at(1))).toMatchObject({ published: 0, failed: [{ pipeId: retried, message: "Service unavailable" }] });
+    expect((await settings()).body).toMatchObject({ lastError: "Service unavailable", keyRefused: false });
+    expect(await published()).toHaveLength(1);
+    // Not before ten minutes.
+    expect(await runScheduledOutlineExports(at(5))).toMatchObject({ published: 0, failed: [] });
+    expect((await runScheduledOutlineExports(at(12))).published).toBe(1);
+    expect(await published()).toHaveLength(1);
+    expect((await settings()).body).toMatchObject({ lastError: null, lastExportUrl: expect.stringMatching(/\/doc\//) });
+    expect((await runScheduledOutlineExports(at(30))).published).toBe(0);
+  });
+
+  it("publishes once when two passes run at the same time", async () => {
+    const end = dailyPeriod(addDays(day, 11), 18, "UTC").end;
+    await activityBefore(end);
+    const before = (await published()).length;
+    const runs = await Promise.all([1, 2].map(() => runScheduledOutlineExports(new Date(end.getTime() + 60_000))));
+    expect(runs[0].published + runs[1].published).toBe(1);
+    expect(await published()).toHaveLength(before + 1);
+  });
+
+  it("stops trying when Outline then refuses the key", async () => {
+    const end = dailyPeriod(addDays(day, 12), 18, "UTC").end;
+    const at = (minutes: number) => new Date(end.getTime() + minutes * 60_000);
+    await activityBefore(end);
+    await fail({ times: 1, status: 503 });
+    expect((await runScheduledOutlineExports(at(1))).failed).toHaveLength(1);
+    await fetch(`${config.outlineApiUrl}/test/revoke`, { method: "POST", body: JSON.stringify({ token: "frank-token" }) });
+    expect((await runScheduledOutlineExports(at(12))).failed).toHaveLength(1);
+    expect((await settings()).body).toMatchObject({ keyRefused: true, lastError: "Authentication required" });
+    expect(await runScheduledOutlineExports(at(30))).toMatchObject({ published: 0, failed: [] });
+    const claims = await pool.query(`SELECT 1 FROM report_runs WHERE kind = $1 AND period_end = $2`, [`outline-daily:${retried}`, end]);
+    expect(claims.rowCount).toBe(1);
   });
 });

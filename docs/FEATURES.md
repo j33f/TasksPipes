@@ -271,8 +271,10 @@ on or off per pipe in its settings — the members of the team estimate tasks to
   weekly time report every Friday — under its own document when one is chosen, else under the parent — and, for
   pipes in sprints, each sprint's report when it closes. It needs a parent document and an **Outline API key** (Outline › Settings ›
   API), stored encrypted and never shown again; reports are published as that key's account, in the language of the
-  member who set it up. If Outline refuses the key, publishing stops, the settings say why, and the member who gave
-  the key is told by e-mail once; a new key starts it again.
+  member who set it up. Other members can turn the reports on or off, but publishing under other documents takes
+  their own key. When Outline cannot be reached or fails on its side, the pipe is tried again every 10 minutes until
+  midnight, without publishing the same report twice. If Outline refuses the key, publishing stops, the settings say
+  why, and the member who gave the key is told by e-mail once; a new key starts it again.
 
 The report hour (18:00 by default) and time zone are set by the instance (`REPORT_HOUR`, `TIMEZONE`).
 

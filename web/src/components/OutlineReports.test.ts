@@ -14,7 +14,7 @@ const me = (kind: "outline" | "email"): Me => ({
 });
 const settings: OutlineExport = {
   parentDocId: "d1", parentDocTitle: "Daily reports", parentDocUrl: "https://outline.test/doc/daily-abc", outlineUser: "Bot",
-  daily: true, weekly: false, weeklyParentDocId: null, weeklyParentDocTitle: null, weeklyParentDocUrl: null, sprints: false, setBy: "Gina", keyRefused: false, lastError: null, lastErrorAt: null, lastExportAt: null, lastExportUrl: null,
+  daily: true, weekly: false, weeklyParentDocId: null, weeklyParentDocTitle: null, weeklyParentDocUrl: null, sprints: false, setBy: "Gina", mine: true, keyRefused: false, lastError: null, lastErrorAt: null, lastExportAt: null, lastExportUrl: null,
 };
 
 let calls: { method: string; url: string; body: unknown }[];
@@ -96,6 +96,25 @@ describe("publishing a pipe's reports automatically", () => {
       method: "PUT", url: "/api/pipes/p/outline-export",
       body: { parentDocumentId: "d1", daily: true, sprints: false, weekly: true, weeklyParentDocumentId: "d2" },
     });
+    app.pipeTypes = [];
+  });
+
+  it("asks for one's own key to move someone else's to other documents", async () => {
+    app.me = me("outline");
+    app.pipeTypes = [{ id: "dev", timeReport: true } as never];
+    exportSettings = { ...settings, setBy: "Hugo", mine: false };
+    render(OutlineAutoPublish, { pipe: { id: "p", kind: "dev" }, hour: 18 });
+    await userEvent.click(await screen.findByRole("button", { name: "Change the key or the document" }));
+    const save = screen.getByRole("button", { name: "Save" });
+    // Same documents: the key is kept.
+    expect(save.hasAttribute("disabled")).toBe(false);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Publish the weekly time report every Friday at 18:00" }));
+    await userEvent.click(screen.getAllByPlaceholderText("Search an Outline document or paste its URL…").at(-1)!);
+    await userEvent.click(await screen.findByRole("button", { name: "Team notes" }));
+    expect(screen.getByText("The current key is someone else's: give your own to publish under other documents.")).toBeTruthy();
+    expect(save.hasAttribute("disabled")).toBe(true);
+    await userEvent.type(screen.getByPlaceholderText("ol_api_…"), "ol_api_mine");
+    expect(save.hasAttribute("disabled")).toBe(false);
     app.pipeTypes = [];
   });
 

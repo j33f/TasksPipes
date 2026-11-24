@@ -365,7 +365,7 @@ const wrap = (lang: Locale, title: string, intro: string, body: string, pipe: Pi
 // Scheduled sending
 
 /** Records a sending; false if it was already done (by this or another run). */
-async function claim(kind: string, end: Date) {
+export async function claim(kind: string, end: Date) {
   return Boolean(await one(`INSERT INTO report_runs (kind, period_end) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING kind`, [kind, end]));
 }
 
