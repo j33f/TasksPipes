@@ -6,7 +6,7 @@
   import type { Webhook } from "../lib/types";
   import { LOCALES, prefs, t } from "../lib/i18n.svelte";
 
-  let { pipeId, onclose }: { pipeId: string; onclose: () => void } = $props();
+  let { pipeId, sprints = false, onclose }: { pipeId: string; sprints?: boolean; onclose: () => void } = $props();
 
   const EVENTS: { id: string; label: () => string }[] = [
     { id: "task.created", label: () => t("A task is created") },
@@ -15,6 +15,12 @@
     { id: "task.commented", label: () => t("A task is commented") },
     { id: "task.done", label: () => t("A task is done") },
   ];
+  // Pipes in sprints also tell their sprints.
+  const SPRINT_EVENTS: { id: string; label: () => string }[] = [
+    { id: "sprint.started", label: () => t("A sprint starts") },
+    { id: "sprint.closed", label: () => t("A sprint is closed") },
+  ];
+  const offered = $derived(sprints ? [...EVENTS, ...SPRINT_EVENTS] : EVENTS);
 
   const FORMATS: { id: Webhook["format"]; label: () => string; placeholder: string }[] = [
     { id: "json", label: () => t("Signed JSON"), placeholder: "https://example.com/hooks/taskspipes" },
@@ -79,7 +85,7 @@
         <button class="btn ghost small" onclick={() => remove(h)}>{t("Delete")}</button>
       </div>
       <div class="row events">
-        {#each EVENTS as ev (ev.id)}
+        {#each offered as ev (ev.id)}
           <label class="small"><input type="checkbox" checked={h.events.includes(ev.id)}
             onchange={() => run(() => api.patch(`/webhooks/${h.id}`, { events: toggleEvent(h.events, ev.id) }))} /> {ev.label()}</label>
         {/each}
@@ -119,7 +125,7 @@
     </div>
     <input class="input" type="url" placeholder={FORMATS.find((f) => f.id === format)!.placeholder} aria-label={t("Address")} bind:value={url} />
     <div class="row events">
-      {#each EVENTS as ev (ev.id)}
+      {#each offered as ev (ev.id)}
         <label class="small"><input type="checkbox" checked={events.includes(ev.id)} onchange={() => (events = toggleEvent(events, ev.id))} /> {ev.label()}</label>
       {/each}
     </div>

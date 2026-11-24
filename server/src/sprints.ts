@@ -16,6 +16,7 @@ import { addDays, isDay, localDay, zonedInstant } from "./time.js";
 import { config } from "./config.js";
 import { WINDOW, velocity, type Velocity } from "./velocity.js";
 import { pipeBurndown, pipeTasks, sprintBurndown, sprintTasks, type TaskNow } from "./burndown.js";
+import { queueSprintWebhooks } from "./webhooks.js";
 
 export type VelocityMode = "manual" | "learned";
 
@@ -347,10 +348,12 @@ export async function sprintRoutes(app: FastifyInstance, deps: SprintDeps) {
       const committed = await one(
         `SELECT COALESCE(sum(points), 0) AS n FROM tasks WHERE sprint_id = $1 AND status <> 'abandoned'`, [s.id], client
       );
-      return one(
+      const started = await one(
         `UPDATE sprints SET status = 'active', committed_points = $2, started_at = now(), started_by = $3 WHERE id = $1 RETURNING *`,
         [s.id, Number(committed!.n), me(req)], client
       );
+      await queueSprintWebhooks(client, "sprint.started", started!, me(req));
+      return started;
     }).catch((err) => {
       throw err?.code === "23505" ? bad("Another sprint is under way: close it first") : err;
     });
@@ -406,10 +409,12 @@ export async function sprintRoutes(app: FastifyInstance, deps: SprintDeps) {
       );
       // The velocity it leads to, for the next sprints.
       const v = await pipeVelocity(p, client);
-      return one(
+      const closed = await one(
         `UPDATE sprints SET report = report || $2::jsonb WHERE id = $1 RETURNING *`,
         [s.id, JSON.stringify({ velocity: { value: v.value, source: v.source } })], client
       );
+      await queueSprintWebhooks(client, "sprint.closed", closed!, uid);
+      return closed;
     });
     notifySpace(p.space_id, { type: "task.updated" }, uid);
     if (sprintSettings(p.sprint_settings).sendReport) deps.sendReport(p, row!).catch((err) => req.log.error({ err }, "Sprint report not sent"));

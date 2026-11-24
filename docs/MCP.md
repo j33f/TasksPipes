@@ -64,10 +64,11 @@ sends you back to is what tells it apart (applications that registered on the fl
 | `docs_contents`, `read_docs` | The documentation of the version running (how TasksPipes works), by section or by a few words | — |
 | `list_spaces`, `get_space` | Your spaces and their pipes | — |
 | `get_pipe` | A pipe, its stages and tasks | — |
+| `get_sprints` | The sprints of a pipe in sprints, its velocity, the points left and the end they point to | — |
 | `my_tasks` | Your tasks still to do | — |
 | `search_tasks` | Search the tasks you can see | — |
 | `get_task` | A task with its description, sub-tasks and history | — |
-| `create_task`, `update_task`, `move_task` | Create a task in a pipe, change it, move it to another pipe | *Create and change tasks* |
+| `create_task`, `update_task`, `move_task` | Create a task in a pipe, change it (also its points, start date and sprint), move it to another pipe | *Create and change tasks* |
 | `add_comment` | Comment on a task | *Comment* |
 | `log_time` | Log your time on a task | *Log my time* |
 | `send_task` | Send a task to someone's incoming | *Send tasks to other people* |

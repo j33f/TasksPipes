@@ -191,6 +191,20 @@ describe("an agent limited to a team space, allowed to write", () => {
     expect((await alice.get(`/api/tasks/${created.id}`)).body.events.at(-1).via).toBeNull();
   });
 
+  it("reads a pipe's sprints and velocity, and plans a task in a sprint", async () => {
+    const pipe = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Agent sprints", kind: "sprint" })).body.id;
+    await alice.patch(`/api/pipes/${pipe}`, { sprintSettings: { velocityMode: "manual", initialVelocity: 13 } });
+    const sprint = (await alice.post(`/api/pipes/${pipe}/sprints`, { goal: "Ship" })).body;
+    const task = (await alice.post("/api/tasks", { title: "Plan me", pipeId: pipe, points: 5 })).body.id;
+    const read = await tool(token, "get_sprints", { pipeId: pipe });
+    expect(read).toMatchObject({
+      sprints: [{ id: sprint.id, name: "Sprint 1", goal: "Ship", status: "planned" }],
+      velocity: { pointsPerSprint: 13, source: "manual" }, remainingPoints: 5, projection: { sprintsLeft: 1 },
+    });
+    expect(await tool(token, "update_task", { taskId: task, sprintId: sprint.id })).toMatchObject({ sprintId: sprint.id, points: 5 });
+    expect((await tool(token, "get_sprints", { pipeId: teamPipe })).sprints).toEqual([]);
+  });
+
   it("cannot send tasks to others or log time without those scopes", async () => {
     const names = (await rpc(token, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
     expect(names).not.toContain("send_task");

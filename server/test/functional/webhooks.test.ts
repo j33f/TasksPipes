@@ -46,6 +46,28 @@ const team = async (name: string) => {
 const hook = async (pipe: string, events: string[]) => (await alice.post(`/api/pipes/${pipe}/webhooks`, { url, events })).body;
 
 describe("outgoing webhooks", () => {
+  it("send a sprint started and closed, with its points and report, as JSON or a chat message", async () => {
+    const id = (await alice.post("/api/spaces", { name: "Sprinting", members: [{ userId: bobId }] })).body.id;
+    const pipe = (await alice.post(`/api/spaces/${id}/pipes`, { name: "App", kind: "sprint" })).body.id;
+    await hook(pipe, ["sprint.started", "sprint.closed"]);
+    await alice.post(`/api/pipes/${pipe}/webhooks`, { url, events: ["sprint.closed"], format: "slack" });
+    const sprint = (await alice.post(`/api/pipes/${pipe}/sprints`, { goal: "Sign-in" })).body.id;
+    const t = (await alice.post("/api/tasks", { title: "Magic link", pipeId: pipe, points: 5, sprintId: sprint })).body.id;
+    await alice.post("/api/tasks", { title: "Profile", pipeId: pipe, points: 3, sprintId: sprint });
+    await alice.post(`/api/sprints/${sprint}/start`);
+    await alice.patch(`/api/tasks/${t}`, { stage: "termine" });
+    await alice.post(`/api/sprints/${sprint}/close`, { unfinished: "backlog" });
+    expect(await runWebhooks()).toBe(3);
+    const json = received.filter((r) => r.json.event);
+    expect(json.map((r) => r.json.event)).toEqual(["sprint.started", "sprint.closed"]);
+    expect(json[0].json).toMatchObject({ pipe: { id: pipe, name: "App" }, sprint: { name: "Sprint 1", goal: "Sign-in", committedPoints: 8 }, actor: { name: "Alice Martin" } });
+    expect(json[1].json.sprint).toMatchObject({ completedPoints: 5, report: { committed: 8, completed: 5, carried: 1, carriedPoints: 3 } });
+    expect(json[1].headers["x-taskspipes-event"]).toBe("sprint.closed");
+    const slack = received.find((r) => !r.json.event)!;
+    expect(slack.json.text).toMatch(/^Alice Martin closed <http.*\/pipes\/.*\|Sprint 1> of App: 5 of 8 points done$/);
+  });
+
+
   it("send the chosen events, signed, with the task and the change", async () => {
     const { pipe } = await team("Hooked");
     const h = await hook(pipe, ["task.created", "task.moved", "task.commented", "task.done", "task.assigned"]);

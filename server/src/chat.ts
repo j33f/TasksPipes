@@ -13,6 +13,7 @@ export interface Delivery {
   event: string;
   pipe: { name: string };
   task?: { key: string; title: string; column: string | null; owner: { name: string } | null; url: string };
+  sprint?: { name: string; url: string; committedPoints: number | null; completedPoints: number | null };
   actor?: { name: string };
   comment?: string | null;
 }
@@ -34,6 +35,13 @@ export function sentence(lang: Locale, d: Delivery, task: string): string {
       return tr(lang, "{name} commented on {task}", { name, task });
     case "task.done":
       return tr(lang, "{name} finished {task}", { name, task });
+    // For a sprint, `task` is the sprint's link.
+    case "sprint.started":
+      return tr(lang, "{name} started {sprint} in {pipe}: {points} points committed", { name, sprint: task, pipe: d.pipe.name, points: d.sprint?.committedPoints ?? 0 });
+    case "sprint.closed":
+      return tr(lang, "{name} closed {sprint} of {pipe}: {done} of {committed} points done", {
+        name, sprint: task, pipe: d.pipe.name, done: d.sprint?.completedPoints ?? 0, committed: d.sprint?.committedPoints ?? 0,
+      });
     default:
       return tr(lang, "Test message from TasksPipes, for the pipe {pipe}", { pipe: d.pipe.name });
   }
@@ -49,7 +57,7 @@ const discordText = (s: string) => s.replace(/([\\[\]*_`~|])/g, "\\$1");
 export function chatBody(format: Exclude<Format, "json">, lang: Locale, d: Delivery): object {
   const quote = d.event === "task.commented" && d.comment ? excerpt(d.comment) : null;
   if (format === "slack") {
-    const task = d.task ? `<${d.task.url}|${slackText(`${d.task.key} ${d.task.title}`)}>` : "";
+    const task = d.task ? `<${d.task.url}|${slackText(`${d.task.key} ${d.task.title}`)}>` : d.sprint ? `<${d.sprint.url}|${slackText(d.sprint.name)}>` : "";
     const text = slackText(sentence(lang, d, "\u0000")).replace("\u0000", task);
     return {
       text,
@@ -60,12 +68,12 @@ export function chatBody(format: Exclude<Format, "json">, lang: Locale, d: Deliv
     };
   }
   if (format === "discord") {
-    const task = d.task ? `[${discordText(`${d.task.key} ${d.task.title}`)}](${d.task.url})` : "";
+    const task = d.task ? `[${discordText(`${d.task.key} ${d.task.title}`)}](${d.task.url})` : d.sprint ? `[${discordText(d.sprint.name)}](${d.sprint.url})` : "";
     const text = discordText(sentence(lang, d, "\u0000")).replace("\u0000", task);
     // No @everyone, role or user ping from a task's title or a comment.
     return { content: quote ? `${text}\n> ${discordText(quote).replace(/\n/g, "\n> ")}` : text, allowed_mentions: { parse: [] } };
   }
-  const task = d.task ? `[${markdownText(`${d.task.key} ${d.task.title}`)}](${d.task.url})` : "";
+  const task = d.task ? `[${markdownText(`${d.task.key} ${d.task.title}`)}](${d.task.url})` : d.sprint ? `[${markdownText(d.sprint.name)}](${d.sprint.url})` : "";
   const text = markdownText(sentence(lang, d, "\u0000")).replace("\u0000", task);
   if (format === "mattermost") {
     return { text: quote ? `${text}\n> ${markdownText(quote).replace(/\n/g, "\n> ")}` : text };
@@ -84,6 +92,7 @@ export function chatBody(format: Exclude<Format, "json">, lang: Locale, d: Deliv
           ...(quote ? [{ type: "TextBlock", text: markdownText(quote), wrap: true, isSubtle: true }] : []),
         ],
         ...(d.task ? { actions: [{ type: "Action.OpenUrl", title: tr(lang, "Open the task"), url: d.task.url }] } : {}),
+        ...(!d.task && d.sprint ? { actions: [{ type: "Action.OpenUrl", title: tr(lang, "Open the pipe"), url: d.sprint.url }] } : {}),
       },
     }],
   };
