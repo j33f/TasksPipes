@@ -43,13 +43,14 @@ describe("pipe export", () => {
     expect(res.headers["content-type"]).toBe("text/csv; charset=utf-8");
     expect(res.headers["content-disposition"]).toBe('attachment; filename="Sales-2026.csv"');
     const [head, ...rows] = parseCsv(res.body);
-    expect(head.slice(0, 8)).toEqual(["Key", "Title", "Description", "Column", "Owner", "Due date", "Task type", "Sub-tasks"]);
+    expect(head.slice(0, 9)).toEqual(["Key", "Title", "Description", "Column", "Owner", "Start date", "Due date", "Task type", "Sub-tasks"]);
     expect(head).toContain("Funding");
     const acme = rows.find((r) => r[1] === "ACME training")!;
     expect(acme[3]).toBe(acmeStage.label);
     expect(acme[4]).toBe("Alice Martin");
-    expect(acme[5]).toBe("2026-06-30");
-    expect(acme[7]).toBe("[ ] Quote\n[x] Call");
+    expect(acme[5]).toBe("");
+    expect(acme[6]).toBe("2026-06-30");
+    expect(acme[8]).toBe("[ ] Quote\n[x] Call");
     expect(acme[head.indexOf("Funding")]).toBe("OPCO");
     // A formula is written as text.
     expect(rows.some((r) => r[1] === "'=HYPERLINK(\"http://evil\")")).toBe(true);
@@ -84,7 +85,7 @@ describe("pipe import", () => {
     const target = (await alice.post(`/api/spaces/${aliceSpace}/pipes`, { name: "Sales copy", kind: "commercial" })).body.id;
     const preview = await alice.post(`/api/pipes/${target}/import/preview`, { content: csv });
     expect(preview.status).toBe(200);
-    expect(preview.body.mapping.slice(0, 8)).toEqual(["ignore", "title", "description", "column", "owner", "dueDate", "taskType", "items"]);
+    expect(preview.body.mapping.slice(0, 9)).toEqual(["ignore", "title", "description", "column", "owner", "startDate", "dueDate", "taskType", "items"]);
     expect(preview.body.count).toBe(2);
     expect(preview.body.errorCount).toBe(0);
     expect(preview.body.tasks[0]).toMatchObject({ title: "ACME training", stage: acmeStage.id, owner: null });

@@ -86,6 +86,114 @@ export interface Pipe {
   /** Reports sent by e-mail at the report hour: daily activity, weekly time (development pipes). */
   dailyReport: boolean;
   weeklyReport: boolean;
+  /** How it works in sprints, for a pipe whose type does; null otherwise. */
+  sprintSettings?: SprintSettings | null;
+  /** Planning Poker as chosen for the pipe; null: as its type says. */
+  pokerChoice?: boolean | null;
+}
+
+export type PokerCard = "0" | "1" | "2" | "3" | "5" | "8" | "13" | "21" | "40" | "100" | "?" | "coffee";
+
+/** An open Planning Poker session, as one member sees it: the others' cards only once shown. */
+export interface PokerSession {
+  id: string;
+  status: "open" | "closed";
+  facilitatorId: string | null;
+  tasks: { id: string; number: number; title: string; points: number | null; taskType: string; status: Status; estimated: number | null }[];
+  currentTaskId: string | null;
+  round: number;
+  revealed: boolean;
+  participants: { id: string; name: string; avatarUrl: string | null; present: boolean; voted: boolean; vote: PokerCard | null }[];
+  stats: { count: number; min: number | null; max: number | null; median: number | null; suggestion: number | null; consensus: boolean } | null;
+}
+
+export interface SprintSettings {
+  /** Length of a sprint, in weeks (1 to 4). */
+  weeks: number;
+  /** ISO day a sprint starts: 1 Monday … 7 Sunday. */
+  startDay: number;
+  /** ISO days worked. */
+  workDays: number[];
+  velocityMode: "manual" | "learned";
+  /** Points per sprint expected while none is learned. */
+  initialVelocity: number | null;
+  sendReport: boolean;
+}
+
+export type SprintStatus = "planned" | "active" | "closed";
+
+export interface DoneBy {
+  /** Owner's name ("" for none) or task type id. */
+  key: string;
+  points: number;
+  tasks: number;
+  done: number;
+  donePoints: number;
+}
+
+export interface SprintReport {
+  committed: number;
+  completed: number;
+  done: number;
+  carried: number;
+  carriedPoints: number;
+  abandoned: number;
+  carriedTo: { id: string; name: string } | null;
+  /** Points of all its tasks when it started and ended (reports made since the burndown came). */
+  scopeStart?: number;
+  scopeEnd?: number;
+  burndown?: BurndownPoint[];
+  byOwner?: DoneBy[];
+  byType?: DoneBy[];
+  /** The velocity it led to. */
+  velocity?: { value: number | null; source: Velocity["source"] };
+}
+
+/** A point of a sprint's burndown: the start (day null), then the end of each working day. */
+export interface BurndownPoint {
+  day: string | null;
+  ideal: number;
+  /** Null for days to come. */
+  remaining: number | null;
+  scope: number | null;
+}
+
+export interface Velocity {
+  /** Points per sprint to plan with. */
+  value: number | null;
+  source: "manual" | "learned" | "initial";
+  /** The learned figure per week, also when not used yet. */
+  perWeek: number | null;
+  samples: { id: string; name: string; perWeek: number; excluded: "exceptional" | "outlier" | null }[];
+}
+
+/** The pipe's work sprint after sprint, and the end it points to. */
+export interface SprintProgress {
+  velocity: Velocity;
+  /** The start (sprintId null), then the end of each sprint: points done and to do in the pipe. */
+  rows: { sprintId: string | null; name: string | null; endsOn: string; done: number; remaining: number }[];
+  remaining: number;
+  unestimated: number;
+  projection: { sprintsLeft: number; endsOn: string } | null;
+}
+
+export interface Sprint {
+  id: string;
+  number: number;
+  name: string;
+  goal: string;
+  startsOn: string;
+  endsOn: string;
+  status: SprintStatus;
+  /** Points of its tasks when it started. */
+  committedPoints: number | null;
+  /** Points of its tasks done when it closed. */
+  completedPoints: number | null;
+  /** Left out of the learned velocity. */
+  exceptional: boolean;
+  report: SprintReport | null;
+  startedAt: string | null;
+  closedAt: string | null;
 }
 
 export interface Member extends UserRef {
@@ -134,6 +242,12 @@ export interface Task {
   blockers: number;
   /** 1 urgent, 2 high, 3 medium, 4 low; null for none. */
   priority: Priority | null;
+  /** Complexity points, on the planning poker scale (POINTS); null for none. */
+  points: number | null;
+  /** When work is planned to start (YYYY-MM-DD); null when not set. */
+  startDate?: string | null;
+  /** Sprint it is planned in (pipes in sprints); null in the backlog. */
+  sprintId?: string | null;
   /** Labels of its space. */
   labels: Label[];
   /** Estimate and time logged by hand, in minutes. */
@@ -196,6 +310,12 @@ export interface TaskEvent {
     /** Moved forward while it still waited for other tasks. */
     whileBlocked?: boolean;
     priority?: { from: Priority | null; to: Priority | null };
+    points?: { from: number | null; to: number | null };
+    /** The points were set at Planning Poker. */
+    poker?: boolean;
+    startDate?: { from: string | null; to: string | null };
+    /** Moved from a sprint to another; null is the backlog. */
+    sprint?: { from: { id: string; name: string } | null; to: { id: string; name: string } | null };
     labels?: { added: string[]; removed: string[] };
     estimate?: { from: number | null; to: number | null };
     /** A team admin deleted someone else's time entry (event "time"). */
@@ -274,6 +394,12 @@ export interface PipeDetail extends Pipe {
   canManage: boolean;
   canAddTasks: boolean;
   tasks: Task[];
+  /** Its sprints, latest first, for a pipe whose type works in sprints; null otherwise. */
+  sprints?: Sprint[] | null;
+  /** The points a sprint can take, and how they were found (pipes in sprints). */
+  velocity?: Velocity | null;
+  /** Planning Poker: on for me in this pipe (its team's members), and whether a session is open. */
+  poker?: { enabled: boolean; open: boolean };
 }
 
 export interface SidebarPipe extends Pipe {
@@ -352,6 +478,10 @@ export interface PipeType extends CustomMeta {
   teamOnly?: boolean;
   /** Development pipes: a weekly time report can be sent. */
   timeReport?: boolean;
+  /** Work in sprints: sprints, planning, velocity. */
+  sprints?: boolean;
+  /** Planning Poker on by default in team pipes of this type. */
+  planningPoker?: boolean;
   templates: string[];
 }
 

@@ -4,7 +4,7 @@
   import { app } from "../lib/app.svelte";
   import type { DocRef, Label, Pipe, UserRef } from "../lib/types";
   import TaskBadges from "./TaskBadges.svelte";
-  import { PRIORITIES } from "../lib/labels";
+  import { POINTS, PRIORITIES, pointsText } from "../lib/labels";
   import Modal from "./Modal.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import SpaceSelect from "./SpaceSelect.svelte";
@@ -16,7 +16,9 @@
   import type { ChecklistItem } from "../lib/types";
   import { t } from "../lib/i18n.svelte";
 
-  let { pipe = null, stage: initialStage = null, spaceId: initialSpaceId = null, dueDate: initialDueDate = null, onclose }: {
+  let { pipe = null, stage: initialStage = null, spaceId: initialSpaceId = null, dueDate: initialDueDate = null, sprintId = null, onclose }: {
+    /** Sprint of the pipe the board shows: the task goes in it. */
+    sprintId?: string | null;
     /** Create directly in this pipe… */
     pipe?: { id: string; name: string; spaceId: string; kind: string } | null;
     /** Column of the pipe (its first one by default). */
@@ -48,6 +50,7 @@
   let assigneeId = $state<string | null>(null);
   let dueDate = $state(untrack(() => initialDueDate ?? ""));
   let priority = $state("");
+  let points = $state("");
   let labelIds = $state<string[]>([]);
   // Labels are put by those who edit the space's tasks: in a pipe, or in one's own incoming.
   let spaceLabels = $state<Label[]>([]);
@@ -97,12 +100,13 @@
         assigneeId: isTeam ? assigneeId : null,
         dueDate: dueDate || null,
         priority: priority ? Number(priority) : null,
+        points: points === "" ? null : Number(points),
         ...(labelIds.length ? { labelIds } : {}),
         taskType: taskTypeId,
         items: items.map(({ text, done }) => ({ text, done })),
         // Only the fields of the chosen type (the type may have changed after filling some).
         fields: Object.fromEntries(Object.entries(fields).filter(([k]) => taskType?.fields.some((f) => f.id === k))),
-        ...(pipe ? { pipeId: pipe.id, stage } : { spaceId }),
+        ...(pipe ? { pipeId: pipe.id, stage, ...(sprintId ? { sprintId } : {}) } : { spaceId }),
       };
       const { id } = await api.post<{ id: string }>("/tasks", body);
       for (const p of pending.filter((x) => taskType?.fields.some((f) => f.id === x.field))) {
@@ -194,6 +198,13 @@
         <select id="nt-priority" class="input" bind:value={priority}>
           <option value="">{t("No priority")}</option>
           {#each PRIORITIES as p (p.value)}<option value={String(p.value)}>{t(p.label)}</option>{/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="nt-points">{t("Points")}</label>
+        <select id="nt-points" class="input" bind:value={points}>
+          <option value="">{t("No points")}</option>
+          {#each POINTS as n (n)}<option value={String(n)}>{pointsText(n)}</option>{/each}
         </select>
       </div>
       {#if spaceLabels.length}

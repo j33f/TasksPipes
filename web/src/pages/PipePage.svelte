@@ -21,8 +21,14 @@
   import WebhooksModal from "../components/WebhooksModal.svelte";
   import PipeLinks from "../components/PipeLinks.svelte";
   import { confirmWhileBlocked } from "../lib/dependencies";
-  import { PRIORITIES, distinctLabels, matches, type TaskFilters } from "../lib/labels";
+  import { PRIORITIES, distinctLabels, matches, pointsText, sumPoints, type TaskFilters } from "../lib/labels";
   import { boardLanes, loadLabel, overLimit } from "../lib/lanes";
+  import { activeSprint } from "../lib/sprints";
+  import SprintBanner from "../components/SprintBanner.svelte";
+  import SprintPlanning from "../components/SprintPlanning.svelte";
+  import SprintModal from "../components/SprintModal.svelte";
+  import Timeline from "../components/Timeline.svelte";
+  import PokerModal from "../components/PokerModal.svelte";
 
   let { id }: { id: string } = $props();
 
@@ -41,19 +47,23 @@
   let priorityFilter = $state("");
   let ownerFilter = $state("");
   let typeFilter = $state("");
+  let pointsFilter = $state("");
   // The filters' panel, folded on a phone; how many filters are on (shown on its button).
   let filtersOpen = $state(false);
-  const activeFilters = $derived([labelFilter, priorityFilter, ownerFilter, typeFilter].filter(Boolean).length + (mineOnly ? 1 : 0));
+  const activeFilters = $derived([labelFilter, priorityFilter, ownerFilter, typeFilter, pointsFilter].filter(Boolean).length + (mineOnly ? 1 : 0));
   const filters = $derived<TaskFilters>({
     labels: labelFilter ? [labelFilter] : [],
     priority: priorityFilter === "" ? undefined : (Number(priorityFilter) as TaskFilters["priority"]),
     owner: ownerFilter || undefined,
     type: typeFilter || undefined,
+    points: pointsFilter === "" ? undefined : pointsFilter === "none" ? "none" : Number(pointsFilter),
   });
   const labelChoices = $derived(distinctLabels((pipe?.tasks ?? []).flatMap((x) => x.labels)));
   const ownerChoices = $derived(
     [...new Map((pipe?.tasks ?? []).filter((x) => x.assignee).map((x) => [x.assignee!.id, x.assignee!])).values()].sort((a, b) => a.name.localeCompare(b.name))
   );
+  // Points are shown (column totals, filter) once a task of the pipe has some.
+  const pointChoices = $derived([...new Set((pipe?.tasks ?? []).flatMap((x) => (x.points === null ? [] : [x.points])))].sort((a, b) => a - b));
   const typeChoices = $derived(app.taskTypesFor(pipe?.kind).filter((tt) => (pipe?.tasks ?? []).some((x) => x.taskType === tt.id)));
 
   // Drag & drop state
@@ -76,24 +86,37 @@
     try { localStorage.setItem("tp:pipeLanes", v); } catch { /* storage unavailable */ }
   }
 
-  // Board (kanban) or agenda (calendar) view of the pipe; remembered in the browser.
-  const readView = (): "board" | "calendar" => {
-    try { return localStorage.getItem("tp:pipeView") === "calendar" ? "calendar" : "board"; } catch { return "board"; }
+  // Board (kanban), sprint planning or agenda (calendar) view of the pipe; remembered in the browser.
+  type PipeView = "board" | "calendar" | "planning" | "timeline";
+  const readView = (): PipeView => {
+    try {
+      const v = localStorage.getItem("tp:pipeView");
+      return v === "calendar" || v === "planning" || v === "timeline" ? v : "board";
+    } catch { return "board"; }
   };
-  let pipeView = $state<"board" | "calendar">(readView());
+  let chosenView = $state<PipeView>(readView());
+  // Pipes in sprints: their sprints, and the one the board shows (the one under way by default).
+  const inSprints = $derived(Boolean(app.pipeType(pipe?.kind)?.sprints && pipe?.sprints));
+  const pipeView = $derived<PipeView>((chosenView === "planning" || chosenView === "timeline") && !inSprints ? "board" : chosenView);
+  let sprintChoice = $state<string | null>(null);
+  const shownSprintId = $derived(inSprints ? (sprintChoice ?? activeSprint(pipe?.sprints)?.id ?? "all") : "all");
+  const shownSprint = $derived(pipe?.sprints?.find((s) => s.id === shownSprintId) ?? null);
+  let newSprint = $state(false);
+  let poker = $state(false);
   // A task reached from a notification is shown on the board, whatever the filters (not remembered).
   $effect(() => {
     const id = app.highlight;
     if (!id || !pipe?.tasks.some((x) => x.id === id)) return;
     untrack(() => {
-      pipeView = "board";
+      chosenView = "board";
+      sprintChoice = "all";
       filter = "";
       mineOnly = false;
-      labelFilter = priorityFilter = ownerFilter = typeFilter = "";
+      labelFilter = priorityFilter = ownerFilter = typeFilter = pointsFilter = "";
     });
   });
-  function setPipeView(v: "board" | "calendar") {
-    pipeView = v;
+  function setPipeView(v: PipeView) {
+    chosenView = v;
     try { localStorage.setItem("tp:pipeView", v); } catch { /* storage unavailable */ }
   }
 
@@ -107,6 +130,7 @@
       (x) =>
         (!filter.trim() || x.title.toLowerCase().includes(filter.trim().toLowerCase())) &&
         (!mineOnly || x.assignee?.id === app.me?.user.id) &&
+        (shownSprintId === "all" || (shownSprintId === "backlog" ? !x.sprintId : x.sprintId === shownSprintId)) &&
         matches(x, filters)
     )
   );
@@ -260,8 +284,20 @@
       <div class="row wrap">
         <div class="seg" role="group" aria-label={t("View")}>
           <button class:active={pipeView === "board"} onclick={() => setPipeView("board")}>{t("Board")}</button>
+          {#if inSprints}<button class:active={pipeView === "planning"} onclick={() => setPipeView("planning")}>{t("Planning")}</button>{/if}
+          {#if inSprints}<button class:active={pipeView === "timeline"} onclick={() => setPipeView("timeline")}>{t("Timeline")}</button>{/if}
           <button class:active={pipeView === "calendar"} onclick={() => setPipeView("calendar")}>{t("Agenda")}</button>
         </div>
+        {#if (pipeView === "board" || pipeView === "timeline") && inSprints}
+          <select class="input sprint-select" value={shownSprintId} aria-label={t("Sprint")}
+            onchange={(e) => (sprintChoice = (e.currentTarget as HTMLSelectElement).value)}>
+            <option value="all">{t("All the sprints")}</option>
+            <option value="backlog">{t("Backlog (no sprint)")}</option>
+            {#each pipe.sprints ?? [] as s (s.id)}
+              <option value={s.id}>{s.name}{s.status === "active" ? ` · ${t("under way")}` : s.status === "closed" ? ` · ${t("closed")}` : ""}</option>
+            {/each}
+          </select>
+        {/if}
         {#if pipeView === "board"}
         <input class="input filter" placeholder={t("Filter…")} bind:value={filter} />
         <!-- On a phone the filters fold into one button (they took four lines before the board). -->
@@ -281,6 +317,13 @@
             {#each PRIORITIES as p (p.value)}<option value={String(p.value)}>{t(p.label)}</option>{/each}
             <option value="0">{t("No priority")}</option>
           </select>
+          {#if pointChoices.length}
+            <select class="input filter-select" bind:value={pointsFilter} aria-label={t("Points")}>
+              <option value="">{t("Any points")}</option>
+              {#each pointChoices as n (n)}<option value={String(n)}>{pointsText(n)}</option>{/each}
+              <option value="none">{t("No points")}</option>
+            </select>
+          {/if}
           {#if pipe.space.kind === "team" && ownerChoices.length}
             <select class="input filter-select" bind:value={ownerFilter} aria-label={t("Owner")}>
               <option value="">{t("Any owner")}</option>
@@ -325,7 +368,27 @@
       </div>
     </div>
 
-    {#if pipeView === "board"}
+    {#if pipe.poker?.open && !poker}
+      <div class="callout row poker-open" role="status">
+        <Icon name="users" />
+        <span class="grow">{t("A Planning Poker session is open in this pipe.")}</span>
+        <button class="btn small" onclick={() => (poker = true)}>{t("Join it")}</button>
+      </div>
+    {/if}
+    {#if pipeView === "board" && shownSprint}
+      <SprintBanner {pipe} sprint={shownSprint} />
+    {:else if pipeView === "board" && inSprints && !pipe.sprints?.length && pipe.canManage && !pipe.archived}
+      <div class="callout row sprint-start">
+        <Icon name="target" />
+        <span class="grow">{t("This pipe works in sprints: plan the first one, then put tasks of the backlog in it.")}</span>
+        <button class="btn small" onclick={() => (newSprint = true)}><Icon name="plus" size={16} />{t("New sprint")}</button>
+      </div>
+    {/if}
+    {#if pipeView === "planning" && inSprints}
+      <SprintPlanning {pipe} onpoker={() => (poker = true)} />
+    {:else if pipeView === "timeline" && inSprints}
+      <Timeline {pipe} sprintId={shownSprintId} />
+    {:else if pipeView === "board"}
     <div class="board" style="--columns:{boardColumns.length}">
       <div class="board-row">
         {#each boardColumns as s (s.id)}
@@ -335,6 +398,10 @@
             <span class="status-dot" style="background:{s.color}"></span>
             <span>{s.label}</span>
             <span class="count neutral">{loadLabel(n, s.wipLimit)}</span>
+            {#if pointChoices.length}
+              {@const pts = sumPoints(visible.filter((x) => x.stage === s.id))}
+              <span class="col-points" title={t("Points of the tasks shown")}>{t("{n} pts", { n: pts })}</span>
+            {/if}
             {#if overLimit(n, s.wipLimit)}<span class="sr-only">{t("Over its limit")}</span>{/if}
           </header>
         {/each}
@@ -378,15 +445,22 @@
   {#if editing}<PipeModal spaceId={pipe.space.id} pipe={pipe} onclose={() => (editing = false)} />{/if}
   {#if reports}<ReportModal {pipe} onclose={() => (reports = false)} />{/if}
   {#if transfer}<TransferModal {pipe} onclose={() => (transfer = false)} />{/if}
-  {#if webhooks}<WebhooksModal pipeId={pipe.id} onclose={() => (webhooks = false)} />{/if}
+  {#if webhooks}<WebhooksModal pipeId={pipe.id} sprints={inSprints} onclose={() => (webhooks = false)} />{/if}
   {#if newTaskStage !== null}
     <NewTaskModal pipe={{ id: pipe.id, name: pipe.name, spaceId: pipe.space.id, kind: pipe.kind }} stage={newTaskStage || null}
+      sprintId={shownSprint && shownSprint.status !== "closed" && pipeView === "board" ? shownSprint.id : null}
       onclose={() => (newTaskStage = null)} />
   {/if}
+  {#if newSprint}<SprintModal pipeId={pipe.id} onclose={() => (newSprint = false)} />{/if}
+  {#if poker}<PokerModal {pipe} onclose={() => (poker = false)} />{/if}
 {/if}
 
 <style>
   .page-header { margin-bottom: 16px; }
+  .sprint-select { width: auto; max-width: 220px; }
+  .sprint-start, .poker-open { margin-bottom: 12px; align-items: center; }
+  .poker-open .btn { flex-shrink: 0; }
+  .sprint-start .btn { flex-shrink: 0; }
   .archived { margin-top: 10px; align-items: center; }
   /* Keep the button at its natural size on narrow widths; let the message column shrink instead. */
   .archived .btn { flex-shrink: 0; }
@@ -427,6 +501,7 @@
     background: var(--background-secondary); border-radius: 10px 10px 0 0; position: sticky; top: 0; z-index: 1;
   }
   .column-header.over { box-shadow: inset 0 3px 0 var(--danger, #ed2651); }
+  .column-header .col-points { margin-left: auto; font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .column-header.over .count { background: var(--danger, #ed2651); color: #fff; }
   .column-body { padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 8px; min-height: 80px; background: var(--background-secondary); }
   .board-row:last-child .column-body { border-radius: 0 0 10px 10px; }

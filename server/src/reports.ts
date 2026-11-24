@@ -371,7 +371,7 @@ async function claim(kind: string, end: Date) {
 
 type Send = (lang: Locale, to: string, subject: string, html: string) => Promise<unknown>;
 
-async function recipients(spaceId: string) {
+export async function recipients(spaceId: string) {
   const { rows } = await query(
     `SELECT u.email, u.locale, u.theme FROM space_members m JOIN users u ON u.id = m.user_id
      WHERE m.space_id = $1 AND u.email IS NOT NULL AND u.auth_kind <> 'system' AND u.disabled_at IS NULL

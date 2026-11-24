@@ -16,7 +16,7 @@ const person = (id: string, name: string) => ({ id, name, avatarUrl: null });
 const task = (id: string, stage: string, assignee: ReturnType<typeof person> | null, taskType = "task") => ({
   id, number: Number(id.slice(1)), title: `Task ${id}`, stage, status: kanban.columns.find((c) => c.id === stage)!.status, position: 1,
   taskType, assignee, author: person("u0", "Author"), space: { id: "s", name: "Team", kind: "team" }, pipe: { id: "p", name: "Board", visibility: "private", kind: "kanban" },
-  checklist: { total: 0, done: 0, next: null }, labels: [], priority: null, blockers: 0, commentCount: 0, dueDate: null, outlineDoc: null, gitState: null,
+  checklist: { total: 0, done: 0, next: null }, labels: [], priority: null, points: null, blockers: 0, commentCount: 0, dueDate: null, outlineDoc: null, gitState: null,
 });
 const ann = person("u1", "Ann");
 const bob = person("u2", "Bob");

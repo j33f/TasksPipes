@@ -5,7 +5,7 @@
   import { STATUSES, dueState, formatDate, formatDateTime, relativeTime } from "../lib/constants";
   import TaskFields, { type FieldFile } from "./TaskFields.svelte";
   import { eventChanges, eventIcon, eventSummary } from "../lib/events";
-  import type { ChecklistItem, DocRef, Label, Pipe, TaskDetail, UserRef } from "../lib/types";
+  import type { ChecklistItem, DocRef, Label, Pipe, Sprint, TaskDetail, UserRef } from "../lib/types";
   import Modal from "./Modal.svelte";
   import Markdown from "./Markdown.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
@@ -22,7 +22,7 @@
   import RepeatSection from "./RepeatSection.svelte";
   import TaskBadges from "./TaskBadges.svelte";
   import LabelsModal from "./LabelsModal.svelte";
-  import { PRIORITIES } from "../lib/labels";
+  import { POINTS, PRIORITIES, pointsText } from "../lib/labels";
   import DependenciesSection from "./DependenciesSection.svelte";
   import TimeSection from "./TimeSection.svelte";
   import { confirmWhileBlocked } from "../lib/dependencies";
@@ -48,6 +48,8 @@
   let comment = $state("");
   let commentKey = $state(0);
   let dialog = $state<"send" | "refuse" | "accept" | "labels" | null>(null);
+  let sprints = $state<Sprint[]>([]);
+  const taskSprint = $derived(sprints.find((s) => s.id === task?.sprintId) ?? null);
   // Labels of the task's space, loaded when choosing them.
   let spaceLabels = $state<Label[] | null>(null);
   const loadLabels = () =>
@@ -67,6 +69,8 @@
         pipes = space.pipes;
         members = space.members;
       }
+      // A pipe in sprints: its sprints, to plan the task in one.
+      sprints = detail.pipe && app.pipeType(detail.pipe.kind)?.sprints ? await api.get<Sprint[]>(`/pipes/${detail.pipe.id}/sprints`) : [];
     } catch (err) {
       loadError = errorMessage(err);
     }
@@ -341,6 +345,23 @@
           </div>
         {/if}
 
+        {#if task.pipe && app.pipeType(task.pipe.kind)?.sprints}
+          <div class="prop">
+            <span class="label-text">{t("Sprint")}</span>
+            {#if perms?.manage && taskSprint?.status !== "closed"}
+              <select class="input" value={task.sprintId ?? ""} disabled={busy} aria-label={t("Sprint")}
+                onchange={(e) => patch({ sprintId: (e.currentTarget as HTMLSelectElement).value || null })}>
+                <option value="">{t("Backlog (no sprint)")}</option>
+                {#each sprints.filter((s) => s.status !== "closed") as s (s.id)}
+                  <option value={s.id}>{s.name}{s.status === "active" ? ` · ${t("under way")}` : ""}</option>
+                {/each}
+              </select>
+            {:else}
+              <div class="value">{#if taskSprint}{taskSprint.name}{#if taskSprint.status === "closed"} <span class="muted">· {t("closed")}</span>{/if}{:else}<span class="muted">{t("Backlog (no sprint)")}</span>{/if}</div>
+            {/if}
+          </div>
+        {/if}
+
         <div class="prop">
           <span class="label-text">{t("Task type")}</span>
           {#if perms?.editContent && typeChoices.length > 1}
@@ -363,6 +384,19 @@
             </select>
           {:else}
             <div class="value">{#if task.priority}<TaskBadges priority={task.priority} />{t(PRIORITIES[task.priority - 1].label)}{:else}<span class="muted">{t("No priority")}</span>{/if}</div>
+          {/if}
+        </div>
+
+        <div class="prop">
+          <span class="label-text">{t("Points")}</span>
+          {#if perms?.editContent}
+            <select class="input" value={task.points ?? ""} disabled={busy} aria-label={t("Points")}
+              onchange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; patch({ points: v === "" ? null : Number(v) }); }}>
+              <option value="">{t("No points")}</option>
+              {#each POINTS as n (n)}<option value={n}>{pointsText(n)}</option>{/each}
+            </select>
+          {:else}
+            <div class="value">{#if task.points !== null}{pointsText(task.points)}{:else}<span class="muted">{t("No points")}</span>{/if}</div>
           {/if}
         </div>
 
@@ -407,6 +441,19 @@
             <div class="value due {due}">{formatDate(task.dueDate) || "—"}</div>
           {/if}
         </div>
+
+        {#if task.pipe && app.pipeType(task.pipe.kind)?.sprints}
+          <!-- When work starts: with the due date, its bar on the timeline. -->
+          <div class="prop">
+            <span class="label-text">{t("Start date")}</span>
+            {#if perms?.manage}
+              <input class="input" type="date" value={task.startDate ?? ""} max={task.dueDate ?? undefined} aria-label={t("Start date")}
+                onchange={(e) => patch({ startDate: (e.currentTarget as HTMLInputElement).value || null })} />
+            {:else}
+              <div class="value">{formatDate(task.startDate) || "—"}</div>
+            {/if}
+          </div>
+        {/if}
 
         <div class="prop">
           <span class="label-text">{t("Outline document")}</span>

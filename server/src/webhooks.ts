@@ -21,7 +21,7 @@ import { LIMITS, rateLimited } from "./rate-limit.js";
 import { FORMATS, chatBody, type Delivery, type Format } from "./chat.js";
 import { LOCALES, type Locale } from "./i18n.js";
 
-export const EVENTS = ["task.created", "task.moved", "task.assigned", "task.commented", "task.done"] as const;
+export const EVENTS = ["task.created", "task.moved", "task.assigned", "task.commented", "task.done", "sprint.started", "sprint.closed"] as const;
 export type WebhookEvent = (typeof EVENTS)[number];
 /** Delays before each new attempt; after the last one, the delivery is given up. */
 export const RETRY_DELAYS_MS = [60_000, 5 * 60_000, 30 * 60_000, 2 * 3_600_000, 12 * 3_600_000];
@@ -60,7 +60,7 @@ function payload(event: WebhookEvent | "ping", e: Row | null, t: Row | null, hoo
     ...(t && e ? {
       task: {
         id: t.id, key: `${TASK_KEY_PREFIX}-${t.number}`, title: t.title, status: t.status,
-        column: stageLabel(t.pipe_kind, t.stage), owner, dueDate: t.due_date, priority: t.priority ?? null,
+        column: stageLabel(t.pipe_kind, t.stage), owner, startDate: t.start_date ?? null, dueDate: t.due_date, priority: t.priority ?? null, points: t.points ?? null,
         labels: ((t.labels ?? []) as { name: string }[]).map((l) => l.name),
         url: t.pipe_id ? `${config.appUrl}/pipes/${t.pipe_id}?task=${t.id}` : `${config.appUrl}/spaces/${t.space_id}?task=${t.id}`,
       },
@@ -93,6 +93,40 @@ export async function queueWebhooks(db: Queryable, eventId: number) {
     for (const event of events.filter((x) => hook.events.includes(x))) {
       await db.query(`INSERT INTO webhook_deliveries (webhook_id, event, payload) VALUES ($1, $2, $3)`, [hook.id, event, JSON.stringify(payload(event, e!, t, hook))]);
     }
+  }
+}
+
+/**
+ * Queues the deliveries of a sprint started or closed (pipes in sprints, sprints.ts), in its transaction: the sprint
+ * with its points, and for a closed one what its report says.
+ */
+export async function queueSprintWebhooks(db: Queryable, event: "sprint.started" | "sprint.closed", sprint: Row, actorId: string) {
+  const { rows: hooks } = await db.query(
+    `SELECT h.id, h.pipe_id, p.name AS pipe_name, p.kind AS pipe_kind FROM pipe_webhooks h JOIN pipes p ON p.id = h.pipe_id
+     WHERE h.pipe_id = $1 AND h.active AND $2 = ANY(h.events)`,
+    [sprint.pipe_id, event]
+  );
+  if (!hooks.length) return;
+  const actor = await one(`SELECT id, name FROM users WHERE id = $1`, [actorId], db);
+  const r = sprint.report ?? null;
+  for (const hook of hooks) {
+    if (confidentialKind(hook.pipe_kind)) continue;
+    const body = {
+      event,
+      occurredAt: new Date().toISOString(),
+      pipe: { id: hook.pipe_id, name: hook.pipe_name },
+      sprint: {
+        id: sprint.id, number: sprint.number, name: sprint.name, goal: sprint.goal,
+        startsOn: String(sprint.starts_on).slice(0, 10), endsOn: String(sprint.ends_on).slice(0, 10),
+        committedPoints: sprint.committed_points ?? null, completedPoints: sprint.completed_points ?? null,
+        ...(event === "sprint.closed" && r ? {
+          report: { committed: r.committed, completed: r.completed, done: r.done, carried: r.carried, carriedPoints: r.carriedPoints, velocity: r.velocity?.value ?? null },
+        } : {}),
+        url: `${config.appUrl}/pipes/${hook.pipe_id}`,
+      },
+      actor: actor ? { id: actor.id, name: actor.name } : null,
+    };
+    await db.query(`INSERT INTO webhook_deliveries (webhook_id, event, payload) VALUES ($1, $2, $3)`, [hook.id, event, JSON.stringify(body)]);
   }
 }
 

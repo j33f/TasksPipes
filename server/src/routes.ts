@@ -37,6 +37,10 @@ import { hasDevices, pushRoutes } from "./push.js";
 import { updateRoutes } from "./updates.js";
 import { emailDomainAllowed } from "./settings.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
+import { cleanPoints } from "./points.js";
+import { cleanSprintId, cleanSprintSettings, pipeSprints, pipeVelocity, sprintChange, sprintRoutes, sprintSettings, worksInSprints } from "./sprints.js";
+import { sendSprintReport } from "./sprint-report.js";
+import { pokerEnabled, pokerRoutes } from "./poker.js";
 import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
 import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
 import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
@@ -77,6 +81,17 @@ function dateOrNull(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw bad("Invalid due date");
   return value;
+}
+
+function startDateOrNull(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw bad("Invalid start date");
+  return value;
+}
+
+/** A start after the due date is refused (either may be missing). */
+function checkDates(start: string | null, due: string | null) {
+  if (start && due && String(due).slice(0, 10) < start) throw bad("A task cannot be due before it starts");
 }
 
 function status(value: unknown, fallback: Status = "backlog"): Status {
@@ -183,6 +198,7 @@ export function presentTask(t: Row) {
     fields: t.fields,
     position: t.position,
     dueDate: t.due_date,
+    startDate: t.start_date ?? null,
     space: { id: t.space_id, name: t.space_name, kind: t.space_kind },
     pipe: t.pipe_id ? { id: t.pipe_id, name: t.pipe_name, visibility: t.pipe_visibility, kind: t.pipe_kind } : null,
     inIncoming: !t.pipe_id,
@@ -202,6 +218,8 @@ export function presentTask(t: Row) {
     // Tasks it waits for, still to finish.
     blockers: Number(t.open_blockers ?? 0),
     priority: t.priority ?? null,
+    points: t.points ?? null,
+    sprintId: t.sprint_id ?? null,
     labels: t.labels ?? [],
     estimateMinutes: t.estimate_minutes ?? null,
     loggedMinutes: Number(t.logged_minutes ?? 0),
@@ -280,6 +298,10 @@ function presentPipe(p: Row) {
     isDefault: p.is_default,
     dailyReport: Boolean(p.daily_report),
     weeklyReport: Boolean(p.weekly_report),
+    // Planning Poker as chosen for the pipe; null: as its type says (pokerEnabled).
+    pokerChoice: p.poker ?? null,
+    // How it works in sprints, for a pipe whose type does.
+    sprintSettings: worksInSprints(p.kind) ? sprintSettings(p.sprint_settings) : null,
     color: p.color,
     position: p.position,
     createdBy: p.created_by ? { id: p.created_by, name: p.created_by_name } : null,
@@ -385,6 +407,12 @@ async function recordEvent(
       if (before && before.space_id !== after.space_id) notifySpace(before.space_id, { type: "task.updated" }, actorId);
     });
   }
+}
+
+/** A task that left its pipe left its sprint too (tasks_sprint_on_move): noted in its history, for the burndown. */
+async function leftSprint(db: Queryable, before: Row, after: Row) {
+  if (!before.sprint_id || after.sprint_id) return null;
+  return sprintChange(await one(`SELECT id, name FROM sprints WHERE id = $1`, [before.sprint_id], db), null);
 }
 
 /** Statuses of work under way or finished: reaching one while blocked is allowed, and noted in the history. */
@@ -573,11 +601,14 @@ export async function createTask(uid: string, byName: string, b: Record<string, 
   const title = text(b.title, "Title", { required: true, max: 300 });
   const description = text(b.description, "Description");
   const dueDate = dateOrNull(b.dueDate);
+  const startDate = startDateOrNull(b.startDate);
+  checkDates(startDate, dueDate);
   const doc = docOrNull(b.outlineDoc);
   const comment = text(b.comment, "Comment") || null;
   const type = taskType(b.taskType);
   const { values } = cleanFields(type, b.fields ?? {});
   const priority = cleanPriority(b.priority);
+  const points = cleanPoints(b.points);
   const estimate = cleanEstimate(b.estimateMinutes);
   if (b.items !== undefined && !Array.isArray(b.items)) throw bad("Invalid sub-tasks");
   const items = ((b.items ?? []) as unknown[])
@@ -611,6 +642,8 @@ export async function createTask(uid: string, byName: string, b: Record<string, 
     senderId = uid;
   }
   const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Owner")));
+  // Straight into a sprint of the pipe (the board shows one).
+  const sprint = b.sprintId ? await cleanSprintId(b.sprintId, pipeId, pipeId ? (await one(`SELECT kind FROM pipes WHERE id = $1`, [pipeId]))!.kind : null) : null;
   // Labels of the space, put by those who edit its tasks: in a pipe one adds to, or in an incoming of one's own.
   const labelIds = b.labelIds === undefined ? [] : await cleanLabelIds(b.labelIds, spaceId);
   if (labelIds.length && !pipeId && !(await memberRole(spaceId, uid))) throw forbidden();
@@ -620,10 +653,11 @@ export async function createTask(uid: string, byName: string, b: Record<string, 
     const row = await one(
       `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date,
                           outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields, priority,
-                          estimate_minutes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18) RETURNING id`,
+                          estimate_minutes, points, sprint_id, start_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18,$19,$20,$21) RETURNING id`,
       [title, description, spaceId, pipeId, st, stage, position, assigneeId, dueDate,
-       doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority, estimate],
+       doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority, estimate, points,
+       sprint?.id ?? null, startDate],
       client
     ).then((r) => getTaskRow(r!.id, client));
     if (labelIds.length) await setTaskLabels(client, row!.id, labelIds);
@@ -635,7 +669,8 @@ export async function createTask(uid: string, byName: string, b: Record<string, 
       );
     }
     const mentioned = mentionedIds(description);
-    await recordEvent(client, row!.id, uid, pipeId ? "created" : "sent", null, snapshot(row!), comment, mentioned.length ? { mentioned } : null);
+    const created = { ...(mentioned.length ? { mentioned } : {}), ...(sprint ? sprintChange(null, sprint) : {}) };
+    await recordEvent(client, row!.id, uid, pipeId ? "created" : "sent", null, snapshot(row!), comment, Object.keys(created).length ? created : null);
     return row!.id as string;
   });
   if (!pipeId) {
@@ -659,6 +694,25 @@ export async function apiRoutes(app: FastifyInstance) {
   await app.register(inboxRoutes);
   await app.register(updateRoutes);
   await app.register(accountRoutes, { present: presentTask, events: getEvents });
+  await app.register(sprintRoutes, {
+    loadPipeFor,
+    recordSprintChange: async (db, taskId, actorId, details) => {
+      const s = snapshot((await getTaskRow(taskId, db))!);
+      await recordEvent(db, taskId, actorId, "fields", s, s, null, details, false);
+    },
+    today: () => localDay(new Date(), config.timezone),
+    sendReport: (p, sprint) => sendSprintReport(p, sprint),
+  });
+  await app.register(pokerRoutes, {
+    loadPipeFor,
+    setPoints: async (db, taskId, actorId, points) => {
+      const before = (await getTaskRow(taskId, db))!;
+      if ((before.points ?? null) === points) return;
+      await db.query(`UPDATE tasks SET points = $2, updated_at = now() WHERE id = $1`, [taskId, points]);
+      const s = snapshot(before);
+      await recordEvent(db, taskId, actorId, "fields", s, s, null, { points: { from: before.points ?? null, to: points }, poker: true });
+    },
+  });
 
   app.get("/me", async (req) => ({
     user: req.user,
@@ -1470,6 +1524,12 @@ export async function apiRoutes(app: FastifyInstance) {
       query(`${TASK_SELECT} WHERE t.pipe_id = $1 ORDER BY t.position, t.created_at`, [p.id]),
       query(`SELECT * FROM pipe_links WHERE pipe_id = $1 ORDER BY created_at`, [p.id]),
     ]);
+    const inSprints = worksInSprints(p.kind);
+    const [sprints, velocity] = inSprints ? await Promise.all([pipeSprints(p.id), pipeVelocity(p)]) : [null, null];
+    // Planning Poker: on in this pipe (its team's members only), and whether a session is open.
+    const poker = role && pokerEnabled(p, space!.kind)
+      ? { enabled: true, open: Boolean(await one(`SELECT 1 FROM poker_sessions WHERE pipe_id = $1 AND status = 'open'`, [p.id])) }
+      : { enabled: false, open: false };
     const counts: Record<string, number> = {};
     for (const t of tasks.rows) counts[t.status] = (counts[t.status] ?? 0) + 1;
     return {
@@ -1480,7 +1540,22 @@ export async function apiRoutes(app: FastifyInstance) {
       canAddTasks: !p.archived_at && (Boolean(role) || p.visibility === "open"),
       links: links.rows.map(presentLink),
       tasks: tasks.rows.map(presentTask),
+      sprints,
+      // The points a sprint can take (velocity.ts), with how it was found.
+      velocity,
+      poker,
     };
+  });
+
+  // Which tasks of the pipe wait for which (the timeline draws them); both ends in the pipe.
+  app.get("/pipes/:id/dependencies", async (req: Req) => {
+    const { p } = await loadPipeFor(req.params.id, me(req));
+    const { rows } = await query(
+      `SELECT d.task_id, d.blocker_id FROM task_dependencies d
+       JOIN tasks a ON a.id = d.task_id JOIN tasks b ON b.id = d.blocker_id WHERE a.pipe_id = $1 AND b.pipe_id = $1`,
+      [p.id]
+    );
+    return rows.map((r) => ({ taskId: r.task_id, waitsFor: r.blocker_id }));
   });
 
   // ----- Export and import of a pipe's tasks --------------------------------
@@ -1491,8 +1566,8 @@ export async function apiRoutes(app: FastifyInstance) {
     const lang = localeOf(req);
     const { p } = await loadPipeFor(req.params.id, uid);
     const { rows } = await query(
-      `SELECT t.number, t.title, t.description, t.status, t.stage, t.task_type, t.fields, t.due_date, t.created_at, t.updated_at,
-              au.name AS author_name, ow.name AS owner_name, t.priority, t.estimate_minutes,
+      `SELECT t.number, t.title, t.description, t.status, t.stage, t.task_type, t.fields, t.due_date, t.start_date, t.created_at, t.updated_at,
+              au.name AS author_name, ow.name AS owner_name, t.priority, t.points, t.estimate_minutes,
               (SELECT COALESCE(sum(te.minutes), 0) FROM task_time_entries te WHERE te.task_id = t.id) AS logged_minutes,
               COALESCE((SELECT json_agg(l.name ORDER BY l.position, lower(l.name)) FROM task_labels tl
                         JOIN space_labels l ON l.id = tl.label_id WHERE tl.task_id = t.id), '[]') AS labels,
@@ -1595,9 +1670,9 @@ export async function apiRoutes(app: FastifyInstance) {
         const position = (positions.get(t.stage) ?? (await nextPosition(client, p.space_id, p.id, t.stage)) - 1) + 1;
         positions.set(t.stage, position);
         const row = await one(
-          `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date, author_id, task_type, fields)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) RETURNING id`,
-          [t.title, t.description, p.space_id, p.id, t.status, t.stage, position, t.assigneeId, t.dueDate, uid, t.taskType, JSON.stringify(t.fields)],
+          `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date, author_id, task_type, fields, points, start_date)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14) RETURNING id`,
+          [t.title, t.description, p.space_id, p.id, t.status, t.stage, position, t.assigneeId, t.dueDate, uid, t.taskType, JSON.stringify(t.fields), t.points, t.startDate],
           client
         ).then((r) => getTaskRow(r!.id, client));
         for (const [i, item] of t.items.entries()) {
@@ -1636,7 +1711,7 @@ export async function apiRoutes(app: FastifyInstance) {
     await client.query(
       `UPDATE pipes SET name = $2, description = $3, visibility = $4, color = $5, kind = $6, icon = $8,
          archived_at = CASE WHEN $7::boolean IS NULL THEN archived_at WHEN $7 THEN COALESCE(archived_at, now()) END,
-         daily_report = $9, weekly_report = $10, updated_at = now()
+         daily_report = $9, weekly_report = $10, sprint_settings = $11, poker = $12, updated_at = now()
        WHERE id = $1`,
       [
         p.id,
@@ -1651,6 +1726,11 @@ export async function apiRoutes(app: FastifyInstance) {
         // Reports sent by e-mail: the weekly time report is for development pipes only.
         "dailyReport" in b ? b.dailyReport === true : p.daily_report,
         pipeTypeById(kind)?.timeReport ? ("weeklyReport" in b ? b.weeklyReport === true : p.weekly_report) : false,
+        // Kept when the type changes, for a return to a type in sprints.
+        "sprintSettings" in b && worksInSprints(kind)
+          ? JSON.stringify(cleanSprintSettings(b.sprintSettings, sprintSettings(p.sprint_settings)))
+          : p.sprint_settings === null ? null : JSON.stringify(p.sprint_settings),
+        "poker" in b ? (b.poker === null ? null : b.poker === true) : p.poker,
       ]
     );
     // A new type brings new columns: each task goes to the matching one.
@@ -1721,13 +1801,15 @@ export async function apiRoutes(app: FastifyInstance) {
     const uid = me(req);
     const { t, perms } = await loadTaskFor(req.params.id, uid, "editContent");
     const b = req.body || {};
-    if (["assigneeId", "dueDate", "outlineDoc", "status", "stage"].some((k) => k in b) && !perms.manage) throw forbidden();
+    if (["assigneeId", "dueDate", "startDate", "outlineDoc", "status", "stage", "sprintId"].some((k) => k in b) && !perms.manage) throw forbidden();
 
     const title = "title" in b ? text(b.title, "Title", { required: true, max: 300 }) : t.title;
     const description = "description" in b ? text(b.description, "Description") : t.description;
     const assigneeId =
       "assigneeId" in b ? await checkAssignee(t.space_id, await ensureUser(optUuid(b.assigneeId, "Owner"))) : t.assignee_id;
     const dueDate = "dueDate" in b ? dateOrNull(b.dueDate) : t.due_date;
+    const startDate = "startDate" in b ? startDateOrNull(b.startDate) : (t.start_date ?? null);
+    if ("startDate" in b || "dueDate" in b) checkDates(startDate, dueDate);
     let st: Status = "status" in b ? status(b.status) : t.status;
     let stage: string | null = t.stage;
     if (t.pipe_id && ("stage" in b || "status" in b)) {
@@ -1742,23 +1824,31 @@ export async function apiRoutes(app: FastifyInstance) {
     assertTaskTypeUsable(type, uid, t.pipe_kind, t.task_type);
     const { values, labels } = "fields" in b ? cleanFields(type, b.fields) : { values: {}, labels: [] };
     const priority = "priority" in b ? cleanPriority(b.priority) : t.priority;
+    const points = "points" in b ? cleanPoints(b.points) : (t.points ?? null);
     const estimate = "estimateMinutes" in b ? cleanEstimate(b.estimateMinutes) : t.estimate_minutes;
+    // Planned in a sprint of its pipe, or back to the backlog (null).
+    const sprint = "sprintId" in b ? await cleanSprintId(b.sprintId, t.pipe_id, t.pipe_kind) : undefined;
+    const sprintId = sprint === undefined ? (t.sprint_id ?? null) : (sprint?.id ?? null);
     const labelIds = "labelIds" in b ? await cleanLabelIds(b.labelIds, t.space_id) : null;
     const details: Record<string, unknown> = {
       ...(type.id !== t.task_type ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: type.label } } : {}),
       ...(labels.length ? { fields: labels } : {}),
       ...(priority !== (t.priority ?? null) ? { priority: { from: t.priority ?? null, to: priority } } : {}),
+      ...(points !== (t.points ?? null) ? { points: { from: t.points ?? null, to: points } } : {}),
       ...(estimate !== (t.estimate_minutes ?? null) ? { estimate: { from: t.estimate_minutes ?? null, to: estimate } } : {}),
+      ...(startDate !== (t.start_date ?? null) ? { startDate: { from: t.start_date ?? null, to: startDate } } : {}),
+      ...(sprintId !== (t.sprint_id ?? null)
+        ? sprintChange(t.sprint_id ? await one(`SELECT id, name FROM sprints WHERE id = $1`, [t.sprint_id]) : null, sprint) : {}),
     };
 
     await tx(async (client) => {
       const row = await one(
         `UPDATE tasks SET title = $2, description = $3, assignee_id = $4, due_date = $5, status = $6, stage = $10,
            outline_doc_id = $7, outline_doc_title = $8, outline_doc_url = $9,
-           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, estimate_minutes = $14, updated_at = now()
+           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, estimate_minutes = $14, points = $15, sprint_id = $16, start_date = $17, updated_at = now()
          WHERE id = $1 RETURNING id`,
         [t.id, title, description, assigneeId, dueDate, st, doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, stage,
-         type.id, JSON.stringify(values), priority, estimate],
+         type.id, JSON.stringify(values), priority, estimate, points, sprintId, startDate],
         client
       ).then(() => getTaskRow(t.id, client));
       if (labelIds) {
@@ -1818,7 +1908,10 @@ export async function apiRoutes(app: FastifyInstance) {
       const row = await getTaskRow(t.id, client);
       const before = snapshot(t);
       const after = snapshot(row!);
-      const details = retyped ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: retyped.label } } : null;
+      const left = await leftSprint(client, t, row!);
+      const details = retyped || left
+        ? { ...(retyped ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: retyped.label } } : {}), ...left }
+        : null;
       if (before.pipe_id !== after.pipe_id || before.stage !== after.stage || comment) {
         const type = !t.pipe_id ? "accepted" : before.pipe_id !== after.pipe_id ? "moved" : "status";
         const blocked = await movedWhileBlocked(client, t, after.status);
@@ -1855,7 +1948,9 @@ export async function apiRoutes(app: FastifyInstance) {
       // Labels belong to the space it left.
       const lost = await keepSpaceLabels(client, t.id, spaceId);
       const row = await getTaskRow(t.id, client);
-      await recordEvent(client, t.id, uid, "sent", snapshot(t), snapshot(row!), comment, lost.length ? { labels: { added: [], removed: lost } } : null);
+      const left = await leftSprint(client, t, row!);
+      const sent = { ...(lost.length ? { labels: { added: [], removed: lost } } : {}), ...left };
+      await recordEvent(client, t.id, uid, "sent", snapshot(t), snapshot(row!), comment, Object.keys(sent).length ? sent : null);
     });
     notifySpace(spaceId, { type: "task.sent", task: { id: t.id, number: t.number, title: t.title }, by: req.user!.name }, uid);
     // The incoming it left (if any) has one task less.

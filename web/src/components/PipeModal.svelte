@@ -11,7 +11,9 @@
   import IconPicker from "./IconPicker.svelte";
   import GitIntegrations from "./GitIntegrations.svelte";
   import IncomingWebhook from "./IncomingWebhook.svelte";
-  import { t, tn } from "../lib/i18n.svelte";
+  import { intlLocale, t, tn } from "../lib/i18n.svelte";
+  import { WEEKDAYS, addDays } from "../lib/sprints";
+  import type { SprintSettings } from "../lib/types";
 
   let { spaceId, pipe = null, onclose }: { spaceId: string; pipe?: Pipe | null; onclose: () => void } = $props();
 
@@ -23,6 +25,18 @@
   let color = $state<string | null>(initial?.color ?? app.pipeType("general")?.color ?? PALETTE[4]);
   let icon = $state<string | null>(initial?.icon ?? null);
   let withTemplates = $state(true);
+  // Planning Poker, for team pipes: the pipe's choice, else its type's.
+  let poker = $state<boolean>(untrack(() => initial?.pokerChoice ?? Boolean(app.pipeType(initial?.kind ?? "")?.planningPoker)));
+  // How it works in sprints (a pipe whose type does).
+  let sprint = $state<SprintSettings>(untrack(() => ({
+    weeks: 2, startDay: 1, workDays: [1, 2, 3, 4, 5], velocityMode: "learned", initialVelocity: null, sendReport: false,
+    ...(initial?.sprintSettings ?? {}),
+  })));
+  // 2026-11-30 is a Monday: its week names the days in the reader's language.
+  const dayName = (d: number) => new Intl.DateTimeFormat(intlLocale(), { weekday: "long" }).format(new Date(`${addDays("2026-11-30", d - 1)}T12:00:00`));
+  function toggleDay(d: number) {
+    sprint.workDays = sprint.workDays.includes(d) ? sprint.workDays.filter((x) => x !== d) : [...sprint.workDays, d].sort();
+  }
   let busy = $state(false);
   let error = $state("");
 
@@ -45,7 +59,11 @@
     e.preventDefault();
     busy = true;
     try {
-      const body = { name, description, visibility, kind, color, icon, withTemplates: !pipe && withTemplates };
+      const body = {
+        name, description, visibility, kind, color, icon, withTemplates: !pipe && withTemplates,
+        ...(pipe && type?.sprints ? { sprintSettings: sprint } : {}),
+        ...(pipe && isTeam && poker !== (initial?.pokerChoice ?? Boolean(app.pipeType(initial?.kind ?? "")?.planningPoker)) ? { poker } : {}),
+      };
       if (pipe) {
         await api.patch(`/pipes/${pipe.id}`, body);
         app.toast(t("Pipe updated"));
@@ -165,6 +183,49 @@
         </div>
       {/if}
     </div>
+    {#if pipe && type?.sprints}
+      <details class="field git-section">
+        <summary class="label-text">{t("Sprints")}</summary>
+        <div class="sprint-grid">
+          <div class="field">
+            <label for="pm-weeks">{t("Length of a sprint")}</label>
+            <select id="pm-weeks" class="input" bind:value={sprint.weeks}>
+              {#each [1, 2, 3, 4] as w (w)}<option value={w}>{tn(w, "{n} week", "{n} weeks")}</option>{/each}
+            </select>
+          </div>
+          <div class="field">
+            <label for="pm-start-day">{t("Starts on a")}</label>
+            <select id="pm-start-day" class="input" bind:value={sprint.startDay}>
+              {#each WEEKDAYS as d (d)}<option value={d}>{dayName(d)}</option>{/each}
+            </select>
+          </div>
+        </div>
+        <fieldset class="field days">
+          <legend class="label-text">{t("Working days")}</legend>
+          {#each WEEKDAYS as d (d)}
+            <label class="day"><input type="checkbox" checked={sprint.workDays.includes(d)} onchange={() => toggleDay(d)} />{dayName(d).slice(0, 3)}</label>
+          {/each}
+        </fieldset>
+        <fieldset class="field">
+          <legend class="label-text">{t("Velocity")}</legend>
+          <label class="check"><input type="radio" bind:group={sprint.velocityMode} value="learned" />
+            {t("Learned from the last sprints (a low average, unusual sprints left out)")}</label>
+          <label class="check"><input type="radio" bind:group={sprint.velocityMode} value="manual" />{t("Set by hand")}</label>
+          <label class="velocity">
+            <span>{sprint.velocityMode === "learned" ? t("Until enough sprints are closed:") : t("Points per sprint:")}</span>
+            <input class="input" type="number" min="0" max="10000" step="1" value={sprint.initialVelocity ?? ""}
+              oninput={(e) => { const v = (e.currentTarget as HTMLInputElement).value; sprint.initialVelocity = v === "" ? null : Math.max(0, Math.round(Number(v))); }} />
+            <span class="muted">{t("pts")}</span>
+          </label>
+        </fieldset>
+        <label class="check"><input type="checkbox" bind:checked={sprint.sendReport} />
+          {t("E-mail the report of each closed sprint to the space's members")}</label>
+      </details>
+    {/if}
+    {#if pipe && isTeam}
+      <label class="check"><input type="checkbox" bind:checked={poker} />
+        {t("Planning Poker: the team's members estimate tasks together")}</label>
+    {/if}
     {#if pipe}
       <details class="field git-section">
         <summary class="label-text">{t("GitHub / GitLab")}</summary>
@@ -203,5 +264,12 @@
   .radio-card:disabled { opacity: 0.45; cursor: not-allowed; }
   .check { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 10px; cursor: pointer; }
   .git-section summary { cursor: pointer; }
+  .sprint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  fieldset { border: 0; padding: 0; margin: 8px 0 0; }
+  .days { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .days legend { width: 100%; margin-bottom: 4px; }
+  .day { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; text-transform: capitalize; cursor: pointer; }
+  .velocity { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 8px; flex-wrap: wrap; }
+  .velocity .input { width: 90px; }
   .templates { margin: 6px 0 0; padding-left: 26px; max-height: 160px; overflow-y: auto; font-size: 13px; color: var(--text-tertiary); }
 </style>

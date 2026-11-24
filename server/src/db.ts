@@ -797,6 +797,96 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Complexity points of any task (points.ts), on the planning poker scale; none when null.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS points smallint CHECK (points IN (0, 1, 2, 3, 5, 8, 13, 21, 40, 100));
+-- The "Points" field of user stories and technical tasks became the points of every task: its values are copied
+-- once, rounded up to the scale (they stay in the fields, no longer shown).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_steps WHERE name = 'task-points-field') THEN
+    UPDATE tasks SET points = COALESCE(
+      (SELECT min(v) FROM unnest(ARRAY[0, 1, 2, 3, 5, 8, 13, 21, 40, 100]) v WHERE v >= (fields->>'points')::numeric), 100)
+    WHERE task_type IN ('user_story', 'tache_technique') AND points IS NULL
+      AND CASE WHEN jsonb_typeof(fields->'points') = 'number' THEN (fields->>'points')::numeric END >= 0;
+    INSERT INTO schema_steps (name) VALUES ('task-points-field') ON CONFLICT DO NOTHING;
+  END IF;
+END $$;
+
+-- Sprints of the pipes whose type works in sprints (sprints.ts): planned, then active (one at a time), then closed.
+-- The points committed when it starts and done when it closes are kept, with a report frozen at its close.
+CREATE TABLE IF NOT EXISTS sprints (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  pipe_id uuid NOT NULL REFERENCES pipes(id) ON DELETE CASCADE,
+  number integer NOT NULL,
+  name text NOT NULL,
+  goal text NOT NULL DEFAULT '',
+  starts_on date NOT NULL,
+  ends_on date NOT NULL CHECK (ends_on >= starts_on),
+  status text NOT NULL DEFAULT 'planned' CHECK (status IN ('planned', 'active', 'closed')),
+  committed_points integer,
+  completed_points integer,
+  -- Left out of the learned velocity (holidays, an incident…).
+  exceptional boolean NOT NULL DEFAULT false,
+  report jsonb,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  started_at timestamptz,
+  started_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  closed_at timestamptz,
+  closed_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE (pipe_id, number)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS sprints_one_active_idx ON sprints(pipe_id) WHERE status = 'active';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sprint_id uuid REFERENCES sprints(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS tasks_sprint_idx ON tasks(sprint_id) WHERE sprint_id IS NOT NULL;
+-- How a pipe works in sprints: length, days, velocity (null: the defaults of sprints.ts).
+ALTER TABLE pipes ADD COLUMN IF NOT EXISTS sprint_settings jsonb;
+-- A task leaving its pipe (moved, sent) leaves its sprint.
+CREATE OR REPLACE FUNCTION task_sprint_on_move() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.pipe_id IS DISTINCT FROM OLD.pipe_id THEN NEW.sprint_id := NULL; END IF;
+  RETURN NEW;
+END $$;
+-- Planning Poker (poker.ts), in team pipes: on or off for the pipe (null: as its type says), and its sessions — one
+-- open at a time per pipe — with the tasks to estimate, the one being estimated, its round and whether the cards are
+-- shown. Votes stay hidden until then (the routes never send them before).
+ALTER TABLE pipes ADD COLUMN IF NOT EXISTS poker boolean;
+CREATE TABLE IF NOT EXISTS poker_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  pipe_id uuid NOT NULL REFERENCES pipes(id) ON DELETE CASCADE,
+  facilitator_id uuid REFERENCES users(id) ON DELETE SET NULL,
+  task_ids uuid[] NOT NULL DEFAULT '{}',
+  current_task_id uuid,
+  round integer NOT NULL DEFAULT 1,
+  revealed boolean NOT NULL DEFAULT false,
+  -- Points set during the session, by task id.
+  estimated jsonb NOT NULL DEFAULT '{}',
+  status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  closed_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS poker_sessions_open_idx ON poker_sessions(pipe_id) WHERE status = 'open';
+CREATE TABLE IF NOT EXISTS poker_votes (
+  session_id uuid NOT NULL REFERENCES poker_sessions(id) ON DELETE CASCADE,
+  task_id uuid NOT NULL,
+  round integer NOT NULL,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  value text NOT NULL CHECK (value IN ('0', '1', '2', '3', '5', '8', '13', '21', '40', '100', '?', 'coffee')),
+  voted_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (session_id, task_id, round, user_id)
+);
+-- Who has the session open (their page says so every few seconds).
+CREATE TABLE IF NOT EXISTS poker_presence (
+  session_id uuid NOT NULL REFERENCES poker_sessions(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  seen_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (session_id, user_id)
+);
+
+-- When work on a task is planned to start (the timeline of pipes in sprints); none when null.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date date;
+CREATE OR REPLACE TRIGGER tasks_sprint_on_move BEFORE UPDATE OF pipe_id ON tasks
+  FOR EACH ROW EXECUTE FUNCTION task_sprint_on_move();
+
 -- Documents linked to a pipe: Outline documents, or pages elsewhere (office suites, design tools, code forges…).
 CREATE TABLE IF NOT EXISTS pipe_links (
   id uuid PRIMARY KEY DEFAULT gen_uuidv7(),

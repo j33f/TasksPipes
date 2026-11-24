@@ -41,6 +41,12 @@ Outline through its RPC-style API.
 | `push.ts` | Web Push: encryption for a device (RFC 8291), VAPID signature, subscriptions kept encrypted. |
 | `worklog.ts` | Estimates and time logged by hand: checks, who may change what, the time of a weekly report. |
 | `labels.ts` | Labels of a space and priority of tasks: who manages them, checks of a task's labels, labels lost on leaving a space. |
+| `points.ts` | Complexity points of tasks: the planning poker scale, checks, rounding of imported values. |
+| `velocity.ts` | Velocity of a pipe in sprints: by hand, or learned (last 6 sprints per week, exceptional and outlying ones left out, low average). |
+| `burndown.ts` | A task's state at any moment, from its history; a sprint's burndown and a pipe's progress sprint after sprint. |
+| `sprint-report.ts` | E-mail of a closed sprint's report to the space's members. |
+| `poker.ts` | Planning Poker of team pipes: sessions, hidden votes until shown, stats, points set in the task's history; live "poker" events. |
+| `sprints.ts` | Sprints of pipes in sprints: settings, dates, start (points committed), close (unfinished tasks moved, report frozen), and their routes. |
 | `dependencies.ts` | Dependencies between tasks: what a linked task shows to whom, loops, and releasing the tasks waiting for one just finished. |
 | `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |
 | `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |
@@ -76,6 +82,7 @@ follow Outline's design tokens (`web/src/app.css`).
 | `lib/api.ts` | API client (sends the page's language). |
 | `lib/i18n.svelte.ts`, `lib/locales/` | Translations, language and theme preferences. |
 | `lib/realtime.svelte.ts` | WebSocket connection, closed when the page is idle. |
+| `lib/sprints.ts`, `lib/timeline.ts` | Sprints (working days, points, order) and the timeline (a task's span from its dates or its sprint, range, moves). |
 
 ## Data model
 

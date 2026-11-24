@@ -86,8 +86,9 @@ quality & Qualiopi, admin & finance, and processes (recruitment / admission, ses
 session end) that can fill their first column with starter tasks.
 
 The *Software* group covers product teams: UX research, UI design, product documentation, translation / i18n,
-R&D (hypotheses, experiments and prototypes), software development (with an *In review* column) and testing / QA.
-R&D and software development pipes get the weekly time report.
+R&D (hypotheses, experiments and prototypes), software development (with an *In review* column), **Sprint**
+(software development in [sprints](#sprints)) and testing / QA. R&D, software development and Sprint pipes get the
+weekly time report.
 
 The *Personal life* group covers everyday life: chores in a flat share, as a couple or as a family (who does it,
 room, frequency, points for the kids), moving house, shared custody (swaps agreed with the other parent), home
@@ -140,6 +141,12 @@ those types keep working. This is a personal choice: others still see every type
   Mentioning someone who cannot open the task tells them nothing.
 - **Priority** of any task: *urgent*, *high*, *medium*, *low* or none, shown as a colored flag on cards and lists.
   (The *Priority* field of user stories became this priority: its values were copied once.)
+- **Points** of any task, for its complexity: a value of the planning poker scale — 0, 1, 2, 3, 5, 8, 13, 21, 40,
+  100 — or none. A card shows them in a small badge; once a task of a pipe has points, each column's header adds up
+  those of the tasks shown, and the filters offer them. Set like the priority, kept in the history, copied to the next
+  task of a series, exported, imported (rounded up to the scale: 4 gives 5), sent with webhooks and through MCP.
+  (The *Points* field of user stories and technical tasks became these points: its values were copied once, rounded
+  up; the *Points / reward* field of household chores stays a field.)
 - **Labels** of a space (*a space's page › Labels*): a name, unique in the space, and a color. Members of the space
   create, rename, recolor and delete them; a task gets labels of its space only, and loses them when it is sent to
   another space (noted in its history). Priority and labels are set by those who edit the task's fields, recorded in
@@ -151,7 +158,7 @@ those types keep working. This is a personal choice: others still see every type
   task's team (noted in the history). Whoever sees the task sees its entries. The time computed per step stays
   beside it. Logged time counts in the **weekly report** (per person and per task, against estimates; durations
   only in the e-mail), the pipe export (in hours) and one's data export.
-- **Filters**: a pipe filters its tasks by text, label, priority, owner and task type; *My tasks* by label and
+- **Filters**: a pipe filters its tasks by text, label, priority, points, owner and task type; *My tasks* by label and
   priority, and groups them by priority too; the search filters by label (by name, across spaces) and priority.
 - **Dependencies**: a task can wait for other tasks (*Dependencies › Add a task it waits for*), from any space or
   pipe, among the tasks you can open; loops are refused. While one of them is not done (or dropped), the task shows
@@ -176,6 +183,72 @@ those types keep working. This is a personal choice: others still see every type
   webhooks). The task shows the rule in words and the next dates; stopping the repetition keeps the tasks made. A
   series stops by itself when its pipe is archived.
 
+## Sprints
+
+Pipes whose type works in sprints — the built-in *Sprint* type, or a model with *Work in sprints* checked in the
+designer — plan their tasks in sprints of a few weeks.
+
+- **Settings** (*Edit the pipe › Sprints*): the length of a sprint (1 to 4 weeks), the day it starts, the days
+  worked, and the velocity: learned from the last sprints, or set by hand (points per sprint, also used until
+  enough sprints are closed).
+- **A sprint** has a name (*Sprint 1*, *Sprint 2*… by default), a goal and dates: a new one follows the last one,
+  or starts on the next start day. It is *planned*, then *under way* — one at a time per pipe: starting it commits
+  the points of its tasks — then *closed*. Closing it keeps the points done and a short report (committed, done,
+  carried over, dropped); its unfinished tasks go to the next sprint (made if there is none) or back to the backlog.
+  Only a planned sprint can be deleted (its tasks go back to the backlog). A closed sprint can be marked
+  *exceptional* (holidays, an incident…), to leave it out of the learned velocity.
+- **The board** shows the sprint under way by default, under a banner: its dates, goal, day of work, points done
+  out of planned, against the velocity, and the tasks still without points. A selector shows another sprint, all of
+  them, or the backlog (tasks in no sprint). A task added while a sprint is shown goes in it.
+- **Planning** (a view beside *Board* and *Agenda*): the backlog beside the sprints still open, with their points
+  against the velocity. Tasks go from one to another by drag and drop or with their *Sprint* menu (on a phone too),
+  and their points are set there. A task's page also offers its sprint.
+- **Velocity**: set by hand, or learned from the last 6 closed sprints, as points done per week (sprints of other
+  lengths compare): the sprints marked exceptional are left out, and so are outliers (a modified z-score above 3.5:
+  0.6745 × distance to the median ÷ median absolute deviation); the velocity is the mean of the values left that
+  are not above their median — a cautious figure — times the length of a sprint. Until 3 sprints count, the velocity
+  typed in the settings is used. The planning shows it with where it comes from; *Progress of the work* shows how it
+  was learned, sprint by sprint.
+- **Burndown** of a sprint (*Burndown* on its banner): the points still to do at the end of each working day, against
+  the ideal line, and the points of all its tasks (*scope*, which rises when tasks are added during the sprint); a day
+  shows its figures on hover, and all the figures are in a table below. It is read from the tasks' history (their
+  sprint, points and status at each moment), so it is right even when opened later.
+- **Report** of a closed sprint (*Report* on its banner): points committed, done, carried over and added during the
+  sprint, its burndown as it ended, what was done per person and per task type, and the velocity it leads to. It is
+  frozen when the sprint closes. With *E-mail the report of each closed sprint* in the settings, the space's members
+  get it by e-mail (in their language), without the chart.
+- **Progress of the work** (in the planning): at the start, then at the end of each sprint, the points of the pipe
+  done and still to do; the points left, the tasks still without points, and the expected end: the sprint under way
+  finishes its own tasks, the rest takes whole sprints at the velocity.
+- **Timeline** (a view beside *Planning*), with the same sprint selector as the board: all the sprints — a band each,
+  their tasks below, the closed ones folded — one sprint, or the backlog. A task is a bar from its **start date**
+  (set on its page, by those who move tasks forward; never after its due date) to its due date; a missing date comes
+  from its sprint, and the bar is then dashed. Releases are milestones, with a line down the timeline. Arrows join a
+  task to the tasks of the pipe it waits for, in red when it starts before they end. Days off are shaded, today is
+  marked, a bar shows its dates, column, points and owner on hover. Members drag a bar to move it, or its ends to
+  change its dates (on a phone, the timeline is read only: dates are set on the task's page). Tasks with no date and
+  no sprint are counted under it. The start date is also in the task's history, the export and import, webhooks and
+  MCP.
+- Each change of sprint is kept in the task's history; a task moved to another pipe or sent leaves its sprint
+  (noted too).
+
+### Planning Poker
+
+In team pipes only — on by default in *Sprint* pipes (and in model types with *Planning Poker on by default*), turned
+on or off per pipe in its settings — the members of the team estimate tasks together.
+
+- **A session** is opened from the planning (*Planning Poker*) with the tasks to estimate, those without points
+  chosen first; whoever opens it leads it. One session at a time per pipe: the others see a banner to join it.
+- **For the task under estimation**, everyone picks a card — 0, 1, 2, 3, 5, 8, 13, 21, 40, 100, *?* or ☕ — and can
+  change it until the cards are shown. The others only see *who* picked one: **no one's card leaves the server
+  before**. Those at the table are shown (their page says so every few seconds); those away are faded.
+- **The one who leads** shows the cards — with their spread, median, and a suggestion (the median rounded up to the
+  scale), or *Everyone agrees* — starts another round if needed, then sets the points: they go on the task, noted
+  in its history *(Planning Poker)*, and the next task not yet estimated comes. They can also pick the task to
+  estimate. Anyone of the team can take the lead (if the one leading left) or close the session.
+- Every page at the table follows at once through the live connection.
+- The members of the pipe's space plan sprints and put tasks in them; whoever sees the pipe sees its sprints.
+
 ## Time and reports
 
 - **Time per step**: each task shows how long it spent in each column (and in incoming buckets), the step it is in
@@ -196,13 +269,13 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
 
 **Export and import** on a pipe's page:
 
-- **Export** — every task of the pipe as **CSV** (key, title, description, column, owner, due date, task type,
-  sub-tasks, one column per field of its task types, priority, labels, author, dates; semicolons in French for spreadsheets) or as
+- **Export** — every task of the pipe as **CSV** (key, title, description, column, owner, start date, due date, task type,
+  sub-tasks, one column per field of its task types, priority, points, labels, author, dates; semicolons in French for spreadsheets) or as
   **JSON** (the fields' values as stored, with their labels). Anyone who sees the pipe can export it. A cell that a
   spreadsheet would run as a formula (`=`, `+`, `-`, `@`) is written as text.
 - **Import** (members of the space, pipes not archived) — a **CSV** file, its separator guessed (comma, semicolon or
   tab): each column of the file is matched to a task property or a field, suggested from its header (in English or
-  French, and the usual words of other tools: *Name*, *List*, *Due*, *Checklist*…), or ignored. Values that match no
+  French, and the usual words of other tools: *Name*, *List*, *Due*, *Checklist*, *Story points*…), or ignored. Values that match no
   column of the pipe (a state from another tool) are placed by hand. Owners are found by name or e-mail among the
   space's members, dates are read as `2026-03-09` or `09/03/2026`, choices without minding case or accents,
   sub-tasks one per line (`[x]` for done ones). An exported file imports back as is.
@@ -220,7 +293,8 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   **read and write**. It acts with exactly your rights, through the same checks as the app, and can be revoked at
   any time; a disabled account's tokens stop working.
 - **API `/api/v1`** — the documented, versioned part of the API: your account, people, spaces, pipes and their tasks,
-  your tasks, the calendar, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, logged time, and sub-tasks. Send the token as
+  your tasks, the calendar, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, logged time, sub-tasks, and the
+  sprints of a pipe with its velocity, progress and their burndowns. Send the token as
   `Authorization: Bearer tp_…`. Its OpenAPI description is at `/api/v1/openapi.json`, browsable at **`/api/v1/docs`**
   (Swagger UI). Tokens are accepted on `/api/v1` only, and never manage tokens, account settings, data export,
   deletion or administration: those need a signed-in session.
@@ -231,8 +305,10 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   *via* it; tasks changed through an access token show it too. Connect it with an agent token, or let a connector
   that signs in (claude.ai, OAuth) ask for your consent. See [MCP.md](MCP.md).
 - **Webhooks** (*a pipe's page › Webhooks*, members of its space) — task events of the pipe are POSTed as JSON to an
-  https address: task created, moved (column or pipe), given an owner, commented, done. Each delivery carries the
-  task (key, title, column, owner, due date, link), who acted and the change, and is signed:
+  https address: task created, moved (column or pipe), given an owner, commented, done — and, in pipes in sprints, a
+  sprint started (its points committed) or closed (its report: points done, carried over, the velocity it leads to).
+  Each task delivery carries the task (key, title, column, owner, start and due dates, points, link), who acted and the
+  change; a sprint delivery carries the sprint and who acted. Each one is signed:
   `X-TasksPipes-Signature: sha256=<HMAC-SHA256 of "<X-TasksPipes-Timestamp>.<body>" with the webhook's secret>`.
   A failed delivery is retried after 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours, then given up; the last
   deliveries show in the dialog, with their answer. A *Test* button sends a `ping`. Addresses on internal networks
@@ -508,7 +584,9 @@ sending nothing but the server's version in its User-Agent, and, when there is a
 | Manage a pipe's webhooks | members of its space (not on confidential pipes) |
 | Add or remove a pipe's linked documents | members of its space (Outline documents: Outline accounts) |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
-| Edit title, description and fields, priority and labels | members, or the author of a task in an open pipe |
+| Plan sprints (create, start, close, delete) and put tasks in them | members of the pipe's space |
+| Play Planning Poker (open a session, vote, lead, close) | members of the pipe's team (team spaces only) |
+| Edit title, description and fields, priority, points and labels | members, or the author of a task in an open pipe |
 | Manage a space's labels | members of the space (whoever sees the space sees them) |
 | Set an estimate, log one's own time | as for fields: members, or the author of a task in an open pipe |
 | Change or delete a time entry | its author; an admin of the task's team may delete it too |

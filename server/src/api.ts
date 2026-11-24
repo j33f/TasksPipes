@@ -99,10 +99,12 @@ const taskBody = {
   description: { type: "string" },
   stage: { type: "string", description: "Column id of the pipe type" },
   dueDate: { type: "string", format: "date", nullable: true },
+  startDate: { type: "string", format: "date", nullable: true, description: "When work is planned to start; not after the due date" },
   assigneeId: { ...uuid, nullable: true, description: "Owner, a member of a team space" },
   taskType: { type: "string" },
   fields: { type: "object", additionalProperties: true, description: "Values by field id of the task type" },
   priority: { type: "integer", minimum: 1, maximum: 4, nullable: true, description: "1 urgent, 2 high, 3 medium, 4 low; null for none" },
+  points: { type: "integer", enum: [0, 1, 2, 3, 5, 8, 13, 21, 40, 100], nullable: true, description: "Complexity points; null for none" },
   labelIds: { type: "array", items: uuid, description: "Labels of the task's space (all of them: the others are taken off)" },
   estimateMinutes: { type: "integer", minimum: 1, maximum: 60000, nullable: true, description: "Estimate, in minutes; null for none" },
 } as const;
@@ -122,6 +124,12 @@ export const V1_ROUTES: Record<string, Doc> = {
   "GET /spaces": { tag: "Spaces", summary: "Spaces one can reach: personal spaces and teams", response: list("Spaces") },
   "GET /spaces/:id": { tag: "Spaces", summary: "A space, its members, pipes and incoming", params: idParams, response: object("Space") },
   "GET /pipes/:id": { tag: "Pipes", summary: "A pipe and its tasks", params: idParams, response: object("Pipe with its tasks") },
+  "GET /pipes/:id/sprints": { tag: "Sprints", summary: "The sprints of a pipe in sprints, latest first", params: idParams, response: list("Sprints") },
+  "GET /pipes/:id/sprint-progress": {
+    tag: "Sprints", summary: "A pipe's velocity, points done and to do at the end of each sprint, and the expected end", params: idParams,
+    response: object("Velocity, progress and projection"),
+  },
+  "GET /sprints/:id/burndown": { tag: "Sprints", summary: "A sprint's burndown: remaining, ideal and scope per working day", params: idParams, response: list("Burndown points") },
   "GET /spaces/:id/labels": { tag: "Labels", summary: "The labels of a space", params: idParams, response: list("Labels") },
   "POST /spaces/:id/labels": {
     tag: "Labels", summary: "Create a label in a space one is a member of", params: idParams,

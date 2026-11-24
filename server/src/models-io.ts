@@ -33,6 +33,8 @@ const pipeOut = (p: PipeType) => ({
   confidential: p.confidential || undefined,
   teamOnly: p.teamOnly || undefined,
   timeReport: p.timeReport || undefined,
+  sprints: p.sprints || undefined,
+  planningPoker: p.planningPoker || undefined,
   columns: p.columns.map(({ id, label, status, color }) => ({ id, label, status, color })),
   taskTypes: p.taskTypes.length ? p.taskTypes : undefined,
   templates: p.templates.length ? p.templates : undefined,

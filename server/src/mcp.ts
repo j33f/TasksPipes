@@ -17,6 +17,7 @@ import { createMcpHandler, McpServer, type AuthInfo } from "@modelcontextprotoco
 import * as z from "zod";
 import { config } from "./config.js";
 import { isConfidential } from "./access.js";
+import { POINTS } from "./points.js";
 import { INTERNAL_HEADER, INTERNAL_SECRET, V1, type McpScope } from "./api.js";
 import { LIMITS, enforceLimit } from "./rate-limit.js";
 import { resourceMetadataUrl } from "./oauth.js";
@@ -85,6 +86,9 @@ const visible = (c: Caller, t: Json) => {
   return !isConfidential({ pipe_kind: t?.pipe?.kind ?? null, task_type: t?.taskType ?? null });
 };
 
+/** Complexity points: a value of the planning poker scale. */
+const pointsSchema = z.number().int().refine((n) => (POINTS as readonly number[]).includes(n), { message: `One of ${POINTS.join(", ")}` });
+
 /** What an agent needs of a task in a list. */
 const brief = (t: Json) => ({
   id: t.id,
@@ -94,7 +98,10 @@ const brief = (t: Json) => ({
   stage: t.stage,
   type: t.taskType,
   dueDate: t.dueDate,
+  startDate: t.startDate ?? null,
   priority: t.priority,
+  points: t.points ?? null,
+  sprintId: t.sprintId ?? null,
   assignee: t.assignee?.name ?? null,
   space: t.space ? { id: t.space.id, name: t.space.name } : null,
   pipe: t.pipe ? { id: t.pipe.id, name: t.pipe.name } : null,
@@ -221,6 +228,32 @@ function buildServer(app: FastifyInstance, c: Caller) {
   );
 
   server.registerTool(
+    "get_sprints",
+    {
+      title: "Get the sprints of a pipe",
+      description: "The sprints of a pipe that works in sprints, latest first (planned, active or closed, with their points), its velocity and the end its remaining work points to.",
+      inputSchema: z.object({ pipeId: id }),
+      annotations: read,
+    },
+    run(async ({ pipeId }) => {
+      await ownPipe(app, c, pipeId);
+      const sprints: Json[] = await call(app, c, "GET", `/pipes/${pipeId}/sprints`);
+      if (!sprints.length) return { sprints: [], notice: "No sprint: this pipe does not work in sprints, or has none yet." };
+      const progress = await call(app, c, "GET", `/pipes/${pipeId}/sprint-progress`);
+      return {
+        sprints: sprints.map((x) => ({
+          id: x.id, number: x.number, name: x.name, goal: x.goal, startsOn: x.startsOn, endsOn: x.endsOn, status: x.status,
+          committedPoints: x.committedPoints, completedPoints: x.completedPoints,
+        })),
+        velocity: { pointsPerSprint: progress.velocity.value, source: progress.velocity.source },
+        remainingPoints: progress.remaining,
+        tasksWithoutPoints: progress.unestimated,
+        projection: progress.projection,
+      };
+    })
+  );
+
+  server.registerTool(
     "my_tasks",
     { title: "My tasks", description: "Tasks the person owns, still to do.", annotations: read },
     run(async () => ({ ...filtered(c, await call(app, c, "GET", "/me/tasks")), notice: NOTICE }))
@@ -263,10 +296,11 @@ function buildServer(app: FastifyInstance, c: Caller) {
       "create_task",
       {
         title: "Create a task",
-        description: "Create a task in a pipe. stage: a stage id of the pipe (see get_pipe); dueDate: YYYY-MM-DD; priority: 1 urgent … 4 low.",
+        description: "Create a task in a pipe. stage: a stage id of the pipe (see get_pipe); dueDate: YYYY-MM-DD; priority: 1 urgent … 4 low; points: complexity, one of 0 1 2 3 5 8 13 21 40 100.",
         inputSchema: z.object({
           pipeId: id, title: z.string().min(1).max(300), description: z.string().max(20000).optional(), stage: z.string().max(100).optional(),
           dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), priority: z.number().int().min(1).max(4).optional(),
+          points: pointsSchema.optional(),
         }),
       },
       run(async ({ pipeId, ...fields }) => {
@@ -280,17 +314,22 @@ function buildServer(app: FastifyInstance, c: Caller) {
       "update_task",
       {
         title: "Change a task",
-        description: "Change a task's title, description, stage, due date (null to clear), priority (null for none) or estimate.",
+        description: "Change a task's title, description, stage, start and due dates (YYYY-MM-DD, null to clear), priority (null for none), points (complexity: 0 1 2 3 5 8 13 21 40 100, null for none), sprint (an open sprint of its pipe, see get_sprints; null for the backlog) or estimate.",
         inputSchema: z.object({
           taskId: id, title: z.string().min(1).max(300).optional(), description: z.string().max(20000).optional(), stage: z.string().max(100).optional(),
           dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), priority: z.number().int().min(1).max(4).nullable().optional(),
+          startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+          sprintId: id.nullable().optional(),
+          points: pointsSchema.nullable().optional(),
           estimateMinutes: z.number().int().min(1).max(60000).nullable().optional(),
         }),
         annotations: { idempotentHint: true },
       },
       run(async ({ taskId, ...changes }) => {
         await ownTask(app, c, taskId);
-        return brief(await call(app, c, "PATCH", `/tasks/${taskId}`, changes));
+        await call(app, c, "PATCH", `/tasks/${taskId}`, changes);
+        // The task as it now is (the change answers only "ok").
+        return brief(await call(app, c, "GET", `/tasks/${taskId}`));
       })
     );
 
