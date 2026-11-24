@@ -4,6 +4,7 @@
   import type { Task } from "../lib/types";
   import Avatar from "./Avatar.svelte";
   import TaskBadges from "./TaskBadges.svelte";
+  import { pointsText } from "../lib/labels";
   import { formatWork } from "../lib/worklog";
   import Icon, { iconOf } from "./Icon.svelte";
   import { t, tn } from "../lib/i18n.svelte";
@@ -29,6 +30,9 @@
   {#if task.labels.length}<div class="t-labels"><TaskBadges labels={task.labels} /></div>{/if}
   <div class="t-meta">
     {#if task.priority}<TaskBadges priority={task.priority} />{/if}
+    {#if task.points !== null && task.points !== undefined}
+      <span class="points" title={pointsText(task.points)} aria-label={pointsText(task.points)}>{task.points}</span>
+    {/if}
     <span class="muted">#{task.number}</span>
     {#if task.dueDate}
       <span class="row due {due}" style="gap:3px"><Icon name="calendar" size={13} />{formatDate(task.dueDate)}</span>
@@ -72,6 +76,11 @@
   .t-title { font-weight: 500; line-height: 1.35; word-break: break-word; }
   .complete { color: #2a9d63; }
   .blocked { color: #ed2651; }
+  .points {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 9px; background: var(--background-tertiary); color: var(--text-secondary);
+    font-weight: 600; font-variant-numeric: tabular-nums;
+  }
   .t-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
   .t-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--text-tertiary); font-size: 12px; flex-wrap: wrap; }
 </style>

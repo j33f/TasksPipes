@@ -141,9 +141,9 @@ describe("filters and export", () => {
   it("are exported with the pipe", async () => {
     const csv = (await app.inject({ method: "GET", url: `/api/pipes/${board}/export?sep=,`, headers: { cookie: alice.cookie } })).body;
     const [head, ...lines] = csv.replace(/^﻿/, "").split("\r\n");
-    expect(head).toContain("Priority,Labels,");
+    expect(head).toContain("Priority,Points,Labels,");
     // Then its estimate and logged time, none here.
-    expect(lines.find((l) => l.includes("Zanzibar visit"))).toContain("Urgent,Client,,,Alice Martin");
+    expect(lines.find((l) => l.includes("Zanzibar visit"))).toContain("Urgent,,Client,,,Alice Martin");
   });
 });
 
@@ -159,5 +159,36 @@ describe("the user stories' priority field", () => {
     await alice.patch(`/api/tasks/${story}`, { priority: null });
     await migrate(app.log);
     expect((await get(alice, story)).priority).toBeNull();
+  });
+});
+
+describe("points of a task", () => {
+  it("are set on the scale, kept in the history, and cleared", async () => {
+    const task = await newTask(alice, { title: "Estimate me", pipeId: board, points: 5 });
+    expect((await get(alice, task)).points).toBe(5);
+    expect((await bob.patch(`/api/tasks/${task}`, { points: 8 })).status).toBe(200);
+    const detail = await get(alice, task);
+    expect(detail.points).toBe(8);
+    expect(detail.events.at(-1)).toMatchObject({ type: "fields", details: { points: { from: 5, to: 8 } } });
+    expect((await alice.patch(`/api/tasks/${task}`, { points: 4 })).body.error).toBe("Invalid points");
+    expect((await alice.post("/api/tasks", { title: "Bad", pipeId: board, points: 7 })).body.error).toBe("Invalid points");
+    expect((await alice.patch(`/api/tasks/${task}`, { points: null })).status).toBe(200);
+    expect((await get(alice, task)).points).toBeNull();
+  });
+
+  it("come from the old Points field once, rounded up to the scale", async () => {
+    const dev = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Software points", kind: "dev" })).body.id;
+    const story = await newTask(alice, { title: "Old estimated story", pipeId: dev, taskType: "user_story" });
+    const chore = await newTask(alice, { title: "Old technical task", pipeId: dev, taskType: "tache_technique" });
+    await pool.query(`UPDATE tasks SET fields = '{"points": 4}', points = NULL WHERE id = $1`, [story]);
+    await pool.query(`UPDATE tasks SET fields = '{"points": "many"}', points = NULL WHERE id = $1`, [chore]);
+    await pool.query(`DELETE FROM schema_steps WHERE name = 'task-points-field'`);
+    await migrate(app.log);
+    expect((await get(alice, story)).points).toBe(5);
+    expect((await get(alice, chore)).points).toBeNull();
+    // Once only: clearing the points sticks.
+    await alice.patch(`/api/tasks/${story}`, { points: null });
+    await migrate(app.log);
+    expect((await get(alice, story)).points).toBeNull();
   });
 });

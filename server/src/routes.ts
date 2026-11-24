@@ -37,6 +37,7 @@ import { hasDevices, pushRoutes } from "./push.js";
 import { updateRoutes } from "./updates.js";
 import { emailDomainAllowed } from "./settings.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
+import { cleanPoints } from "./points.js";
 import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
 import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
 import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
@@ -202,6 +203,7 @@ export function presentTask(t: Row) {
     // Tasks it waits for, still to finish.
     blockers: Number(t.open_blockers ?? 0),
     priority: t.priority ?? null,
+    points: t.points ?? null,
     labels: t.labels ?? [],
     estimateMinutes: t.estimate_minutes ?? null,
     loggedMinutes: Number(t.logged_minutes ?? 0),
@@ -578,6 +580,7 @@ export async function createTask(uid: string, byName: string, b: Record<string, 
   const type = taskType(b.taskType);
   const { values } = cleanFields(type, b.fields ?? {});
   const priority = cleanPriority(b.priority);
+  const points = cleanPoints(b.points);
   const estimate = cleanEstimate(b.estimateMinutes);
   if (b.items !== undefined && !Array.isArray(b.items)) throw bad("Invalid sub-tasks");
   const items = ((b.items ?? []) as unknown[])
@@ -620,10 +623,10 @@ export async function createTask(uid: string, byName: string, b: Record<string, 
     const row = await one(
       `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date,
                           outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields, priority,
-                          estimate_minutes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18) RETURNING id`,
+                          estimate_minutes, points)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18,$19) RETURNING id`,
       [title, description, spaceId, pipeId, st, stage, position, assigneeId, dueDate,
-       doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority, estimate],
+       doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority, estimate, points],
       client
     ).then((r) => getTaskRow(r!.id, client));
     if (labelIds.length) await setTaskLabels(client, row!.id, labelIds);
@@ -1492,7 +1495,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const { p } = await loadPipeFor(req.params.id, uid);
     const { rows } = await query(
       `SELECT t.number, t.title, t.description, t.status, t.stage, t.task_type, t.fields, t.due_date, t.created_at, t.updated_at,
-              au.name AS author_name, ow.name AS owner_name, t.priority, t.estimate_minutes,
+              au.name AS author_name, ow.name AS owner_name, t.priority, t.points, t.estimate_minutes,
               (SELECT COALESCE(sum(te.minutes), 0) FROM task_time_entries te WHERE te.task_id = t.id) AS logged_minutes,
               COALESCE((SELECT json_agg(l.name ORDER BY l.position, lower(l.name)) FROM task_labels tl
                         JOIN space_labels l ON l.id = tl.label_id WHERE tl.task_id = t.id), '[]') AS labels,
@@ -1595,9 +1598,9 @@ export async function apiRoutes(app: FastifyInstance) {
         const position = (positions.get(t.stage) ?? (await nextPosition(client, p.space_id, p.id, t.stage)) - 1) + 1;
         positions.set(t.stage, position);
         const row = await one(
-          `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date, author_id, task_type, fields)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb) RETURNING id`,
-          [t.title, t.description, p.space_id, p.id, t.status, t.stage, position, t.assigneeId, t.dueDate, uid, t.taskType, JSON.stringify(t.fields)],
+          `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date, author_id, task_type, fields, points)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13) RETURNING id`,
+          [t.title, t.description, p.space_id, p.id, t.status, t.stage, position, t.assigneeId, t.dueDate, uid, t.taskType, JSON.stringify(t.fields), t.points],
           client
         ).then((r) => getTaskRow(r!.id, client));
         for (const [i, item] of t.items.entries()) {
@@ -1742,12 +1745,14 @@ export async function apiRoutes(app: FastifyInstance) {
     assertTaskTypeUsable(type, uid, t.pipe_kind, t.task_type);
     const { values, labels } = "fields" in b ? cleanFields(type, b.fields) : { values: {}, labels: [] };
     const priority = "priority" in b ? cleanPriority(b.priority) : t.priority;
+    const points = "points" in b ? cleanPoints(b.points) : (t.points ?? null);
     const estimate = "estimateMinutes" in b ? cleanEstimate(b.estimateMinutes) : t.estimate_minutes;
     const labelIds = "labelIds" in b ? await cleanLabelIds(b.labelIds, t.space_id) : null;
     const details: Record<string, unknown> = {
       ...(type.id !== t.task_type ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: type.label } } : {}),
       ...(labels.length ? { fields: labels } : {}),
       ...(priority !== (t.priority ?? null) ? { priority: { from: t.priority ?? null, to: priority } } : {}),
+      ...(points !== (t.points ?? null) ? { points: { from: t.points ?? null, to: points } } : {}),
       ...(estimate !== (t.estimate_minutes ?? null) ? { estimate: { from: t.estimate_minutes ?? null, to: estimate } } : {}),
     };
 
@@ -1755,10 +1760,10 @@ export async function apiRoutes(app: FastifyInstance) {
       const row = await one(
         `UPDATE tasks SET title = $2, description = $3, assignee_id = $4, due_date = $5, status = $6, stage = $10,
            outline_doc_id = $7, outline_doc_title = $8, outline_doc_url = $9,
-           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, estimate_minutes = $14, updated_at = now()
+           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, estimate_minutes = $14, points = $15, updated_at = now()
          WHERE id = $1 RETURNING id`,
         [t.id, title, description, assigneeId, dueDate, st, doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, stage,
-         type.id, JSON.stringify(values), priority, estimate],
+         type.id, JSON.stringify(values), priority, estimate, points],
         client
       ).then(() => getTaskRow(t.id, client));
       if (labelIds) {

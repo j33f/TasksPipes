@@ -797,6 +797,20 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Complexity points of any task (points.ts), on the planning poker scale; none when null.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS points smallint CHECK (points IN (0, 1, 2, 3, 5, 8, 13, 21, 40, 100));
+-- The "Points" field of user stories and technical tasks became the points of every task: its values are copied
+-- once, rounded up to the scale (they stay in the fields, no longer shown).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_steps WHERE name = 'task-points-field') THEN
+    UPDATE tasks SET points = COALESCE(
+      (SELECT min(v) FROM unnest(ARRAY[0, 1, 2, 3, 5, 8, 13, 21, 40, 100]) v WHERE v >= (fields->>'points')::numeric), 100)
+    WHERE task_type IN ('user_story', 'tache_technique') AND points IS NULL
+      AND CASE WHEN jsonb_typeof(fields->'points') = 'number' THEN (fields->>'points')::numeric END >= 0;
+    INSERT INTO schema_steps (name) VALUES ('task-points-field') ON CONFLICT DO NOTHING;
+  END IF;
+END $$;
+
 -- Documents linked to a pipe: Outline documents, or pages elsewhere (office suites, design tools, code forges…).
 CREATE TABLE IF NOT EXISTS pipe_links (
   id uuid PRIMARY KEY DEFAULT gen_uuidv7(),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byPriority, distinctLabels, labelText, matches, priorityName } from "./labels";
+import { byPriority, distinctLabels, labelText, matches, priorityName, sumPoints } from "./labels";
 
 const label = (id: string, name: string) => ({ id, name, color: "#2bc2ff" });
 const task = (over = {}) => ({ labels: [label("a", "Client")], priority: 2 as const, assignee: { id: "u", name: "Ann", avatarUrl: null }, taskType: "bug", ...over });
@@ -16,6 +16,14 @@ describe("labels and priority", () => {
     expect(matches(task(), { owner: "none" })).toBe(false);
     expect(matches(task({ assignee: null }), { owner: "none" })).toBe(true);
     expect(matches(task(), { type: "story" })).toBe(false);
+  });
+
+  it("filter tasks by points, and add them up", () => {
+    expect(matches(task({ points: 5 }), { points: 5 })).toBe(true);
+    expect(matches(task({ points: 0 }), { points: "none" })).toBe(false);
+    expect(matches(task({ points: null }), { points: "none" })).toBe(true);
+    expect(matches(task({ points: 3 }), { points: 5 })).toBe(false);
+    expect(sumPoints([{ points: 3 }, { points: null }, { points: 8 }])).toBe(11);
   });
 
   it("sort the most urgent first, tasks without priority last", () => {

@@ -22,7 +22,7 @@
   import RepeatSection from "./RepeatSection.svelte";
   import TaskBadges from "./TaskBadges.svelte";
   import LabelsModal from "./LabelsModal.svelte";
-  import { PRIORITIES } from "../lib/labels";
+  import { POINTS, PRIORITIES, pointsText } from "../lib/labels";
   import DependenciesSection from "./DependenciesSection.svelte";
   import TimeSection from "./TimeSection.svelte";
   import { confirmWhileBlocked } from "../lib/dependencies";
@@ -363,6 +363,19 @@
             </select>
           {:else}
             <div class="value">{#if task.priority}<TaskBadges priority={task.priority} />{t(PRIORITIES[task.priority - 1].label)}{:else}<span class="muted">{t("No priority")}</span>{/if}</div>
+          {/if}
+        </div>
+
+        <div class="prop">
+          <span class="label-text">{t("Points")}</span>
+          {#if perms?.editContent}
+            <select class="input" value={task.points ?? ""} disabled={busy} aria-label={t("Points")}
+              onchange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; patch({ points: v === "" ? null : Number(v) }); }}>
+              <option value="">{t("No points")}</option>
+              {#each POINTS as n (n)}<option value={n}>{pointsText(n)}</option>{/each}
+            </select>
+          {:else}
+            <div class="value">{#if task.points !== null}{pointsText(task.points)}{:else}<span class="muted">{t("No points")}</span>{/if}</div>
           {/if}
         </div>
 

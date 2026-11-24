@@ -21,7 +21,7 @@
   import WebhooksModal from "../components/WebhooksModal.svelte";
   import PipeLinks from "../components/PipeLinks.svelte";
   import { confirmWhileBlocked } from "../lib/dependencies";
-  import { PRIORITIES, distinctLabels, matches, type TaskFilters } from "../lib/labels";
+  import { PRIORITIES, distinctLabels, matches, pointsText, sumPoints, type TaskFilters } from "../lib/labels";
   import { boardLanes, loadLabel, overLimit } from "../lib/lanes";
 
   let { id }: { id: string } = $props();
@@ -41,19 +41,23 @@
   let priorityFilter = $state("");
   let ownerFilter = $state("");
   let typeFilter = $state("");
+  let pointsFilter = $state("");
   // The filters' panel, folded on a phone; how many filters are on (shown on its button).
   let filtersOpen = $state(false);
-  const activeFilters = $derived([labelFilter, priorityFilter, ownerFilter, typeFilter].filter(Boolean).length + (mineOnly ? 1 : 0));
+  const activeFilters = $derived([labelFilter, priorityFilter, ownerFilter, typeFilter, pointsFilter].filter(Boolean).length + (mineOnly ? 1 : 0));
   const filters = $derived<TaskFilters>({
     labels: labelFilter ? [labelFilter] : [],
     priority: priorityFilter === "" ? undefined : (Number(priorityFilter) as TaskFilters["priority"]),
     owner: ownerFilter || undefined,
     type: typeFilter || undefined,
+    points: pointsFilter === "" ? undefined : pointsFilter === "none" ? "none" : Number(pointsFilter),
   });
   const labelChoices = $derived(distinctLabels((pipe?.tasks ?? []).flatMap((x) => x.labels)));
   const ownerChoices = $derived(
     [...new Map((pipe?.tasks ?? []).filter((x) => x.assignee).map((x) => [x.assignee!.id, x.assignee!])).values()].sort((a, b) => a.name.localeCompare(b.name))
   );
+  // Points are shown (column totals, filter) once a task of the pipe has some.
+  const pointChoices = $derived([...new Set((pipe?.tasks ?? []).flatMap((x) => (x.points === null ? [] : [x.points])))].sort((a, b) => a - b));
   const typeChoices = $derived(app.taskTypesFor(pipe?.kind).filter((tt) => (pipe?.tasks ?? []).some((x) => x.taskType === tt.id)));
 
   // Drag & drop state
@@ -89,7 +93,7 @@
       pipeView = "board";
       filter = "";
       mineOnly = false;
-      labelFilter = priorityFilter = ownerFilter = typeFilter = "";
+      labelFilter = priorityFilter = ownerFilter = typeFilter = pointsFilter = "";
     });
   });
   function setPipeView(v: "board" | "calendar") {
@@ -281,6 +285,13 @@
             {#each PRIORITIES as p (p.value)}<option value={String(p.value)}>{t(p.label)}</option>{/each}
             <option value="0">{t("No priority")}</option>
           </select>
+          {#if pointChoices.length}
+            <select class="input filter-select" bind:value={pointsFilter} aria-label={t("Points")}>
+              <option value="">{t("Any points")}</option>
+              {#each pointChoices as n (n)}<option value={String(n)}>{pointsText(n)}</option>{/each}
+              <option value="none">{t("No points")}</option>
+            </select>
+          {/if}
           {#if pipe.space.kind === "team" && ownerChoices.length}
             <select class="input filter-select" bind:value={ownerFilter} aria-label={t("Owner")}>
               <option value="">{t("Any owner")}</option>
@@ -335,6 +346,10 @@
             <span class="status-dot" style="background:{s.color}"></span>
             <span>{s.label}</span>
             <span class="count neutral">{loadLabel(n, s.wipLimit)}</span>
+            {#if pointChoices.length}
+              {@const pts = sumPoints(visible.filter((x) => x.stage === s.id))}
+              <span class="col-points" title={t("Points of the tasks shown")}>{t("{n} pts", { n: pts })}</span>
+            {/if}
             {#if overLimit(n, s.wipLimit)}<span class="sr-only">{t("Over its limit")}</span>{/if}
           </header>
         {/each}
@@ -427,6 +442,7 @@
     background: var(--background-secondary); border-radius: 10px 10px 0 0; position: sticky; top: 0; z-index: 1;
   }
   .column-header.over { box-shadow: inset 0 3px 0 var(--danger, #ed2651); }
+  .column-header .col-points { margin-left: auto; font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .column-header.over .count { background: var(--danger, #ed2651); color: #fff; }
   .column-body { padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 8px; min-height: 80px; background: var(--background-secondary); }
   .board-row:last-child .column-body { border-radius: 0 0 10px 10px; }

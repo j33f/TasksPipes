@@ -140,6 +140,12 @@ those types keep working. This is a personal choice: others still see every type
   Mentioning someone who cannot open the task tells them nothing.
 - **Priority** of any task: *urgent*, *high*, *medium*, *low* or none, shown as a colored flag on cards and lists.
   (The *Priority* field of user stories became this priority: its values were copied once.)
+- **Points** of any task, for its complexity: a value of the planning poker scale — 0, 1, 2, 3, 5, 8, 13, 21, 40,
+  100 — or none. A card shows them in a small badge; once a task of a pipe has points, each column's header adds up
+  those of the tasks shown, and the filters offer them. Set like the priority, kept in the history, copied to the next
+  task of a series, exported, imported (rounded up to the scale: 4 gives 5), sent with webhooks and through MCP.
+  (The *Points* field of user stories and technical tasks became these points: its values were copied once, rounded
+  up; the *Points / reward* field of household chores stays a field.)
 - **Labels** of a space (*a space's page › Labels*): a name, unique in the space, and a color. Members of the space
   create, rename, recolor and delete them; a task gets labels of its space only, and loses them when it is sent to
   another space (noted in its history). Priority and labels are set by those who edit the task's fields, recorded in
@@ -151,7 +157,7 @@ those types keep working. This is a personal choice: others still see every type
   task's team (noted in the history). Whoever sees the task sees its entries. The time computed per step stays
   beside it. Logged time counts in the **weekly report** (per person and per task, against estimates; durations
   only in the e-mail), the pipe export (in hours) and one's data export.
-- **Filters**: a pipe filters its tasks by text, label, priority, owner and task type; *My tasks* by label and
+- **Filters**: a pipe filters its tasks by text, label, priority, points, owner and task type; *My tasks* by label and
   priority, and groups them by priority too; the search filters by label (by name, across spaces) and priority.
 - **Dependencies**: a task can wait for other tasks (*Dependencies › Add a task it waits for*), from any space or
   pipe, among the tasks you can open; loops are refused. While one of them is not done (or dropped), the task shows
@@ -197,12 +203,12 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
 **Export and import** on a pipe's page:
 
 - **Export** — every task of the pipe as **CSV** (key, title, description, column, owner, due date, task type,
-  sub-tasks, one column per field of its task types, priority, labels, author, dates; semicolons in French for spreadsheets) or as
+  sub-tasks, one column per field of its task types, priority, points, labels, author, dates; semicolons in French for spreadsheets) or as
   **JSON** (the fields' values as stored, with their labels). Anyone who sees the pipe can export it. A cell that a
   spreadsheet would run as a formula (`=`, `+`, `-`, `@`) is written as text.
 - **Import** (members of the space, pipes not archived) — a **CSV** file, its separator guessed (comma, semicolon or
   tab): each column of the file is matched to a task property or a field, suggested from its header (in English or
-  French, and the usual words of other tools: *Name*, *List*, *Due*, *Checklist*…), or ignored. Values that match no
+  French, and the usual words of other tools: *Name*, *List*, *Due*, *Checklist*, *Story points*…), or ignored. Values that match no
   column of the pipe (a state from another tool) are placed by hand. Owners are found by name or e-mail among the
   space's members, dates are read as `2026-03-09` or `09/03/2026`, choices without minding case or accents,
   sub-tasks one per line (`[x]` for done ones). An exported file imports back as is.
@@ -508,7 +514,7 @@ sending nothing but the server's version in its User-Agent, and, when there is a
 | Manage a pipe's webhooks | members of its space (not on confidential pipes) |
 | Add or remove a pipe's linked documents | members of its space (Outline documents: Outline accounts) |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
-| Edit title, description and fields, priority and labels | members, or the author of a task in an open pipe |
+| Edit title, description and fields, priority, points and labels | members, or the author of a task in an open pipe |
 | Manage a space's labels | members of the space (whoever sees the space sees them) |
 | Set an estimate, log one's own time | as for fields: members, or the author of a task in an open pipe |
 | Change or delete a time entry | its author; an admin of the task's team may delete it too |
