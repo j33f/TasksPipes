@@ -1276,7 +1276,12 @@
     "Publish under “{title}”": "Publicar bajo «{title}»",
     "Or under another document:": "O bajo otro documento:",
     "The report becomes a document under the one you pick:": "El informe se convierte en un documento bajo el que elija:",
-    "Open in Outline": "Abrir en Outline"
+    "Open in Outline": "Abrir en Outline",
+    "Publish the weekly time report every Friday at {hour}:00": "Publicar el informe de tiempo cada viernes a las {hour}:00",
+    "Document for the weekly report": "Documento del informe semanal",
+    "Use the parent document": "Usar el documento padre",
+    "Under the parent document, or under another one:": "Bajo el documento padre, o bajo otro:",
+    "under {title}": "bajo «{title}»"
   },
   "server": {
     "{label} is required": "{label}: obligatorio",
@@ -1737,7 +1742,8 @@
     "Reports of {pipe} are no longer published to Outline": "Los informes de {pipe} ya no se publican en Outline",
     "Outline refused the API key given for this pipe: {error}": "Outline rechazó la clave de API indicada para este pipe: {error}",
     "Give a new key in the pipe's reports (Outline section) to start again.": "Indique una nueva clave en los informes del pipe (sección Outline) para reanudar.",
-    "You receive this e-mail because you set up the publishing of this pipe's reports to Outline.": "Recibe este correo porque configuró la publicación de los informes de este pipe en Outline."
+    "You receive this e-mail because you set up the publishing of this pipe's reports to Outline.": "Recibe este correo porque configuró la publicación de los informes de este pipe en Outline.",
+    "This pipe has no weekly time report": "Este pipe no tiene informe semanal de tiempo"
   },
   "catalog": {
     "Prêt à démarrer": "Lista para empezar",

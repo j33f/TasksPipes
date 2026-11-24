@@ -2,8 +2,10 @@
  * Reports published to Outline: the daily activity of a pipe and the report of a closed sprint, written as Markdown
  * documents under a parent document.
  *
- * By hand, from a report, with the Outline account of the person (their session). Automatically, when a pipe asks
- * for it: the daily activity at REPORT_HOUR (once per day, like the e-mails) and each sprint as it closes. The
+ * Also the weekly time report of pipes with time reports. By hand, from a report, with the Outline account of the
+ * person (their session). Automatically, when a pipe asks for it: the daily activity at REPORT_HOUR (once per day,
+ * like the e-mails), the weekly time report on Fridays at that hour (under its own parent when one is set) and each
+ * sprint as it closes. The
  * automatic publishing needs an Outline API key, given by whoever turns it on and kept encrypted: an OAuth token
  * copied from a session would die as soon as that session refreshes it. When Outline refuses the key, publishing
  * stops until a new key is given, and that person is told by e-mail, once.
@@ -17,9 +19,11 @@ import { TASK_KEY_PREFIX } from "./git.js";
 import { intlTag, localeOf, localize, tr, type Locale } from "./i18n.js";
 import { escape, mailEnabled, mailLayout, sendHtmlMail } from "./mail.js";
 import { absoluteOutlineUrl, outlineApi, OutlineError, type OutlineDocument } from "./outline.js";
-import { stageLabel, taskTypeById } from "./pipeTypes.js";
-import { dailyPeriod, localDay } from "./time.js";
-import { pipeDailyReport, type DailyReport, type ReportTask } from "./reports.js";
+import { pipeTypeById, stageLabel, taskTypeById } from "./pipeTypes.js";
+import { dailyPeriod, lastWeekday, localDay, zonedParts } from "./time.js";
+import {
+  duration, latestReportWeek, pipeDailyReport, pipeWeeklyReport, workDuration, type DailyReport, type ReportTask, type TaskInfo, type WeeklyReport,
+} from "./reports.js";
 
 /** Calls an Outline API method as someone: the person's session, or the key of a pipe. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,10 +51,13 @@ const when = (iso: string, lang: Locale) =>
 
 const isoDay = (d: unknown) => (d instanceof Date ? d.toISOString() : String(d)).slice(0, 10);
 
-const taskLine = (lang: Locale, kind: string, t: ReportTask) => {
-  const stage = t.stage ? ` · ${md(localize(lang, stageLabel(kind, t.stage) ?? t.stage))}` : "";
-  return `- [${TASK_KEY_PREFIX}-${t.number}](${config.appUrl}/?task=${t.id}) ${md(t.title)}${stage}${t.owner ? ` · ${md(t.owner)}` : ""}`;
+const taskLine = (lang: Locale, kind: string, t: ReportTask | TaskInfo, extra = "") => {
+  const stage = "stage" in t && t.stage ? ` · ${md(localize(lang, stageLabel(kind, t.stage) ?? t.stage))}` : "";
+  return `- [${TASK_KEY_PREFIX}-${t.number}](${config.appUrl}/?task=${t.id}) ${md(t.title)}${stage}${t.owner ? ` · ${md(t.owner)}` : ""}${extra}`;
 };
+
+const mdTable = (head: string[], body: string[][]) =>
+  `| ${head.join(" | ")} |\n|${head.map((_, i) => (i ? " ---: " : " --- ")).join("|")}|\n${body.map((row) => `| ${row.join(" | ")} |`).join("\n")}`;
 
 const backLink = (lang: Locale, pipe: Row) =>
   `\n---\n\n${tr(lang, "Published by TasksPipes from the pipe [{pipe}]({url}).", { pipe: md(pipe.name), url: `${config.appUrl}/pipes/${pipe.id}` })}\n`;
@@ -69,6 +76,32 @@ export function dailyDocument(pipe: Row, r: DailyReport, lang: Locale, reportDay
     text: `${tr(lang, "From {start} to {end}.", { start: when(r.period.start, lang), end: when(r.period.end, lang) })}\n\n`
       + (body || tr(lang, "Nothing happened in this pipe during this period.")) + "\n" + backLink(lang, pipe),
     empty: !shown.length,
+  };
+}
+
+/** The weekly time report of a pipe as a document; `empty` when no time was spent nor logged. */
+export function weeklyDocument(pipe: Row, r: WeeklyReport, lang: Locale, reportDay: string) {
+  const byType = r.byType.length
+    ? mdTable(
+      [tr(lang, "Task type"), tr(lang, "In progress"), tr(lang, "Blocked"), tr(lang, "Tasks"), tr(lang, "Done")],
+      r.byType.map((row) => [md(localize(lang, taskTypeById(row.taskType)?.label ?? row.taskType)), duration(row.activeMs, lang), duration(row.blockedMs, lang), String(row.tasks), String(row.done)]),
+    )
+    : tr(lang, "No time recorded this week.");
+  const top = r.tasks.length
+    ? `\n\n## ${md(tr(lang, "Tasks that took the most time"))}\n\n${r.tasks.slice(0, 10).map((t) => taskLine(lang, pipe.kind, t, ` · ${duration(t.activeMs, lang)}`)).join("\n")}`
+    : "";
+  // Durations only: notes stay in the app.
+  const logged = r.logged?.totalMinutes
+    ? `\n\n## ${md(tr(lang, "Time logged: {total}", { total: workDuration(r.logged.totalMinutes, lang) }))}\n\n`
+      + `${r.logged.byPerson.map((p) => `${md(p.name)} ${workDuration(p.minutes, lang)}`).join(" · ")}\n\n`
+      + r.logged.tasks.slice(0, 10).map((t) => taskLine(lang, pipe.kind, t, ` · ${workDuration(t.minutes, lang)}`
+        + (t.estimateMinutes ? ` · ${md(tr(lang, "{logged} of {estimate} estimated", { logged: workDuration(t.totalMinutes, lang), estimate: workDuration(t.estimateMinutes, lang) }))}` : ""))).join("\n")
+    : "";
+  return {
+    title: tr(lang, "Time report of {pipe} — week to {day}", { pipe: pipe.name, day: longDay(reportDay, lang) }),
+    text: `${tr(lang, "Time spent on tasks being worked on, from {start} to {end}: {total}.", { start: when(r.period.start, lang), end: when(r.period.end, lang), total: duration(r.totalActiveMs, lang) })}\n\n`
+      + byType + top + logged + "\n" + backLink(lang, pipe),
+    empty: !r.tasks.length && !r.logged?.totalMinutes,
   };
 }
 
@@ -111,8 +144,7 @@ export function sprintDocument(pipe: Row, sprint: Row, lang: Locale) {
     rows.push([tr(lang, "Added during the sprint"), `${added > 0 ? "+" : ""}${pts(added)}`]);
   }
   if (r.velocity?.value !== null && r.velocity?.value !== undefined) rows.push([tr(lang, "Velocity for the next sprints"), pts(r.velocity.value)]);
-  const table = (head: string[], body: string[][]) =>
-    `| ${head.join(" | ")} |\n|${head.map((_, i) => (i ? " ---: " : " --- ")).join("|")}|\n${body.map((row) => `| ${row.join(" | ")} |`).join("\n")}`;
+  const table = mdTable;
   const by = (title: string, list: DoneBy[] | undefined, name: (key: string) => string) =>
     list?.length
       ? `\n\n## ${md(title)}\n\n${table(["", tr(lang, "Points done"), tr(lang, "Tasks done")], list.map((o) => [md(name(o.key)), `${o.donePoints} / ${o.points}`, `${o.done} / ${o.tasks}`]))}`
@@ -144,6 +176,11 @@ export interface ExportSettings {
   parentDocUrl: string | null;
   outlineUser: string | null;
   daily: boolean;
+  weekly: boolean;
+  /** Where the weekly time report goes, when not under the main parent. */
+  weeklyParentDocId: string | null;
+  weeklyParentDocTitle: string | null;
+  weeklyParentDocUrl: string | null;
   sprints: boolean;
   setBy: string | null;
   keyRefused: boolean;
@@ -161,6 +198,10 @@ const present = (r: Row): ExportSettings => ({
   parentDocUrl: r.parent_doc_url,
   outlineUser: r.outline_user,
   daily: r.daily,
+  weekly: r.weekly,
+  weeklyParentDocId: r.weekly_parent_doc_id,
+  weeklyParentDocTitle: r.weekly_parent_doc_title,
+  weeklyParentDocUrl: r.weekly_parent_doc_url,
   sprints: r.sprints,
   setBy: r.created_by_name ?? null,
   keyRefused: r.key_refused,
@@ -174,10 +215,10 @@ const present = (r: Row): ExportSettings => ({
 const refused = (err: unknown) => err instanceof OutlineError && [401, 403].includes(err.status);
 
 /** Publishes with the pipe's key; records the outcome, and tells the person who set it up when the key is refused. */
-async function publishForPipe(row: Row, pipe: Row, doc: { title: string; text: string }) {
+async function publishForPipe(row: Row, pipe: Row, doc: { title: string; text: string }, parentId: string = row.parent_doc_id) {
   const call: OutlineCall = (method, body) => outlineApi(decrypt(row.api_key)!, method, body, row.outline_url);
   try {
-    const out = await publish(call, row.parent_doc_id, doc, row.outline_url);
+    const out = await publish(call, parentId, doc, row.outline_url);
     await query(
       `UPDATE pipe_outline_exports SET last_export_at = now(), last_export_url = $2, last_error = NULL, last_error_at = NULL WHERE pipe_id = $1`,
       [pipe.id, out.url]
@@ -233,15 +274,36 @@ export async function runScheduledOutlineExports(now = new Date()): Promise<numb
     `SELECT e.*, p.name, p.kind FROM pipe_outline_exports e JOIN pipes p ON p.id = e.pipe_id
      WHERE e.daily AND NOT e.key_refused AND p.archived_at IS NULL`
   );
-  if (!rows.length) return 0;
-  const claimed = await one(`INSERT INTO report_runs (kind, period_end) VALUES ('outline-daily', $1) ON CONFLICT DO NOTHING RETURNING kind`, [end]);
-  if (!claimed) return 0;
+  const claimed = rows.length
+    && (await one(`INSERT INTO report_runs (kind, period_end) VALUES ('outline-daily', $1) ON CONFLICT DO NOTHING RETURNING kind`, [end]));
+  if (!claimed) return runWeekly(now, reportDay, end);
   let n = 0;
   for (const row of rows) {
     const pipe = { id: row.pipe_id, name: row.name, kind: row.kind };
     const doc = dailyDocument(pipe, await pipeDailyReport(pipe.id, reportDay), row.locale ?? config.defaultLocale, reportDay);
     if (doc.empty) continue;
     await publishForPipe(row, pipe, doc).then(() => n++, () => {});
+  }
+  return n + (await runWeekly(now, reportDay, end));
+}
+
+/** On Fridays, the weekly time report of the pipes that ask for it (pipe types with time reports only). */
+async function runWeekly(now: Date, reportDay: string, end: Date): Promise<number> {
+  if (zonedParts(now, config.timezone).weekday !== "Fri") return 0;
+  const { rows } = await query(
+    `SELECT e.*, p.name, p.kind FROM pipe_outline_exports e JOIN pipes p ON p.id = e.pipe_id
+     WHERE e.weekly AND NOT e.key_refused AND p.archived_at IS NULL`
+  );
+  const due = rows.filter((r) => pipeTypeById(r.kind)?.timeReport);
+  if (!due.length) return 0;
+  const claimed = await one(`INSERT INTO report_runs (kind, period_end) VALUES ('outline-weekly', $1) ON CONFLICT DO NOTHING RETURNING kind`, [end]);
+  if (!claimed) return 0;
+  let n = 0;
+  for (const row of due) {
+    const pipe = { id: row.pipe_id, name: row.name, kind: row.kind };
+    const doc = weeklyDocument(pipe, await pipeWeeklyReport(pipe.id, reportDay), row.locale ?? config.defaultLocale, reportDay);
+    if (doc.empty) continue;
+    await publishForPipe(row, pipe, doc, row.weekly_parent_doc_id ?? row.parent_doc_id).then(() => n++, () => {});
   }
   return n;
 }
@@ -276,14 +338,14 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
   };
 
   /** The parent asked for (resolved to its id: it may be an address), else the one the pipe publishes under. */
-  async function parentFor(req: Req, pipeId: string) {
+  async function parentFor(req: Req, pipeId: string, weekly = false) {
     if (req.body?.parentDocumentId) {
       const { data } = await (req.outline as OutlineCall)<OutlineDocument>("documents.info", { id: docId(req.body.parentDocumentId) });
       return data.id;
     }
-    const row = await one(`SELECT parent_doc_id FROM pipe_outline_exports WHERE pipe_id = $1`, [pipeId]);
+    const row = await one(`SELECT parent_doc_id, weekly_parent_doc_id FROM pipe_outline_exports WHERE pipe_id = $1`, [pipeId]);
     if (!row) throw bad("Choose the parent document in Outline");
-    return row.parent_doc_id as string;
+    return ((weekly && row.weekly_parent_doc_id) || row.parent_doc_id) as string;
   }
 
   // By hand: the daily activity of a day, with one's own Outline account.
@@ -293,6 +355,16 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
     const reportDay = deps.reportDay(req.body?.date, deps.latestReportDay());
     const doc = dailyDocument(p, await pipeDailyReport(p.id, reportDay), localeOf(req), reportDay);
     return publish(req.outline as OutlineCall, await parentFor(req, p.id), doc, req.outlineUrl);
+  });
+
+  // By hand: the weekly time report of a week ending on a Friday (pipes with time reports).
+  app.post("/pipes/:id/reports/weekly/outline", async (req: Req) => {
+    enabled();
+    const { p } = await deps.loadPipeFor(req.params.id, me(req));
+    if (!pipeTypeById(p.kind)?.timeReport) throw bad("This pipe has no weekly time report");
+    const reportDay = lastWeekday(deps.reportDay(req.body?.date, latestReportWeek()), 5);
+    const doc = weeklyDocument(p, await pipeWeeklyReport(p.id, reportDay), localeOf(req), reportDay);
+    return publish(req.outline as OutlineCall, await parentFor(req, p.id, true), doc, req.outlineUrl);
   });
 
   // By hand: the report of a closed sprint.
@@ -333,23 +405,30 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
     const parent = b.parentDocumentId !== undefined ? docId(b.parentDocumentId) : current?.parent_doc_id;
     if (!parent) throw bad("Choose the parent document in Outline");
     const call: OutlineCall = (method, body) => outlineApi(key, method, body, instance);
+    // The weekly report's own parent: kept when not given, cleared when empty.
+    const weeklyParent = b.weeklyParentDocumentId === undefined ? (current?.weekly_parent_doc_id ?? null)
+      : b.weeklyParentDocumentId ? docId(b.weeklyParentDocumentId) : null;
     let who: { user?: { name?: string } };
     let doc: OutlineDocument;
+    let weeklyDoc: OutlineDocument | null = null;
     try {
       ({ data: who } = await call<{ user?: { name?: string } }>("auth.info"));
       ({ data: doc } = await call<OutlineDocument>("documents.info", { id: parent }));
+      if (weeklyParent) ({ data: weeklyDoc } = await call<OutlineDocument>("documents.info", { id: weeklyParent }));
     } catch (err) {
       if (err instanceof OutlineError && [401, 403, 404].includes(err.status)) {
         throw bad("Outline refused this key or this document: {error}", { error: err.message });
       }
       throw err;
     }
+    const timeReport = Boolean(pipeTypeById(p.kind)?.timeReport);
     await query(
       `INSERT INTO pipe_outline_exports (pipe_id, outline_url, api_key, parent_doc_id, parent_doc_title, parent_doc_url, outline_user,
-         daily, sprints, locale, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         daily, sprints, locale, created_by, weekly, weekly_parent_doc_id, weekly_parent_doc_title, weekly_parent_doc_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        ON CONFLICT (pipe_id) DO UPDATE SET outline_url = $2, api_key = $3, parent_doc_id = $4, parent_doc_title = $5, parent_doc_url = $6,
-         outline_user = $7, daily = $8, sprints = $9, locale = $10, created_by = $11, updated_at = now(),
+         outline_user = $7, daily = $8, sprints = $9, locale = $10, created_by = $11, weekly = $12, weekly_parent_doc_id = $13,
+         weekly_parent_doc_title = $14, weekly_parent_doc_url = $15, updated_at = now(),
          key_refused = false, last_error = NULL, last_error_at = NULL`,
       [
         p.id, instance, encrypt(key), doc.id, doc.title.slice(0, 500), absoluteOutlineUrl(doc.url, instance), who.user?.name?.slice(0, 200) ?? null,
@@ -357,6 +436,8 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
         "sprints" in b ? b.sprints === true : Boolean(current?.sprints),
         // Who is told when the key is refused: the person who gave it.
         localeOf(req), typed ? me(req) : (current?.created_by ?? me(req)),
+        timeReport && ("weekly" in b ? b.weekly === true : Boolean(current?.weekly)),
+        weeklyDoc?.id ?? null, weeklyDoc?.title.slice(0, 500) ?? null, weeklyDoc ? absoluteOutlineUrl(weeklyDoc.url, instance) : null,
       ]
     );
     return present((await settingsOf(p.id))!);

@@ -105,6 +105,7 @@
       </div>
     {/each}
   {:else if tab === "weekly" && weekly}
+    <OutlinePublish pipeId={pipe.id} path={`/pipes/${pipe.id}/reports/weekly/outline`} body={{ date: weekly.day }} weekly />
     <p class="small">{t("Time spent on tasks being worked on (in progress columns): {total}.", { total: formatDuration(weekly.totalActiveMs) })}</p>
     {#if weekly.byType.length}
       <table>

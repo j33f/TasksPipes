@@ -3,7 +3,7 @@ import { signIn, startApp, stopApp, type Agent } from "./helpers.js";
 import { config } from "../../src/config.js";
 import { pool } from "../../src/db.js";
 import { runScheduledOutlineExports } from "../../src/outline-reports.js";
-import { addDays, dailyPeriod, localDay } from "../../src/time.js";
+import { addDays, dailyPeriod, lastWeekday, localDay } from "../../src/time.js";
 
 let alice: Agent, bob: Agent, carol: Agent, team: string, pipe: string, board: string;
 // The report day whose period holds "now" (tests use UTC and 18:00).
@@ -138,6 +138,39 @@ describe("Automatic publishing of a pipe's reports", () => {
     // A new key starts it again.
     const res = await alice.put(`/api/pipes/${pipe}/outline-export`, { apiKey: "alice-token" });
     expect(res.body).toMatchObject({ keyRefused: false, lastError: null, outlineUser: "Alice Martin" });
+  });
+
+  it("publishes the weekly time report on Fridays, under its own parent when one is set", async () => {
+    const plain = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Plain" })).body.id;
+    expect((await alice.post(`/api/pipes/${plain}/reports/weekly/outline`, { parentDocumentId: "doc-1" })).body.error).toBe("This pipe has no weekly time report");
+    // The option is ignored on a pipe type without time reports.
+    expect((await alice.put(`/api/pipes/${plain}/outline-export`, { apiKey: "alice-token", parentDocumentId: "doc-1", weekly: true })).body.weekly).toBe(false);
+    const res = await alice.put(`/api/pipes/${pipe}/outline-export`, { weekly: true, weeklyParentDocumentId: "doc-1", daily: false });
+    expect(res.body).toMatchObject({ weekly: true, weeklyParentDocId: "doc-1", weeklyParentDocTitle: "Roadmap 2027", parentDocId: "doc-2" });
+    // By hand, from the weekly tab: under the weekly parent.
+    const friday = lastWeekday(addDays(day, 6), 5);
+    const manual = await bob.post(`/api/pipes/${pipe}/reports/weekly/outline`, { date: friday });
+    expect(manual.status).toBe(200);
+    expect(manual.body.title).toMatch(/^Time report of Site \[v2\] — week to /);
+    expect(await outlineDoc(manual.body.id)).toMatchObject({ parentDocumentId: "doc-1", createdBy: "Bob Durand" });
+    // Automatically, on Friday after the report hour, once; not on other days.
+    const end = dailyPeriod(friday, 18, "UTC").end;
+    await pool.query(`UPDATE task_events SET created_at = $2 WHERE task_id IN (SELECT id FROM tasks WHERE pipe_id = $1)`, [pipe, new Date(end.getTime() - 3 * 86400_000)]);
+    const thursday = dailyPeriod(addDays(friday, -1), 18, "UTC").end;
+    await pool.query(`DELETE FROM report_runs WHERE kind = 'outline-weekly'`);
+    const before = (await alice.get(`/api/pipes/${pipe}/outline-export`)).body.lastExportUrl;
+    await runScheduledOutlineExports(new Date(thursday.getTime() + 60_000));
+    expect((await alice.get(`/api/pipes/${pipe}/outline-export`)).body.lastExportUrl).toBe(before);
+    await runScheduledOutlineExports(new Date(end.getTime() + 60_000));
+    const doc = await lastPublished(pipe);
+    expect(doc).toMatchObject({ parentDocumentId: "doc-1", createdBy: "Alice Martin" });
+    expect(doc.title).toMatch(/^Time report of Site/);
+    expect(doc.text).toContain("| Task type | In progress | Blocked | Tasks | Done |");
+    const again = (await alice.get(`/api/pipes/${pipe}/outline-export`)).body.lastExportUrl;
+    await runScheduledOutlineExports(new Date(end.getTime() + 120_000));
+    expect((await alice.get(`/api/pipes/${pipe}/outline-export`)).body.lastExportUrl).toBe(again);
+    // Cleared: back under the main parent.
+    expect((await alice.put(`/api/pipes/${pipe}/outline-export`, { weeklyParentDocumentId: "" })).body.weeklyParentDocId).toBeNull();
   });
 
   it("is turned off by members", async () => {

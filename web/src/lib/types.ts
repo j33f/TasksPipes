@@ -497,6 +497,11 @@ export interface OutlineExport {
   /** The Outline account the key belongs to. */
   outlineUser: string | null;
   daily: boolean;
+  /** The weekly time report, on Fridays (pipes with time reports), under its own parent when one is set. */
+  weekly: boolean;
+  weeklyParentDocId: string | null;
+  weeklyParentDocTitle: string | null;
+  weeklyParentDocUrl: string | null;
   sprints: boolean;
   /** Who gave the key. */
   setBy: string | null;

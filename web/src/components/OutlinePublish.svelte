@@ -9,9 +9,9 @@
   /**
    * Publishes a report to Outline with one's own Outline account, as a child of a document: the one the pipe
    * publishes under when it has one, or any document picked. `path` is the export route, `body` what it needs
-   * besides the parent (the day of a daily report).
+   * besides the parent (the day of a report). The weekly time report goes under its own parent when the pipe has one.
    */
-  let { pipeId, path, body = {} }: { pipeId: string; path: string; body?: Record<string, unknown> } = $props();
+  let { pipeId, path, body = {}, weekly = false }: { pipeId: string; path: string; body?: Record<string, unknown>; weekly?: boolean } = $props();
 
   let open = $state(false);
   let busy = $state(false);
@@ -23,7 +23,8 @@
     published = null;
     if (open && !parent) {
       const s = await api.get<OutlineExport | null>(`/pipes/${pipeId}/outline-export`).catch(() => null);
-      if (s) parent = { id: s.parentDocId, title: s.parentDocTitle, url: s.parentDocUrl };
+      if (s && weekly && s.weeklyParentDocId) parent = { id: s.weeklyParentDocId, title: s.weeklyParentDocTitle ?? "", url: s.weeklyParentDocUrl };
+      else if (s) parent = { id: s.parentDocId, title: s.parentDocTitle, url: s.parentDocUrl };
     }
   }
 

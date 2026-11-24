@@ -922,6 +922,11 @@ CREATE TABLE IF NOT EXISTS pipe_outline_exports (
   last_export_at timestamptz,
   last_export_url text
 );
+-- The weekly time report too (pipes with time reports), on Fridays, under its own parent when one is set.
+ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS weekly boolean NOT NULL DEFAULT false;
+ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS weekly_parent_doc_id text;
+ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS weekly_parent_doc_title text;
+ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS weekly_parent_doc_url text;
 
 -- New versions the administrators were told of (once each).
 CREATE TABLE IF NOT EXISTS update_notices (version text PRIMARY KEY, notified_at timestamptz NOT NULL DEFAULT now());

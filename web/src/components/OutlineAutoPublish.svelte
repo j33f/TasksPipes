@@ -9,11 +9,13 @@
 
   /**
    * Reports a pipe publishes to Outline by itself: the daily activity at the report hour, and each sprint as it
-   * closes (pipes in sprints), under a parent document, with an Outline API key given by a member.
+   * closes (pipes in sprints), under a parent document, with an Outline API key given by a member; the weekly time
+   * report on Fridays (pipes with time reports), under its own parent document when one is chosen.
    */
   let { pipe, hour }: { pipe: { id: string; kind: string }; hour: number } = $props();
 
   const inSprints = $derived(Boolean(app.pipeType(pipe.kind)?.sprints));
+  const timeReport = $derived(Boolean(app.pipeType(pipe.kind)?.timeReport));
   let settings = $state<OutlineExport | null>(null);
   let loaded = $state(false);
   let editing = $state(false);
@@ -24,6 +26,9 @@
   let apiKey = $state("");
   let daily = $state(true);
   let sprints = $state(false);
+  let weekly = $state(false);
+  // Null: the weekly report goes under the main parent.
+  let weeklyParent = $state<DocRef | null>(null);
 
   $effect(() => {
     api.get<OutlineExport | null>(`/pipes/${pipe.id}/outline-export`)
@@ -37,6 +42,9 @@
     apiKey = "";
     daily = settings?.daily ?? true;
     sprints = settings?.sprints ?? inSprints;
+    weekly = settings?.weekly ?? false;
+    weeklyParent = settings?.weeklyParentDocId
+      ? { id: settings.weeklyParentDocId, title: settings.weeklyParentDocTitle ?? "", url: settings.weeklyParentDocUrl } : null;
     error = "";
     editing = true;
   }
@@ -57,7 +65,11 @@
 
   const submit = (e: SubmitEvent) => {
     e.preventDefault();
-    save({ parentDocumentId: parent?.id ?? "", daily, sprints: inSprints && sprints, ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) });
+    save({
+      parentDocumentId: parent?.id ?? "", daily, sprints: inSprints && sprints,
+      ...(timeReport ? { weekly, weeklyParentDocumentId: weekly ? (weeklyParent?.id ?? "") : "" } : {}),
+      ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+    });
   };
 
   async function stop() {
@@ -93,6 +105,21 @@
           <span class="small muted">{t("Create one in Outline › Settings › API. Reports are published as that account, even when nobody is signed in.")}</span>
         </label>
         <label class="check"><input type="checkbox" bind:checked={daily} />{t("Publish the daily activity every day at {hour}:00 (days with activity)", { hour })}</label>
+        {#if timeReport}
+          <label class="check"><input type="checkbox" bind:checked={weekly} />{t("Publish the weekly time report every Friday at {hour}:00", { hour })}</label>
+          {#if weekly}
+            <div class="sub">
+              <span class="small muted">{t("Document for the weekly report")}</span>
+              {#if weeklyParent}
+                <div class="row chosen"><Icon name="doc" size={16} /><span class="ellipsis">{weeklyParent.title}</span>
+                  <button type="button" class="btn ghost small" onclick={() => (weeklyParent = null)}>{t("Use the parent document")}</button></div>
+              {:else}
+                <span class="small muted">{t("Under the parent document, or under another one:")}</span>
+                <DocPicker onselect={(d) => (weeklyParent = d)} />
+              {/if}
+            </div>
+          {/if}
+        {/if}
         {#if inSprints}
           <label class="check"><input type="checkbox" bind:checked={sprints} />{t("Publish the report of each sprint when it closes")}</label>
         {/if}
@@ -114,6 +141,10 @@
       {/if}
       <label class="check"><input type="checkbox" checked={settings.daily} disabled={busy} onchange={(e) => save({ daily: e.currentTarget.checked })} />
         {t("Publish the daily activity every day at {hour}:00 (days with activity)", { hour })}</label>
+      {#if timeReport}
+        <label class="check"><input type="checkbox" checked={settings.weekly} disabled={busy} onchange={(e) => save({ weekly: e.currentTarget.checked })} />
+          {t("Publish the weekly time report every Friday at {hour}:00", { hour })}{#if settings.weeklyParentDocId}<span class="muted">{" · "}{t("under {title}", { title: settings.weeklyParentDocTitle ?? "" })}</span>{/if}</label>
+      {/if}
       {#if inSprints}
         <label class="check"><input type="checkbox" checked={settings.sprints} disabled={busy} onchange={(e) => save({ sprints: e.currentTarget.checked })} />
           {t("Publish the report of each sprint when it closes")}</label>
@@ -140,6 +171,7 @@
   .chosen { gap: 6px; font-size: 14px; min-width: 0; }
   .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .actions { gap: 8px; flex-wrap: wrap; }
+  .sub { display: flex; flex-direction: column; gap: 4px; margin: -2px 0 4px 26px; }
   .check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin: 6px 0; }
   a { overflow-wrap: anywhere; }
 </style>
