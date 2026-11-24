@@ -70,6 +70,8 @@ export interface PipeType extends CustomMeta {
   timeReport?: boolean;
   /** Work in sprints (sprints.ts): tasks are planned in sprints of a few weeks, with points and velocity. */
   sprints?: boolean;
+  /** Planning Poker on by default in team pipes of this type (poker.ts); each pipe can turn it on or off. */
+  planningPoker?: boolean;
   templates: string[];
 }
 
@@ -951,7 +953,7 @@ export const PIPE_TYPES: PipeType[] = [
       col("termine", "Terminé", "done", "#3ad984"),
       col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
     ],
-    taskTypes: ["user_story", "bug", "tache_technique", "release"], templates: [], timeReport: true, sprints: true,
+    taskTypes: ["user_story", "bug", "tache_technique", "release"], templates: [], timeReport: true, sprints: true, planningPoker: true,
   },
   {
     id: "rnd", label: "R&D", group: "Logiciel",

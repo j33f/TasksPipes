@@ -114,7 +114,10 @@ export function eventChanges(e: TaskEvent): string[] {
     const name = (s: { name: string } | null) => s?.name ?? t("Backlog");
     out.push(t("Sprint: {from} → {to}", { from: name(e.details.sprint.from), to: name(e.details.sprint.to) }));
   }
-  if (e.details?.points) out.push(t("Points: {from} → {to}", { from: pointsText(e.details.points.from), to: pointsText(e.details.points.to) }));
+  if (e.details?.points) {
+    const line = t("Points: {from} → {to}", { from: pointsText(e.details.points.from), to: pointsText(e.details.points.to) });
+    out.push(e.details.poker ? `${line} (${t("Planning Poker")})` : line);
+  }
   if (e.details?.labels?.added.length) out.push(t("Labels added: {names}", { names: e.details.labels.added.join(", ") }));
   if (e.details?.labels?.removed.length) out.push(t("Labels removed: {names}", { names: e.details.labels.removed.join(", ") }));
   if (e.details?.taskType) out.push(t("Type: {from} → {to}", { from: e.details.taskType.from, to: e.details.taskType.to }));

@@ -97,6 +97,7 @@ export function validatePipeType(input: unknown, userId: string, previous?: Pipe
     teamOnly,
     timeReport: b.timeReport === true,
     sprints: b.sprints === true,
+    planningPoker: b.planningPoker === true,
     templates: list(b.templates, "Starter tasks", 50).map((t) => str(t, "Starter task", { max: 300 })).filter(Boolean),
   };
 }

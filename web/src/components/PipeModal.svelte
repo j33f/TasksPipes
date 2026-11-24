@@ -25,6 +25,8 @@
   let color = $state<string | null>(initial?.color ?? app.pipeType("general")?.color ?? PALETTE[4]);
   let icon = $state<string | null>(initial?.icon ?? null);
   let withTemplates = $state(true);
+  // Planning Poker, for team pipes: the pipe's choice, else its type's.
+  let poker = $state<boolean>(untrack(() => initial?.pokerChoice ?? Boolean(app.pipeType(initial?.kind ?? "")?.planningPoker)));
   // How it works in sprints (a pipe whose type does).
   let sprint = $state<SprintSettings>(untrack(() => ({
     weeks: 2, startDay: 1, workDays: [1, 2, 3, 4, 5], velocityMode: "learned", initialVelocity: null, sendReport: false,
@@ -60,6 +62,7 @@
       const body = {
         name, description, visibility, kind, color, icon, withTemplates: !pipe && withTemplates,
         ...(pipe && type?.sprints ? { sprintSettings: sprint } : {}),
+        ...(pipe && isTeam && poker !== (initial?.pokerChoice ?? Boolean(app.pipeType(initial?.kind ?? "")?.planningPoker)) ? { poker } : {}),
       };
       if (pipe) {
         await api.patch(`/pipes/${pipe.id}`, body);
@@ -218,6 +221,10 @@
         <label class="check"><input type="checkbox" bind:checked={sprint.sendReport} />
           {t("E-mail the report of each closed sprint to the space's members")}</label>
       </details>
+    {/if}
+    {#if pipe && isTeam}
+      <label class="check"><input type="checkbox" bind:checked={poker} />
+        {t("Planning Poker: the team's members estimate tasks together")}</label>
     {/if}
     {#if pipe}
       <details class="field git-section">

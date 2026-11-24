@@ -40,6 +40,7 @@ import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabe
 import { cleanPoints } from "./points.js";
 import { cleanSprintId, cleanSprintSettings, pipeSprints, pipeVelocity, sprintChange, sprintRoutes, sprintSettings, worksInSprints } from "./sprints.js";
 import { sendSprintReport } from "./sprint-report.js";
+import { pokerEnabled, pokerRoutes } from "./poker.js";
 import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
 import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
 import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
@@ -297,6 +298,8 @@ function presentPipe(p: Row) {
     isDefault: p.is_default,
     dailyReport: Boolean(p.daily_report),
     weeklyReport: Boolean(p.weekly_report),
+    // Planning Poker as chosen for the pipe; null: as its type says (pokerEnabled).
+    pokerChoice: p.poker ?? null,
     // How it works in sprints, for a pipe whose type does.
     sprintSettings: worksInSprints(p.kind) ? sprintSettings(p.sprint_settings) : null,
     color: p.color,
@@ -699,6 +702,16 @@ export async function apiRoutes(app: FastifyInstance) {
     },
     today: () => localDay(new Date(), config.timezone),
     sendReport: (p, sprint) => sendSprintReport(p, sprint),
+  });
+  await app.register(pokerRoutes, {
+    loadPipeFor,
+    setPoints: async (db, taskId, actorId, points) => {
+      const before = (await getTaskRow(taskId, db))!;
+      if ((before.points ?? null) === points) return;
+      await db.query(`UPDATE tasks SET points = $2, updated_at = now() WHERE id = $1`, [taskId, points]);
+      const s = snapshot(before);
+      await recordEvent(db, taskId, actorId, "fields", s, s, null, { points: { from: before.points ?? null, to: points }, poker: true });
+    },
   });
 
   app.get("/me", async (req) => ({
@@ -1513,6 +1526,10 @@ export async function apiRoutes(app: FastifyInstance) {
     ]);
     const inSprints = worksInSprints(p.kind);
     const [sprints, velocity] = inSprints ? await Promise.all([pipeSprints(p.id), pipeVelocity(p)]) : [null, null];
+    // Planning Poker: on in this pipe (its team's members only), and whether a session is open.
+    const poker = role && pokerEnabled(p, space!.kind)
+      ? { enabled: true, open: Boolean(await one(`SELECT 1 FROM poker_sessions WHERE pipe_id = $1 AND status = 'open'`, [p.id])) }
+      : { enabled: false, open: false };
     const counts: Record<string, number> = {};
     for (const t of tasks.rows) counts[t.status] = (counts[t.status] ?? 0) + 1;
     return {
@@ -1526,6 +1543,7 @@ export async function apiRoutes(app: FastifyInstance) {
       sprints,
       // The points a sprint can take (velocity.ts), with how it was found.
       velocity,
+      poker,
     };
   });
 
@@ -1693,7 +1711,7 @@ export async function apiRoutes(app: FastifyInstance) {
     await client.query(
       `UPDATE pipes SET name = $2, description = $3, visibility = $4, color = $5, kind = $6, icon = $8,
          archived_at = CASE WHEN $7::boolean IS NULL THEN archived_at WHEN $7 THEN COALESCE(archived_at, now()) END,
-         daily_report = $9, weekly_report = $10, sprint_settings = $11, updated_at = now()
+         daily_report = $9, weekly_report = $10, sprint_settings = $11, poker = $12, updated_at = now()
        WHERE id = $1`,
       [
         p.id,
@@ -1712,6 +1730,7 @@ export async function apiRoutes(app: FastifyInstance) {
         "sprintSettings" in b && worksInSprints(kind)
           ? JSON.stringify(cleanSprintSettings(b.sprintSettings, sprintSettings(p.sprint_settings)))
           : p.sprint_settings === null ? null : JSON.stringify(p.sprint_settings),
+        "poker" in b ? (b.poker === null ? null : b.poker === true) : p.poker,
       ]
     );
     // A new type brings new columns: each task goes to the matching one.

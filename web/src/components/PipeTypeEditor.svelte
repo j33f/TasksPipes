@@ -40,6 +40,7 @@
       teamOnly: Boolean(src?.teamOnly),
       timeReport: Boolean(src?.timeReport),
       sprints: Boolean(src?.sprints),
+      planningPoker: Boolean(src?.planningPoker),
       templates: (src?.templates ?? []).join("\n"),
     };
   }
@@ -212,6 +213,8 @@
         {t("Weekly time report: pipes of this type can send the time spent per task type every Friday")}</label>
       <label class="check"><input type="checkbox" bind:checked={draft.sprints} />
         {t("Work in sprints: sprints, planning, complexity points and velocity")}</label>
+      <label class="check"><input type="checkbox" bind:checked={draft.planningPoker} />
+        {t("Planning Poker on by default in team pipes")}</label>
     </div>
 
     <div class="field">
