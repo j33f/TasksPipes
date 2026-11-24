@@ -82,6 +82,17 @@ function dateOrNull(value: unknown): string | null {
   return value;
 }
 
+function startDateOrNull(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw bad("Invalid start date");
+  return value;
+}
+
+/** A start after the due date is refused (either may be missing). */
+function checkDates(start: string | null, due: string | null) {
+  if (start && due && String(due).slice(0, 10) < start) throw bad("A task cannot be due before it starts");
+}
+
 function status(value: unknown, fallback: Status = "backlog"): Status {
   if (value === undefined || value === null) return fallback;
   if (!STATUSES.includes(value as Status)) throw bad("Invalid status");
@@ -186,6 +197,7 @@ export function presentTask(t: Row) {
     fields: t.fields,
     position: t.position,
     dueDate: t.due_date,
+    startDate: t.start_date ?? null,
     space: { id: t.space_id, name: t.space_name, kind: t.space_kind },
     pipe: t.pipe_id ? { id: t.pipe_id, name: t.pipe_name, visibility: t.pipe_visibility, kind: t.pipe_kind } : null,
     inIncoming: !t.pipe_id,
@@ -586,6 +598,8 @@ export async function createTask(uid: string, byName: string, b: Record<string, 
   const title = text(b.title, "Title", { required: true, max: 300 });
   const description = text(b.description, "Description");
   const dueDate = dateOrNull(b.dueDate);
+  const startDate = startDateOrNull(b.startDate);
+  checkDates(startDate, dueDate);
   const doc = docOrNull(b.outlineDoc);
   const comment = text(b.comment, "Comment") || null;
   const type = taskType(b.taskType);
@@ -636,11 +650,11 @@ export async function createTask(uid: string, byName: string, b: Record<string, 
     const row = await one(
       `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date,
                           outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields, priority,
-                          estimate_minutes, points, sprint_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18,$19,$20) RETURNING id`,
+                          estimate_minutes, points, sprint_id, start_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18,$19,$20,$21) RETURNING id`,
       [title, description, spaceId, pipeId, st, stage, position, assigneeId, dueDate,
        doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority, estimate, points,
-       sprint?.id ?? null],
+       sprint?.id ?? null, startDate],
       client
     ).then((r) => getTaskRow(r!.id, client));
     if (labelIds.length) await setTaskLabels(client, row!.id, labelIds);
@@ -1515,6 +1529,17 @@ export async function apiRoutes(app: FastifyInstance) {
     };
   });
 
+  // Which tasks of the pipe wait for which (the timeline draws them); both ends in the pipe.
+  app.get("/pipes/:id/dependencies", async (req: Req) => {
+    const { p } = await loadPipeFor(req.params.id, me(req));
+    const { rows } = await query(
+      `SELECT d.task_id, d.blocker_id FROM task_dependencies d
+       JOIN tasks a ON a.id = d.task_id JOIN tasks b ON b.id = d.blocker_id WHERE a.pipe_id = $1 AND b.pipe_id = $1`,
+      [p.id]
+    );
+    return rows.map((r) => ({ taskId: r.task_id, waitsFor: r.blocker_id }));
+  });
+
   // ----- Export and import of a pipe's tasks --------------------------------
 
   // Anyone who sees the pipe may export it, as CSV (one column per field) or JSON.
@@ -1523,7 +1548,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const lang = localeOf(req);
     const { p } = await loadPipeFor(req.params.id, uid);
     const { rows } = await query(
-      `SELECT t.number, t.title, t.description, t.status, t.stage, t.task_type, t.fields, t.due_date, t.created_at, t.updated_at,
+      `SELECT t.number, t.title, t.description, t.status, t.stage, t.task_type, t.fields, t.due_date, t.start_date, t.created_at, t.updated_at,
               au.name AS author_name, ow.name AS owner_name, t.priority, t.points, t.estimate_minutes,
               (SELECT COALESCE(sum(te.minutes), 0) FROM task_time_entries te WHERE te.task_id = t.id) AS logged_minutes,
               COALESCE((SELECT json_agg(l.name ORDER BY l.position, lower(l.name)) FROM task_labels tl
@@ -1627,9 +1652,9 @@ export async function apiRoutes(app: FastifyInstance) {
         const position = (positions.get(t.stage) ?? (await nextPosition(client, p.space_id, p.id, t.stage)) - 1) + 1;
         positions.set(t.stage, position);
         const row = await one(
-          `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date, author_id, task_type, fields, points)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13) RETURNING id`,
-          [t.title, t.description, p.space_id, p.id, t.status, t.stage, position, t.assigneeId, t.dueDate, uid, t.taskType, JSON.stringify(t.fields), t.points],
+          `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date, author_id, task_type, fields, points, start_date)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14) RETURNING id`,
+          [t.title, t.description, p.space_id, p.id, t.status, t.stage, position, t.assigneeId, t.dueDate, uid, t.taskType, JSON.stringify(t.fields), t.points, t.startDate],
           client
         ).then((r) => getTaskRow(r!.id, client));
         for (const [i, item] of t.items.entries()) {
@@ -1757,13 +1782,15 @@ export async function apiRoutes(app: FastifyInstance) {
     const uid = me(req);
     const { t, perms } = await loadTaskFor(req.params.id, uid, "editContent");
     const b = req.body || {};
-    if (["assigneeId", "dueDate", "outlineDoc", "status", "stage", "sprintId"].some((k) => k in b) && !perms.manage) throw forbidden();
+    if (["assigneeId", "dueDate", "startDate", "outlineDoc", "status", "stage", "sprintId"].some((k) => k in b) && !perms.manage) throw forbidden();
 
     const title = "title" in b ? text(b.title, "Title", { required: true, max: 300 }) : t.title;
     const description = "description" in b ? text(b.description, "Description") : t.description;
     const assigneeId =
       "assigneeId" in b ? await checkAssignee(t.space_id, await ensureUser(optUuid(b.assigneeId, "Owner"))) : t.assignee_id;
     const dueDate = "dueDate" in b ? dateOrNull(b.dueDate) : t.due_date;
+    const startDate = "startDate" in b ? startDateOrNull(b.startDate) : (t.start_date ?? null);
+    if ("startDate" in b || "dueDate" in b) checkDates(startDate, dueDate);
     let st: Status = "status" in b ? status(b.status) : t.status;
     let stage: string | null = t.stage;
     if (t.pipe_id && ("stage" in b || "status" in b)) {
@@ -1790,6 +1817,7 @@ export async function apiRoutes(app: FastifyInstance) {
       ...(priority !== (t.priority ?? null) ? { priority: { from: t.priority ?? null, to: priority } } : {}),
       ...(points !== (t.points ?? null) ? { points: { from: t.points ?? null, to: points } } : {}),
       ...(estimate !== (t.estimate_minutes ?? null) ? { estimate: { from: t.estimate_minutes ?? null, to: estimate } } : {}),
+      ...(startDate !== (t.start_date ?? null) ? { startDate: { from: t.start_date ?? null, to: startDate } } : {}),
       ...(sprintId !== (t.sprint_id ?? null)
         ? sprintChange(t.sprint_id ? await one(`SELECT id, name FROM sprints WHERE id = $1`, [t.sprint_id]) : null, sprint) : {}),
     };
@@ -1798,10 +1826,10 @@ export async function apiRoutes(app: FastifyInstance) {
       const row = await one(
         `UPDATE tasks SET title = $2, description = $3, assignee_id = $4, due_date = $5, status = $6, stage = $10,
            outline_doc_id = $7, outline_doc_title = $8, outline_doc_url = $9,
-           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, estimate_minutes = $14, points = $15, sprint_id = $16, updated_at = now()
+           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, estimate_minutes = $14, points = $15, sprint_id = $16, start_date = $17, updated_at = now()
          WHERE id = $1 RETURNING id`,
         [t.id, title, description, assigneeId, dueDate, st, doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, stage,
-         type.id, JSON.stringify(values), priority, estimate, points, sprintId],
+         type.id, JSON.stringify(values), priority, estimate, points, sprintId, startDate],
         client
       ).then(() => getTaskRow(t.id, client));
       if (labelIds) {

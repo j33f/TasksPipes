@@ -220,6 +220,15 @@ designer — plan their tasks in sprints of a few weeks.
 - **Progress of the work** (in the planning): at the start, then at the end of each sprint, the points of the pipe
   done and still to do; the points left, the tasks still without points, and the expected end: the sprint under way
   finishes its own tasks, the rest takes whole sprints at the velocity.
+- **Timeline** (a view beside *Planning*), with the same sprint selector as the board: all the sprints — a band each,
+  their tasks below, the closed ones folded — one sprint, or the backlog. A task is a bar from its **start date**
+  (set on its page, by those who move tasks forward; never after its due date) to its due date; a missing date comes
+  from its sprint, and the bar is then dashed. Releases are milestones, with a line down the timeline. Arrows join a
+  task to the tasks of the pipe it waits for, in red when it starts before they end. Days off are shaded, today is
+  marked, a bar shows its dates, column, points and owner on hover. Members drag a bar to move it, or its ends to
+  change its dates (on a phone, the timeline is read only: dates are set on the task's page). Tasks with no date and
+  no sprint are counted under it. The start date is also in the task's history, the export and import, webhooks and
+  MCP.
 - Each change of sprint is kept in the task's history; a task moved to another pipe or sent leaves its sprint
   (noted too).
 - The members of the pipe's space plan sprints and put tasks in them; whoever sees the pipe sees its sprints.
@@ -244,7 +253,7 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
 
 **Export and import** on a pipe's page:
 
-- **Export** — every task of the pipe as **CSV** (key, title, description, column, owner, due date, task type,
+- **Export** — every task of the pipe as **CSV** (key, title, description, column, owner, start date, due date, task type,
   sub-tasks, one column per field of its task types, priority, points, labels, author, dates; semicolons in French for spreadsheets) or as
   **JSON** (the fields' values as stored, with their labels). Anyone who sees the pipe can export it. A cell that a
   spreadsheet would run as a formula (`=`, `+`, `-`, `@`) is written as text.

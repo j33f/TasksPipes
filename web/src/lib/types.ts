@@ -227,6 +227,8 @@ export interface Task {
   priority: Priority | null;
   /** Complexity points, on the planning poker scale (POINTS); null for none. */
   points: number | null;
+  /** When work is planned to start (YYYY-MM-DD); null when not set. */
+  startDate?: string | null;
   /** Sprint it is planned in (pipes in sprints); null in the backlog. */
   sprintId?: string | null;
   /** Labels of its space. */
@@ -292,6 +294,7 @@ export interface TaskEvent {
     whileBlocked?: boolean;
     priority?: { from: Priority | null; to: Priority | null };
     points?: { from: number | null; to: number | null };
+    startDate?: { from: string | null; to: string | null };
     /** Moved from a sprint to another; null is the backlog. */
     sprint?: { from: { id: string; name: string } | null; to: { id: string; name: string } | null };
     labels?: { added: string[]; removed: string[] };

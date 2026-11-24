@@ -56,6 +56,14 @@ describe("import of a CSV file", () => {
     expect(plan.tasks[0]).toMatchObject({ stage: "ongoing", status: "ongoing" });
   });
 
+  it("reads start dates, never after the due date", () => {
+    expect(["Start date", "Début", "Date de début"].map((h) => suggestTarget(h, "dev"))).toEqual(["startDate", "startDate", "startDate"]);
+    const rows = [["Title", "Start date", "Due date"], ["A", "01/12/2026", "2026-12-04"], ["B", "2026-12-05", "2026-12-04"], ["C", "soon", ""]];
+    const plan = planImport("dev", "en", { rows }, people, null);
+    expect(plan.tasks.map((t) => t.startDate)).toEqual(["2026-12-01"]);
+    expect(plan.errors.map((e) => e.message)).toEqual(["A task cannot be due before it starts", "Invalid start date: soon"]);
+  });
+
   it("reads points, rounded up to the scale", () => {
     expect(["Story Points", "Complexité", "Points"].map((h) => suggestTarget(h, "dev"))).toEqual(["points", "points", "points"]);
     const rows = [["Title", "Story points"], ["A", "4"], ["B", ""], ["C", "2,5"], ["D", "lots"]];

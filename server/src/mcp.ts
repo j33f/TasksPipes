@@ -98,6 +98,7 @@ const brief = (t: Json) => ({
   stage: t.stage,
   type: t.taskType,
   dueDate: t.dueDate,
+  startDate: t.startDate ?? null,
   priority: t.priority,
   points: t.points ?? null,
   assignee: t.assignee?.name ?? null,
@@ -286,10 +287,11 @@ function buildServer(app: FastifyInstance, c: Caller) {
       "update_task",
       {
         title: "Change a task",
-        description: "Change a task's title, description, stage, due date (null to clear), priority (null for none), points (complexity: 0 1 2 3 5 8 13 21 40 100, null for none) or estimate.",
+        description: "Change a task's title, description, stage, start and due dates (YYYY-MM-DD, null to clear), priority (null for none), points (complexity: 0 1 2 3 5 8 13 21 40 100, null for none) or estimate.",
         inputSchema: z.object({
           taskId: id, title: z.string().min(1).max(300).optional(), description: z.string().max(20000).optional(), stage: z.string().max(100).optional(),
           dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), priority: z.number().int().min(1).max(4).nullable().optional(),
+          startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
           points: pointsSchema.nullable().optional(),
           estimateMinutes: z.number().int().min(1).max(60000).nullable().optional(),
         }),
