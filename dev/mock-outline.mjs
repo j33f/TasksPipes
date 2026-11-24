@@ -11,11 +11,14 @@ const users = {
 // API keys of people who never sign in nor show in the workspace: the tests revoke them (reports published to Outline).
 const apiKeys = {
   "erin-token": { id: "55555555-5555-4555-8555-555555555555", name: "Erin Moreau", email: "erin@example.com", avatarUrl: null },
+  "frank-token": { id: "66666666-6666-4666-8666-666666666666", name: "Frank Girard", email: "frank@example.com", avatarUrl: null },
 };
 const docs = [
   { id: "doc-1", title: "Roadmap 2027", url: "/doc/roadmap-2027-abc123", updatedAt: new Date().toISOString(), collectionId: "col-1" },
   { id: "doc-2", title: "Guide d'onboarding", url: "/doc/guide-onboarding-def456", updatedAt: new Date().toISOString(), collectionId: "col-1" },
 ];
+
+let failing = { times: 0, status: 503, created: false };
 
 http.createServer((req, res) => {
   let body = "";
@@ -30,6 +33,12 @@ http.createServer((req, res) => {
       delete apiKeys[JSON.parse(body || "{}").token];
       return send(200, { ok: true });
     }
+    // Tests: the next documents.create calls fail (POST /test/fail {"times": 1, "status": 503}); with "created": true,
+    // the document is created all the same, as when Outline answers too late.
+    if (req.url === "/test/fail") {
+      failing = { times: 1, status: 503, created: false, ...JSON.parse(body || "{}") };
+      return send(200, { ok: true });
+    }
     // OAuth: the code is the token of the person who signed in (code=alice-token).
     if (req.url === "/oauth/token") {
       const code = new URLSearchParams(body).get("code");
@@ -42,7 +51,7 @@ http.createServer((req, res) => {
     switch (req.url) {
       case "/api/auth.info": return send(200, { data: { user, team: { id: "team-1", name: "Demo" } } });
       case "/api/users.list": return send(200, { data: input.offset ? [] : Object.values(users) });
-      case "/api/documents.list": return send(200, { data: docs });
+      case "/api/documents.list": return send(200, { data: input.parentDocumentId ? docs.filter((d) => d.parentDocumentId === input.parentDocumentId).reverse() : docs });
       case "/api/documents.search":
         return send(200, { data: docs.filter((d) => d.title.toLowerCase().includes(String(input.query).toLowerCase())).map((document) => ({ document })) });
       case "/api/documents.info": {
@@ -58,6 +67,11 @@ http.createServer((req, res) => {
           collectionId: input.collectionId ?? parent?.collectionId, parentDocumentId: input.parentDocumentId ?? null, text: input.text ?? "",
           createdBy: user.name,
         };
+        if (failing.times > 0) {
+          failing.times--;
+          if (failing.created) docs.push(d);
+          return send(failing.status, { ok: false, message: "Service unavailable" });
+        }
         docs.push(d);
         return send(200, { data: d });
       }

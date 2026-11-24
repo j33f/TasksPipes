@@ -22,7 +22,7 @@ import { absoluteOutlineUrl, outlineApi, OutlineError, type OutlineDocument } fr
 import { pipeTypeById, stageLabel, taskTypeById } from "./pipeTypes.js";
 import { dailyPeriod, lastWeekday, localDay, zonedParts } from "./time.js";
 import {
-  duration, latestReportWeek, pipeDailyReport, pipeWeeklyReport, workDuration, type DailyReport, type ReportTask, type TaskInfo, type WeeklyReport,
+  claim, duration, latestReportWeek, pipeDailyReport, pipeWeeklyReport, workDuration, type DailyReport, type ReportTask, type TaskInfo, type WeeklyReport,
 } from "./reports.js";
 
 /** Calls an Outline API method as someone: the person's session, or the key of a pipe. */
@@ -161,10 +161,25 @@ export function sprintDocument(pipe: Row, sprint: Row, lang: Locale) {
   };
 }
 
+/** The title as Outline keeps it (100 characters at most). */
+const outlineTitle = (title: string) => title.slice(0, 100);
+
+const published = (d: OutlineDocument, instance: string): PublishedDoc => ({ id: d.id, title: d.title, url: absoluteOutlineUrl(d.url, instance) });
+
 /** Creates the document under its parent, published. */
 export async function publish(call: OutlineCall, parentDocumentId: string, doc: { title: string; text: string }, instance: string): Promise<PublishedDoc> {
-  const { data } = await call<OutlineDocument>("documents.create", { title: doc.title.slice(0, 100), text: doc.text, parentDocumentId, publish: true });
-  return { id: data.id, title: data.title, url: absoluteOutlineUrl(data.url, instance) };
+  const { data } = await call<OutlineDocument>("documents.create", { title: outlineTitle(doc.title), text: doc.text, parentDocumentId, publish: true });
+  return published(data, instance);
+}
+
+/**
+ * The document already under the parent with this title, if any. Before trying again: Outline may have created the
+ * document of a failed attempt and answered too late.
+ */
+async function alreadyPublished(call: OutlineCall, parentDocumentId: string, title: string, instance: string): Promise<PublishedDoc | null> {
+  const { data } = await call<OutlineDocument[]>("documents.list", { parentDocumentId, sort: "createdAt", direction: "DESC", limit: 25 });
+  const found = data.find((d) => d.title === outlineTitle(title));
+  return found ? published(found, instance) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +198,8 @@ export interface ExportSettings {
   weeklyParentDocUrl: string | null;
   sprints: boolean;
   setBy: string | null;
+  /** The key was given by the person who reads the settings: only they may point it at other documents. */
+  mine: boolean;
   keyRefused: boolean;
   lastError: string | null;
   lastErrorAt: string | null;
@@ -192,7 +209,7 @@ export interface ExportSettings {
 
 const iso = (d: unknown) => (d instanceof Date ? d.toISOString() : ((d as string | null) ?? null));
 
-const present = (r: Row): ExportSettings => ({
+const present = (r: Row, viewerId: string): ExportSettings => ({
   parentDocId: r.parent_doc_id,
   parentDocTitle: r.parent_doc_title,
   parentDocUrl: r.parent_doc_url,
@@ -204,6 +221,7 @@ const present = (r: Row): ExportSettings => ({
   weeklyParentDocUrl: r.weekly_parent_doc_url,
   sprints: r.sprints,
   setBy: r.created_by_name ?? null,
+  mine: r.created_by === viewerId,
   keyRefused: r.key_refused,
   lastError: r.last_error,
   lastErrorAt: iso(r.last_error_at),
@@ -214,24 +232,45 @@ const present = (r: Row): ExportSettings => ({
 /** Outline refuses the key itself (revoked, expired, or no longer allowed to write there). */
 const refused = (err: unknown) => err instanceof OutlineError && [401, 403].includes(err.status);
 
+/** Outline did not answer in time, could not be reached, or failed on its side: worth trying again later. */
+const transient = (err: unknown) => err instanceof OutlineError && (err.status >= 500 || err.status === 429);
+
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 500);
+
+interface PublishOptions {
+  /** The parent document; the pipe's main one by default. */
+  parentId?: string;
+  /** The clock of the run, for the times recorded. */
+  now?: Date;
+  /** An attempt of this period failed: look for its document before creating another one. */
+  retrying?: boolean;
+}
+
 /** Publishes with the pipe's key; records the outcome, and tells the person who set it up when the key is refused. */
-async function publishForPipe(row: Row, pipe: Row, doc: { title: string; text: string }, parentId: string = row.parent_doc_id) {
-  const call: OutlineCall = (method, body) => outlineApi(decrypt(row.api_key)!, method, body, row.outline_url);
+async function publishForPipe(row: Row, pipe: Row, doc: { title: string; text: string }, options: PublishOptions = {}) {
+  const { parentId = row.parent_doc_id as string, now = new Date(), retrying = false } = options;
+  const instance: string = row.outline_url;
   try {
-    const out = await publish(call, parentId, doc, row.outline_url);
+    const key = decrypt(row.api_key);
+    if (!key) throw new Error("Outline API key unreadable");
+    const call: OutlineCall = (method, body) => outlineApi(key, method, body, instance);
+    const out = (retrying && (await alreadyPublished(call, parentId, doc.title, instance))) || (await publish(call, parentId, doc, instance));
     await query(
-      `UPDATE pipe_outline_exports SET last_export_at = now(), last_export_url = $2, last_error = NULL, last_error_at = NULL WHERE pipe_id = $1`,
-      [pipe.id, out.url]
+      `UPDATE pipe_outline_exports SET last_export_at = $3, last_export_url = $2, last_error = NULL, last_error_at = NULL WHERE pipe_id = $1`,
+      [pipe.id, out.url, now]
     );
     return out;
   } catch (err) {
-    const message = (err instanceof Error ? err.message : String(err)).slice(0, 500);
+    const message = messageOf(err);
     const keyRefused = refused(err);
     await query(
-      `UPDATE pipe_outline_exports SET last_error = $2, last_error_at = now(), key_refused = key_refused OR $3 WHERE pipe_id = $1`,
-      [pipe.id, message, keyRefused]
+      `UPDATE pipe_outline_exports SET last_error = $2, last_error_at = $4, key_refused = key_refused OR $3 WHERE pipe_id = $1`,
+      [pipe.id, message, keyRefused, now]
     );
-    if (keyRefused && !row.key_refused) await warnOwner(row, pipe, message).catch(() => {});
+    if (keyRefused && !row.key_refused) {
+      const mailError = await warnOwner(row, pipe, message).then(() => null, (e: unknown) => e);
+      if (mailError) throw new Error(`${message} (the e-mail telling of it was not sent: ${messageOf(mailError)})`, { cause: err });
+    }
     throw err;
   }
 }
@@ -261,51 +300,65 @@ export async function exportSprintToOutline(pipe: Row, sprint: Row): Promise<Pub
   return publishForPipe(row, pipe, sprintDocument(pipe, sprint, row.locale ?? config.defaultLocale));
 }
 
-/**
- * Publishes the daily activity of the pipes that ask for it, once the report hour has passed (call it every
- * minute; each day is claimed once). Days with no activity are skipped. Returns how many documents were created.
- */
-export async function runScheduledOutlineExports(now = new Date()): Promise<number> {
-  if (!config.outlineEnabled) return 0;
-  const reportDay = localDay(now, config.timezone);
-  const end = dailyPeriod(reportDay, config.reportHour, config.timezone).end;
-  if (now < end) return 0;
-  const { rows } = await query(
-    `SELECT e.*, p.name, p.kind FROM pipe_outline_exports e JOIN pipes p ON p.id = e.pipe_id
-     WHERE e.daily AND NOT e.key_refused AND p.archived_at IS NULL`
-  );
-  const claimed = rows.length
-    && (await one(`INSERT INTO report_runs (kind, period_end) VALUES ('outline-daily', $1) ON CONFLICT DO NOTHING RETURNING kind`, [end]));
-  if (!claimed) return runWeekly(now, reportDay, end);
-  let n = 0;
-  for (const row of rows) {
-    const pipe = { id: row.pipe_id, name: row.name, kind: row.kind };
-    const doc = dailyDocument(pipe, await pipeDailyReport(pipe.id, reportDay), row.locale ?? config.defaultLocale, reportDay);
-    if (doc.empty) continue;
-    await publishForPipe(row, pipe, doc).then(() => n++, () => {});
-  }
-  return n + (await runWeekly(now, reportDay, end));
+/** What a scheduled pass did: the documents created, and the pipes it could not publish (for the logs). */
+export interface ScheduledRun {
+  published: number;
+  failed: { pipeId: string; message: string }[];
 }
 
-/** On Fridays, the weekly time report of the pipes that ask for it (pipe types with time reports only). */
-async function runWeekly(now: Date, reportDay: string, end: Date): Promise<number> {
-  if (zonedParts(now, config.timezone).weekday !== "Fri") return 0;
+/** A pipe whose attempt failed for a passing reason is tried again after this long. */
+const RETRY_AFTER_MS = 10 * 60_000;
+
+/**
+ * Publishes the daily activity of the pipes that ask for it once the report hour has passed, and on Fridays the
+ * weekly time report (call it every minute). Each pipe's period is claimed once; days with no activity are skipped.
+ * When Outline fails for a passing reason, the claim is given back and the pipe tried again after RETRY_AFTER_MS,
+ * until midnight: the report day comes from `now`, so a period still failing then is not tried anymore (its error
+ * stays in the pipe's settings).
+ */
+export async function runScheduledOutlineExports(now = new Date()): Promise<ScheduledRun> {
+  const run: ScheduledRun = { published: 0, failed: [] };
+  if (!config.outlineEnabled) return run;
+  const reportDay = localDay(now, config.timezone);
+  const end = dailyPeriod(reportDay, config.reportHour, config.timezone).end;
+  if (now < end) return run;
+  await publishDue(run, "daily", now, reportDay, end);
+  if (zonedParts(now, config.timezone).weekday === "Fri") await publishDue(run, "weekly", now, reportDay, end);
+  return run;
+}
+
+async function publishDue(run: ScheduledRun, kind: "daily" | "weekly", now: Date, reportDay: string, end: Date) {
+  const prefix = `outline-${kind}:`;
+  // Not done for this period, and not failed in the last minutes. last_error_at is also written when a sprint is
+  // published: such a failure delays the next attempt too.
   const { rows } = await query(
     `SELECT e.*, p.name, p.kind FROM pipe_outline_exports e JOIN pipes p ON p.id = e.pipe_id
-     WHERE e.weekly AND NOT e.key_refused AND p.archived_at IS NULL`
+     WHERE ${kind === "daily" ? "e.daily" : "e.weekly"} AND NOT e.key_refused AND p.archived_at IS NULL
+       AND (e.last_error_at IS NULL OR e.last_error_at <= $2)
+       AND NOT EXISTS (SELECT 1 FROM report_runs r WHERE r.kind = $1::text || e.pipe_id::text AND r.period_end = $3)`,
+    [prefix, new Date(now.getTime() - RETRY_AFTER_MS), end]
   );
-  const due = rows.filter((r) => pipeTypeById(r.kind)?.timeReport);
-  if (!due.length) return 0;
-  const claimed = await one(`INSERT INTO report_runs (kind, period_end) VALUES ('outline-weekly', $1) ON CONFLICT DO NOTHING RETURNING kind`, [end]);
-  if (!claimed) return 0;
-  let n = 0;
-  for (const row of due) {
+  for (const row of rows) {
     const pipe = { id: row.pipe_id, name: row.name, kind: row.kind };
-    const doc = weeklyDocument(pipe, await pipeWeeklyReport(pipe.id, reportDay), row.locale ?? config.defaultLocale, reportDay);
-    if (doc.empty) continue;
-    await publishForPipe(row, pipe, doc, row.weekly_parent_doc_id ?? row.parent_doc_id).then(() => n++, () => {});
+    if (kind === "weekly" && !pipeTypeById(pipe.kind)?.timeReport) continue;
+    const runKind = prefix + pipe.id;
+    if (!(await claim(runKind, end))) continue;
+    try {
+      const lang: Locale = row.locale ?? config.defaultLocale;
+      const doc = kind === "daily"
+        ? dailyDocument(pipe, await pipeDailyReport(pipe.id, reportDay), lang, reportDay)
+        : weeklyDocument(pipe, await pipeWeeklyReport(pipe.id, reportDay), lang, reportDay);
+      if (doc.empty) continue;
+      const parentId = kind === "weekly" ? (row.weekly_parent_doc_id ?? row.parent_doc_id) : row.parent_doc_id;
+      // Failed since the report hour: Outline may have created that document anyway.
+      const retrying = Boolean(row.last_error_at && row.last_error_at >= end);
+      await publishForPipe(row, pipe, doc, { parentId, now, retrying });
+      run.published++;
+    } catch (err) {
+      if (transient(err)) await query(`DELETE FROM report_runs WHERE kind = $1 AND period_end = $2`, [runKind, end]);
+      run.failed.push({ pipeId: pipe.id, message: messageOf(err) });
+    }
   }
-  return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +440,7 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
   app.get("/pipes/:id/outline-export", async (req: Req) => {
     const p = await managedPipe(req);
     const row = await settingsOf(p.id);
-    return row ? present(row) : null;
+    return row ? present(row, me(req)) : null;
   });
 
   // Turns the automatic publishing on, or changes it. The key is checked against Outline, with the parent document.
@@ -408,6 +461,16 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
     // The weekly report's own parent: kept when not given, cleared when empty.
     const weeklyParent = b.weeklyParentDocumentId === undefined ? (current?.weekly_parent_doc_id ?? null)
       : b.weeklyParentDocumentId ? docId(b.weeklyParentDocumentId) : null;
+    // Someone else's key only writes where its owner chose: pointing it at other documents takes one's own key.
+    // Checked before asking Outline, which would otherwise tell what that key can reach.
+    if (!typed && current && current.created_by !== me(req)) {
+      const moved = (id: string | null, storedId: string | null, storedUrl: string | null) =>
+        id !== null && id !== storedId && !storedUrl?.endsWith(`/doc/${id}`);
+      if (moved(parent, current.parent_doc_id, current.parent_doc_url)
+        || moved(weeklyParent, current.weekly_parent_doc_id, current.weekly_parent_doc_url)) {
+        throw bad("Give your own Outline API key to change where this pipe publishes");
+      }
+    }
     let who: { user?: { name?: string } };
     let doc: OutlineDocument;
     let weeklyDoc: OutlineDocument | null = null;
@@ -440,7 +503,7 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
         weeklyDoc?.id ?? null, weeklyDoc?.title.slice(0, 500) ?? null, weeklyDoc ? absoluteOutlineUrl(weeklyDoc.url, instance) : null,
       ]
     );
-    return present((await settingsOf(p.id))!);
+    return present((await settingsOf(p.id))!, me(req));
   });
 
   app.delete("/pipes/:id/outline-export", async (req: Req) => {

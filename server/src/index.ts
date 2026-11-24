@@ -85,11 +85,19 @@ setInterval(() => {
     .finally(() => (pushing = false));
 }, 15_000).unref();
 
-// Daily reports published to Outline, for the pipes that ask for it (independent of e-mail).
+// Reports published to Outline, for the pipes that ask for it (independent of e-mail). A pass can outlast the
+// minute when Outline is slow: the next one waits.
+let publishingToOutline = false;
 setInterval(() => {
+  if (publishingToOutline) return;
+  publishingToOutline = true;
   runScheduledOutlineExports()
-    .then((n) => n && app.log.info({ published: n }, "Reports published to Outline"))
-    .catch((err) => app.log.error({ err }, "Report publishing to Outline failed"));
+    .then(({ published, failed }) => {
+      if (published) app.log.info({ published }, "Reports published to Outline");
+      for (const f of failed) app.log.warn({ pipeId: f.pipeId, error: f.message }, "Report not published to Outline");
+    })
+    .catch((err) => app.log.error({ err }, "Report publishing to Outline failed"))
+    .finally(() => (publishingToOutline = false));
 }, 60_000).unref();
 
 // Reports and notifications by e-mail: checked every minute, each one sent once. E-mail can be set up while the
