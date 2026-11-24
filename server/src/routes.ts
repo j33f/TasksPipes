@@ -705,7 +705,7 @@ export async function apiRoutes(app: FastifyInstance) {
     sendReport: (p, sprint) => sendSprintReport(p, sprint),
     exportReport: (p, sprint) => exportSprintToOutline(p, sprint),
   });
-  await app.register(outlineReportRoutes, { loadPipeFor, latestReportDay: () => latestReportDay(), reportDay });
+  await app.register(outlineReportRoutes, { loadPipeFor, latestReportDay, reportDay });
   await app.register(pokerRoutes, {
     loadPipeFor,
     setPoints: async (db, taskId, actorId, points) => {
