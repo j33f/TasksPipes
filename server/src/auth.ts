@@ -96,6 +96,33 @@ export function takeFlow<T>(req: FastifyRequest, reply: FastifyReply, cookie: st
   return flow;
 }
 
+/**
+ * Other uses of an Outline authorization than signing in (a pipe connecting its publishing), by the `kind` their flow
+ * carries. They come back through the same callback: it is the address registered in Outline.
+ */
+type GrantFlow = Flow<Record<string, unknown>>;
+type GrantHandler = (req: FastifyRequest, reply: FastifyReply, flow: GrantFlow, query: Record<string, string | undefined>) => Promise<unknown>;
+const grantHandlers = new Map<string, GrantHandler>();
+export const handleOutlineGrant = (kind: string, handler: GrantHandler) => grantHandlers.set(kind, handler);
+
+/** Starts an Outline authorization carrying `data` (with its `kind`); returns Outline's page to send the person to. */
+export const startOutlineGrant = (req: FastifyRequest, reply: FastifyReply, data: object = {}) =>
+  outlineAuthorizeUrl(startFlow(req, reply, STATE_COOKIE, data));
+
+function outlineAuthorizeUrl(state: string) {
+  const url = new URL(`${config.outlineUrl}/oauth/authorize`);
+  url.searchParams.set("client_id", config.oauthClientId);
+  url.searchParams.set("redirect_uri", `${config.appUrl}/auth/outline/callback`);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", "read write");
+  url.searchParams.set("state", state);
+  return url.toString();
+}
+
+/** Exchanges the code Outline sent back for tokens. */
+export const outlineGrant = (code: string) =>
+  outlineToken({ grant_type: "authorization_code", code, redirect_uri: `${config.appUrl}/auth/outline/callback` });
+
 /** Back on the sign-in page with a message (a provider's sign-in that went wrong). */
 export const loginError = (reply: FastifyReply, message: string) => reply.redirect(`/login?error=${encodeURIComponent(message)}`);
 
@@ -503,20 +530,15 @@ async function auth(app: FastifyInstance) {
 
   app.get("/auth/outline", rateLimited(LIMITS.oauth), async (req, reply) => {
     if (!config.oauthEnabled) return loginError(reply, tr(localeOf(req), "OAuth is not set up"));
-    const state = startFlow(req, reply, STATE_COOKIE);
-    const url = new URL(`${config.outlineUrl}/oauth/authorize`);
-    url.searchParams.set("client_id", config.oauthClientId);
-    url.searchParams.set("redirect_uri", `${config.appUrl}/auth/outline/callback`);
-    url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", "read write");
-    url.searchParams.set("state", state);
-    return reply.redirect(url.toString());
+    return reply.redirect(startOutlineGrant(req, reply));
   });
 
   app.get<{ Querystring: Record<string, string | undefined> }>("/auth/outline/callback", rateLimited(LIMITS.oauth), async (req, reply) => {
     const fail = (msg: string) => loginError(reply, msg);
     try {
-      const flow = takeFlow(req, reply, STATE_COOKIE, req.query.state);
+      const flow = takeFlow<{ kind?: string }>(req, reply, STATE_COOKIE, req.query.state);
+      const handler = flow?.kind ? grantHandlers.get(flow.kind) : undefined;
+      if (handler) return handler(req, reply, flow as GrantFlow, req.query);
       if (req.query.error) return fail(req.query.error_description || req.query.error);
       if (!flow || !req.query.code) {
         // Already signed in: this return was played again (back button, a second tab); nothing to do.
@@ -524,11 +546,7 @@ async function auth(app: FastifyInstance) {
         req.log.warn({ cookie: Boolean(req.cookies[STATE_COOKIE]), state: Boolean(req.query.state) }, "OAuth sign-in with an unknown state");
         return fail(tr(localeOf(req), "Sign-in expired or interrupted, please try again."));
       }
-      const t = await outlineToken({
-        grant_type: "authorization_code",
-        code: req.query.code || "",
-        redirect_uri: `${config.appUrl}/auth/outline/callback`,
-      });
+      const t = await outlineGrant(req.query.code);
       await establishSession(req, reply, {
         accessToken: t.access_token,
         refreshToken: t.refresh_token,

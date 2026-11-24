@@ -4,20 +4,24 @@
  *
  * - By hand, from a report, with the person's own Outline session.
  * - Automatically, when a pipe asks for it: the daily activity at REPORT_HOUR, the weekly time report on Fridays at
- *   that hour (under its own parent when one is set), and each sprint as it closes. This uses an Outline API key,
- *   given by a member and kept encrypted (an OAuth token copied from a session would die at that session's next
- *   refresh). Only that member may point the key at other documents. When Outline refuses the key, publishing stops
- *   until a new key is given, and that member is told by e-mail, once.
+ *   that hour (under its own parent when one is set), and each sprint as it closes. This uses the Outline account
+ *   of a member, kept encrypted: an API key they give, or their account connected with OAuth for this pipe, with
+ *   its own tokens refreshed here (a token copied from a session would die at that session's next refresh). Only
+ *   that member may point it at other documents. When Outline refuses it, publishing stops until a new key or
+ *   connection is given, and that member is told by e-mail, once.
  */
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { config } from "./config.js";
+import { handleOutlineGrant, outlineGrant, startOutlineGrant } from "./auth.js";
 import { decrypt, encrypt } from "./crypto-box.js";
-import { one, query, type Row } from "./db.js";
-import { bad, forbidden, notFound } from "./errors.js";
+import { one, query, tx, type Row } from "./db.js";
+import { bad, forbidden, HttpError, notFound } from "./errors.js";
 import { TASK_KEY_PREFIX } from "./git.js";
 import { intlTag, localeOf, localize, tr, type Locale } from "./i18n.js";
 import { escape, mailEnabled, mailLayout, sendHtmlMail } from "./mail.js";
-import { absoluteOutlineUrl, outlineApi, OutlineError, type OutlineCall, type OutlineDocument } from "./outline.js";
+import {
+  absoluteOutlineUrl, outlineApi, OutlineError, outlineToken, type OAuthTokens, type OutlineCall, type OutlineDocument,
+} from "./outline.js";
 import { pipeTypeById, stageLabel, taskTypeById } from "./pipeTypes.js";
 import { dailyPeriod, lastWeekday, localDay, zonedParts } from "./time.js";
 import {
@@ -194,6 +198,8 @@ export interface ExportSettings {
   parentDocTitle: string;
   parentDocUrl: string | null;
   outlineUser: string | null;
+  /** "oauth": a member's Outline account connected for this pipe; "key": an API key they gave. */
+  connection: "oauth" | "key";
   daily: boolean;
   weekly: boolean;
   /** Where the weekly time report goes, when not under the main parent. */
@@ -218,6 +224,7 @@ const present = (r: Row, viewerId: string): ExportSettings => ({
   parentDocTitle: r.parent_doc_title,
   parentDocUrl: r.parent_doc_url,
   outlineUser: r.outline_user,
+  connection: r.oauth ? "oauth" : "key",
   daily: r.daily,
   weekly: r.weekly,
   weeklyParentDocId: r.weekly_parent_doc_id,
@@ -242,6 +249,69 @@ const transient = (err: unknown) => err instanceof OutlineError && (err.status >
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err)).slice(0, 500);
 
+/** An Outline account given for a pipe: an API key, or the tokens of an OAuth connection. */
+interface Account {
+  token: string;
+  instance: string;
+  oauth: boolean;
+  refreshToken: string | null;
+  expiresAt: Date | null;
+}
+
+/** An access token this close to its end is refreshed before use. */
+const EXPIRY_MARGIN_MS = 60_000;
+
+const expiryOf = (t: OAuthTokens) => (t.expires_in ? new Date(Date.now() + t.expires_in * 1000) : null);
+
+/**
+ * A fresh access token for a pipe's OAuth connection. Outline replaces the refresh token at each refresh, so two
+ * refreshes at once would leave one of them with a dead token: the row is locked, and a token another pass refreshed
+ * meanwhile is used as is. A refresh Outline refuses (connection revoked or expired) counts as a refused key.
+ */
+async function refreshGrant(pipeId: string, stale: string | null): Promise<string> {
+  return tx(async (db) => {
+    const { rows: [r] } = await db.query(`SELECT api_key, refresh_token FROM pipe_outline_exports WHERE pipe_id = $1 FOR UPDATE`, [pipeId]);
+    const current = decrypt(r?.api_key);
+    if (current && current !== stale) return current;
+    const refreshToken = decrypt(r?.refresh_token);
+    if (!refreshToken) throw new OutlineError(401, "The Outline connection cannot be renewed");
+    let t: OAuthTokens;
+    try {
+      t = await outlineToken({ grant_type: "refresh_token", refresh_token: refreshToken });
+    } catch (err) {
+      if (err instanceof OutlineError && err.status >= 400 && err.status < 500 && err.status !== 429) throw new OutlineError(401, err.message);
+      throw err;
+    }
+    await db.query(
+      `UPDATE pipe_outline_exports SET api_key = $2, refresh_token = $3, token_expires_at = $4 WHERE pipe_id = $1`,
+      [pipeId, encrypt(t.access_token), encrypt(t.refresh_token || refreshToken), expiryOf(t)]
+    );
+    return t.access_token;
+  });
+}
+
+/** Calls Outline with a pipe's stored account; an OAuth connection's access token is refreshed when it ends. */
+function callerFor(row: Row): OutlineCall {
+  const instance: string = row.outline_url;
+  let token = decrypt(row.api_key);
+  let expiresAt: number | null = row.token_expires_at ? new Date(row.token_expires_at).getTime() : null;
+  const refresh = async () => {
+    token = await refreshGrant(row.pipe_id, token);
+    expiresAt = null;
+  };
+  return async (method, body) => {
+    if (!token) throw new Error("Outline API key unreadable");
+    if (row.oauth && expiresAt !== null && expiresAt < Date.now() + EXPIRY_MARGIN_MS) await refresh();
+    try {
+      return await outlineApi(token!, method, body, instance);
+    } catch (err) {
+      if (!(row.oauth && err instanceof OutlineError && err.status === 401)) throw err;
+      await refresh();
+      return outlineApi(token!, method, body, instance);
+    }
+  };
+}
+
 interface PublishOptions {
   /** The parent document; the pipe's main one by default. */
   parentId?: string;
@@ -256,9 +326,7 @@ async function publishForPipe(row: Row, pipe: Row, doc: { title: string; text: s
   const { parentId = row.parent_doc_id as string, now = new Date(), retrying = false } = options;
   const instance: string = row.outline_url;
   try {
-    const key = decrypt(row.api_key);
-    if (!key) throw new Error("Outline API key unreadable");
-    const call: OutlineCall = (method, body) => outlineApi(key, method, body, instance);
+    const call = callerFor(row);
     const out = (retrying && (await alreadyPublished(call, parentId, doc.title, instance))) || (await publish(call, parentId, doc, instance));
     await query(
       `UPDATE pipe_outline_exports SET last_export_at = $3, last_export_url = $2, last_error = NULL, last_error_at = NULL WHERE pipe_id = $1`,
@@ -266,18 +334,23 @@ async function publishForPipe(row: Row, pipe: Row, doc: { title: string; text: s
     );
     return out;
   } catch (err) {
-    const message = messageOf(err);
-    const keyRefused = refused(err);
-    await query(
-      `UPDATE pipe_outline_exports SET last_error = $2, last_error_at = $4, key_refused = key_refused OR $3 WHERE pipe_id = $1`,
-      [pipe.id, message, keyRefused, now]
-    );
-    if (keyRefused && !row.key_refused) {
-      const mailError = await warnOwner(row, pipe, message).then(() => null, (e: unknown) => e);
-      if (mailError) throw new Error(`${message} (the e-mail telling of it was not sent: ${messageOf(mailError)})`, { cause: err });
-    }
-    throw err;
+    throw await recordFailure(row, pipe, err, now);
   }
+}
+
+/** Records a failure in the pipe's settings; a refused account stops the publishing, and its giver is told, once. */
+async function recordFailure(row: Row, pipe: Row, err: unknown, now: Date): Promise<unknown> {
+  const message = messageOf(err);
+  const keyRefused = refused(err);
+  await query(
+    `UPDATE pipe_outline_exports SET last_error = $2, last_error_at = $4, key_refused = key_refused OR $3 WHERE pipe_id = $1`,
+    [pipe.id, message, keyRefused, now]
+  );
+  if (keyRefused && !row.key_refused) {
+    const mailError = await warnOwner(row, pipe, message).then(() => null, (e: unknown) => e);
+    if (mailError) return new Error(`${message} (the e-mail telling of it was not sent: ${messageOf(mailError)})`, { cause: err });
+  }
+  return err;
 }
 
 async function warnOwner(row: Row, pipe: Row, message: string) {
@@ -288,8 +361,12 @@ async function warnOwner(row: Row, pipe: Row, message: string) {
   const title = tr(lang, "Reports of {pipe} are no longer published to Outline", { pipe: pipe.name });
   await sendHtmlMail(lang, u.email, title, mailLayout(lang, {
     title,
-    intro: tr(lang, "Outline refused the API key given for this pipe: {error}", { error: message }),
-    body: `<p>${escape(tr(lang, "Give a new key in the pipe's reports (Outline section) to start again."))}</p>`,
+    intro: row.oauth
+      ? tr(lang, "Outline ended the connection made for this pipe: {error}", { error: message })
+      : tr(lang, "Outline refused the API key given for this pipe: {error}", { error: message }),
+    body: `<p>${escape(row.oauth
+      ? tr(lang, "Connect the Outline account again in the pipe's reports (Outline section) to start again.")
+      : tr(lang, "Give a new key in the pipe's reports (Outline section) to start again."))}</p>`,
     action: { label: tr(lang, "Open the pipe"), url: `${config.appUrl}/pipes/${pipe.id}` },
     footer: escape(tr(lang, "You receive this e-mail because you set up the publishing of this pipe's reports to Outline.")),
   }));
@@ -298,11 +375,15 @@ async function warnOwner(row: Row, pipe: Row, message: string) {
 /** Writes a pipe's settings (columns named in code); new settings clear the last error and a refused key. */
 async function saveSettings(pipeId: string, values: Record<string, unknown>) {
   const columns = Object.keys(values);
+  const params = [pipeId, ...Object.values(values)];
+  const set = `${columns.map((c, i) => `${c} = $${i + 2}`).join(", ")}, updated_at = now(), key_refused = false, last_error = NULL, last_error_at = NULL`;
+  // Settings changed without an account keep the stored one (an INSERT would need it); a new pipe's come with one.
+  const { rowCount } = await query(`UPDATE pipe_outline_exports SET ${set} WHERE pipe_id = $1`, params);
+  if (rowCount) return;
   await query(
     `INSERT INTO pipe_outline_exports (pipe_id, ${columns.join(", ")}) VALUES ($1, ${columns.map((_, i) => `$${i + 2}`).join(", ")})
-     ON CONFLICT (pipe_id) DO UPDATE SET ${columns.map((c) => `${c} = EXCLUDED.${c}`).join(", ")},
-       updated_at = now(), key_refused = false, last_error = NULL, last_error_at = NULL`,
-    [pipeId, ...Object.values(values)]
+     ON CONFLICT (pipe_id) DO UPDATE SET ${set}`,
+    params
   );
 }
 
@@ -388,6 +469,33 @@ async function publishDue(run: ScheduledRun, kind: "daily" | "weekly", now: Date
   }
 }
 
+/** An OAuth connection unused this long is refreshed, so that its refresh token does not expire unused. */
+const KEEP_ALIVE_DAYS = 7;
+
+/**
+ * Refreshes the OAuth connections idle for KEEP_ALIVE_DAYS (a pipe that only publishes its sprints, or the weekly
+ * report): call it every hour. Returns the pipes that failed; a connection Outline ended stops as a refused key.
+ */
+export async function refreshIdleOutlineConnections(now = new Date()): Promise<ScheduledRun["failed"]> {
+  const failed: ScheduledRun["failed"] = [];
+  if (!config.outlineEnabled || !config.oauthEnabled) return failed;
+  const { rows } = await query(
+    `SELECT e.*, p.name FROM pipe_outline_exports e JOIN pipes p ON p.id = e.pipe_id
+     WHERE e.oauth AND NOT e.key_refused AND p.archived_at IS NULL AND ${OWNER_ACTIVE}
+       AND e.token_expires_at < $1::timestamptz - make_interval(days => $2)`,
+    [now, KEEP_ALIVE_DAYS]
+  );
+  for (const row of rows) {
+    try {
+      await refreshGrant(row.pipe_id, decrypt(row.api_key));
+    } catch (err) {
+      const recorded = await recordFailure(row, { id: row.pipe_id, name: row.name }, err, now);
+      failed.push({ pipeId: row.pipe_id, message: messageOf(recorded) });
+    }
+  }
+  return failed;
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 
@@ -408,6 +516,9 @@ export function docId(v: unknown): string {
   if (!id || id.length > 200 || !/^[\w-]+$/.test(id)) throw bad("Choose the parent document in Outline");
   return id;
 }
+
+/** The kind of the OAuth flows that connect a pipe's publishing (see auth.ts). */
+const CONNECT = "outline-export";
 
 const SPRINT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -470,21 +581,18 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
     return row ? present(row, me(req)) : null;
   });
 
-  // Turns the automatic publishing on, or changes it. The key is checked against Outline, with the parent document.
-  app.put("/pipes/:id/outline-export", async (req: Req) => {
-    enabled();
-    const p = await managedPipe(req);
-    const b = req.body || {};
-    const current = await one(`SELECT * FROM pipe_outline_exports WHERE pipe_id = $1`, [p.id]);
-    const typed = typeof b.apiKey === "string" ? b.apiKey.trim() : "";
-    if (typed.length > 500 || /\s/.test(typed)) throw bad("Invalid Outline API key");
-    // A new key works on the Outline server of one's account; a kept key stays on its own.
-    const instance: string | undefined = typed ? req.outlineUrl : current?.outline_url;
-    const key = typed || (current ? decrypt(current.api_key) : null);
-    if (!key || !instance) throw bad("An Outline API key is required");
+  /**
+   * Turns the automatic publishing on, or changes it, with the account `given` (a key typed, an OAuth connection just
+   * made), else the current one. The account is checked against Outline, with the parent documents.
+   */
+  async function configure(p: Row, userId: string, lang: Locale, b: Record<string, unknown>, given: Account | null) {
+    const current = await settingsOf(p.id);
+    if (!given && !decrypt(current?.api_key)) throw bad("An Outline API key is required");
     const parent = b.parentDocumentId !== undefined ? docId(b.parentDocumentId) : current?.parent_doc_id;
     if (!parent) throw bad("Choose the parent document in Outline");
-    const call: OutlineCall = (method, body) => outlineApi(key, method, body, instance);
+    // A new account works on its own Outline server; a kept one stays on its own.
+    const instance: string = given ? given.instance : current!.outline_url;
+    const call: OutlineCall = given ? (method, body) => outlineApi(given.token, method, body, instance) : callerFor(current!);
     const timeReport = Boolean(pipeTypeById(p.kind)?.timeReport);
     // The weekly report's own parent (pipes with time reports): kept when not given, cleared when empty.
     const weeklyParent = !timeReport ? null
@@ -492,13 +600,13 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
         : b.weeklyParentDocumentId ? docId(b.weeklyParentDocumentId) : null;
     // A setting given in the request, else the current one.
     const flag = (name: "daily" | "weekly" | "sprints") => (name in b ? b[name] === true : Boolean(current?.[name]));
-    // Someone else's key only writes where its owner chose: pointing it at other documents takes one's own key.
-    // Checked before asking Outline, which would otherwise tell what that key can reach.
-    if (!typed && current && current.created_by !== me(req)) {
+    // Someone else's account only writes where its owner chose: pointing it at other documents takes one's own.
+    // Checked before asking Outline, which would otherwise tell what that account can reach.
+    if (!given && current!.created_by !== userId) {
       const moved = (id: string | null, storedId: string | null, storedUrl: string | null) =>
         id !== null && id !== storedId && !storedUrl?.endsWith(`/doc/${id}`);
-      if (moved(parent, current.parent_doc_id, current.parent_doc_url)
-        || moved(weeklyParent, current.weekly_parent_doc_id, current.weekly_parent_doc_url)) {
+      if (moved(parent, current!.parent_doc_id, current!.parent_doc_url)
+        || moved(weeklyParent, current!.weekly_parent_doc_id, current!.weekly_parent_doc_url)) {
         throw bad("Give your own Outline API key to change where this pipe publishes");
       }
     }
@@ -516,12 +624,18 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
       throw err;
     }
     await saveSettings(p.id, {
-      outline_url: instance,
-      api_key: encrypt(key),
+      // A kept account is not written back: its tokens may have been refreshed meanwhile.
+      ...(given ? {
+        outline_url: instance,
+        api_key: encrypt(given.token),
+        oauth: given.oauth,
+        refresh_token: encrypt(given.refreshToken),
+        token_expires_at: given.expiresAt,
+      } : {}),
       outline_user: who.user?.name?.slice(0, 200) ?? null,
-      // Who is told when the key is refused: the person who gave it.
-      created_by: typed ? me(req) : (current?.created_by ?? me(req)),
-      locale: localeOf(req),
+      // Who is told when the account is refused: the person who gave it.
+      created_by: given ? userId : (current!.created_by ?? userId),
+      locale: lang,
       parent_doc_id: doc.id,
       parent_doc_title: doc.title.slice(0, 500),
       parent_doc_url: absoluteOutlineUrl(doc.url, instance),
@@ -532,7 +646,59 @@ export async function outlineReportRoutes(app: FastifyInstance, deps: OutlineRep
       weekly: timeReport && flag("weekly"),
       sprints: flag("sprints"),
     });
-    return present((await settingsOf(p.id))!, me(req));
+    return present((await settingsOf(p.id))!, userId);
+  }
+
+  // With an API key typed, or without one to change the documents or what is published.
+  app.put("/pipes/:id/outline-export", async (req: Req) => {
+    enabled();
+    const p = await managedPipe(req);
+    const b = req.body || {};
+    const typed = typeof b.apiKey === "string" ? b.apiKey.trim() : "";
+    if (typed.length > 500 || /\s/.test(typed)) throw bad("Invalid Outline API key");
+    const given = typed ? { token: typed, instance: req.outlineUrl, oauth: false, refreshToken: null, expiresAt: null } : null;
+    return configure(p, me(req), localeOf(req), b, given);
+  });
+
+  // With one's Outline account, connected with OAuth: returns Outline's authorization page; the choices of the form
+  // travel with the flow, and are saved when Outline sends the person back (below).
+  app.post("/pipes/:id/outline-export/connect", async (req: Req, reply) => {
+    enabled();
+    if (!config.oauthEnabled) throw bad("OAuth is not set up");
+    // OAuth works with the configured server only, where the documents were chosen.
+    if (req.outlineUrl !== config.outlineUrl) throw bad("Your Outline account is on another server: give an API key");
+    const p = await managedPipe(req);
+    const b = req.body || {};
+    const choices = {
+      parentDocumentId: docId(b.parentDocumentId),
+      ...("weeklyParentDocumentId" in b ? { weeklyParentDocumentId: b.weeklyParentDocumentId ? docId(b.weeklyParentDocumentId) : "" } : {}),
+      ...Object.fromEntries((["daily", "weekly", "sprints"] as const).filter((k) => k in b).map((k) => [k, b[k] === true])),
+    };
+    return { url: startOutlineGrant(req, reply, { kind: CONNECT, pipeId: p.id, userId: me(req), choices }) };
+  });
+
+  // Back from Outline: the person who started the connection, still signed in, still in the pipe's space.
+  handleOutlineGrant(CONNECT, async (req, reply, flow, q) => {
+    const pipeId = String(flow.pipeId);
+    const lang = localeOf(req);
+    const back = (params: Record<string, string>) => reply.redirect(`/pipes/${encodeURIComponent(pipeId)}?${new URLSearchParams(params)}`);
+    try {
+      if (q.error) return back({ outline_error: q.error_description || q.error });
+      if (!req.user || req.user.id !== flow.userId) throw forbidden();
+      if (!q.code) throw bad("Sign-in expired or interrupted, please try again.");
+      enabled();
+      const t = await outlineGrant(q.code);
+      const { p, role } = await deps.loadPipeFor(pipeId, req.user.id);
+      if (!role) throw forbidden();
+      await configure(p, req.user.id, lang, flow.choices as Record<string, unknown>, {
+        token: t.access_token, instance: config.outlineUrl, oauth: true, refreshToken: t.refresh_token ?? null, expiresAt: expiryOf(t),
+      });
+      return back({ outline: "connected" });
+    } catch (err) {
+      req.log.warn({ err, pipeId }, "Connecting a pipe's publishing to Outline failed");
+      const known = err instanceof HttpError || err instanceof OutlineError;
+      return back({ outline_error: known ? tr(lang, err.message, err.params) : tr(lang, "Connecting to Outline failed") });
+    }
   });
 
   app.delete("/pipes/:id/outline-export", async (req: Req) => {

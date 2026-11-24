@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import OutlinePublish from "./OutlinePublish.svelte";
 import OutlineAutoPublish from "./OutlineAutoPublish.svelte";
 import { app } from "../lib/app.svelte";
+import { router } from "../lib/router.svelte";
 import type { Me, OutlineExport } from "../lib/types";
 
 const me = (kind: "outline" | "email"): Me => ({
@@ -13,7 +14,7 @@ const me = (kind: "outline" | "email"): Me => ({
   features: { invitations: true, notifications: false, outline: true },
 });
 const settings: OutlineExport = {
-  parentDocId: "d1", parentDocTitle: "Daily reports", parentDocUrl: "https://outline.test/doc/daily-abc", outlineUser: "Bot",
+  parentDocId: "d1", parentDocTitle: "Daily reports", parentDocUrl: "https://outline.test/doc/daily-abc", outlineUser: "Bot", connection: "key",
   daily: true, weekly: false, weeklyParentDocId: null, weeklyParentDocTitle: null, weeklyParentDocUrl: null, sprints: false, setBy: "Gina", mine: true, ownerGone: false, keyRefused: false, lastError: null, lastErrorAt: null, lastExportAt: null, lastExportUrl: null,
 };
 
@@ -29,6 +30,7 @@ beforeEach(() => {
     let answer: unknown = { ok: true };
     if (url.endsWith("/outline-export") && method === "GET") answer = exportSettings;
     else if (url.endsWith("/outline-export") && method === "PUT") answer = { ...settings, ...body };
+    else if (url.endsWith("/outline-export/connect")) answer = { url: "https://outline.test/oauth/authorize?state=s" };
     else if (url.startsWith("/api/outline/documents")) answer = [{ id: "d2", title: "Team notes", url: "https://outline.test/doc/notes-def" }];
     else if (url.endsWith("/outline")) answer = { id: "d9", title: "Activity of App", url: "https://outline.test/doc/new-9" };
     return new Response(JSON.stringify(answer), { status: 200, headers: { "content-type": "application/json" } });
@@ -128,6 +130,43 @@ describe("publishing a pipe's reports automatically", () => {
     expect(save.hasAttribute("disabled")).toBe(true);
     await userEvent.type(screen.getByPlaceholderText("ol_api_…"), "ol_api_mine");
     expect(save.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("connects an Outline account instead of a key, with the form's choices", async () => {
+    app.me = { ...me("outline"), features: { ...me("outline").features, outlineConnect: true } };
+    render(OutlineAutoPublish, { pipe: { id: "p", kind: "dev" }, hour: 18 });
+    await userEvent.click(await screen.findByRole("button", { name: "Publish the reports to Outline automatically…" }));
+    const connect = screen.getByRole("button", { name: "Connect with Outline" });
+    expect(connect.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Or an Outline API key")).toBeTruthy();
+    await userEvent.click(screen.getByPlaceholderText("Search an Outline document or paste its URL…"));
+    await userEvent.click(await screen.findByRole("button", { name: "Team notes" }));
+    await userEvent.click(connect);
+    expect(calls).toContainEqual({ method: "POST", url: "/api/pipes/p/outline-export/connect", body: { parentDocumentId: "d2", daily: true, sprints: false } });
+  });
+
+  it("is not offered to connect without OAuth", async () => {
+    app.me = me("outline");
+    render(OutlineAutoPublish, { pipe: { id: "p", kind: "dev" }, hour: 18 });
+    await userEvent.click(await screen.findByRole("button", { name: "Publish the reports to Outline automatically…" }));
+    expect(screen.queryByRole("button", { name: "Connect with Outline" })).toBeNull();
+  });
+
+  it("says when Outline sent one back without the connection, once", async () => {
+    app.me = me("outline");
+    history.replaceState({}, "", "/pipes/p?outline_error=access_denied");
+    router.sync();
+    render(OutlineAutoPublish, { pipe: { id: "p", kind: "dev" }, hour: 18 });
+    expect(await screen.findByText("access_denied")).toBeTruthy();
+    expect(location.search).toBe("");
+  });
+
+  it("shows a connection Outline ended", async () => {
+    app.me = me("outline");
+    exportSettings = { ...settings, connection: "oauth", keyRefused: true, lastError: "Invalid refresh token" };
+    render(OutlineAutoPublish, { pipe: { id: "p", kind: "dev" }, hour: 18 });
+    expect(await screen.findByText("Outline ended the connection: Invalid refresh token. Connect the account again to start again.")).toBeTruthy();
+    expect(screen.getByText(/as Bot · account connected/)).toBeTruthy();
   });
 
   it("shows a refused key, and stops", async () => {

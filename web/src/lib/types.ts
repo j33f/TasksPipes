@@ -43,7 +43,7 @@ export interface Me {
   /** Administrator of the instance (ADMIN_EMAILS): the administration page is offered. */
   admin?: boolean;
   /** What this instance allows. */
-  features: { invitations: boolean; notifications: boolean; outline?: boolean; mcp?: boolean };
+  features: { invitations: boolean; notifications: boolean; outline?: boolean; mcp?: boolean; outlineConnect?: boolean };
   /** E-mail notification choices, when e-mail is set up on the instance. */
   notificationPrefs?: NotificationPrefs;
 }
@@ -496,6 +496,8 @@ export interface OutlineExport {
   parentDocUrl: string | null;
   /** The Outline account the key belongs to. */
   outlineUser: string | null;
+  /** "oauth": an Outline account connected for this pipe; "key": an API key. */
+  connection: "oauth" | "key";
   daily: boolean;
   /** The weekly time report, on Fridays (pipes with time reports), under its own parent when one is set. */
   weekly: boolean;

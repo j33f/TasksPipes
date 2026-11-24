@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
+  import { router, setParams } from "../lib/router.svelte";
   import { formatDateTime } from "../lib/constants";
   import { t } from "../lib/i18n.svelte";
   import type { DocRef, OutlineExport } from "../lib/types";
@@ -10,7 +11,8 @@
   /**
    * Reports a pipe publishes to Outline by itself: the daily activity at the report hour, and each sprint as it
    * closes (pipes in sprints), under a parent document, with an Outline API key given by a member; the weekly time
-   * report on Fridays (pipes with time reports), under its own parent document when one is chosen.
+   * report on Fridays (pipes with time reports), under its own parent document when one is chosen. The account is given with
+   * an API key, or connected with OAuth: Outline's page, then back to the pipe (?outline=connected or ?outline_error).
    */
   let { pipe, hour }: { pipe: { id: string; kind: string }; hour: number } = $props();
 
@@ -34,6 +36,15 @@
     (parent && parent.id !== settings.parentDocId)
     || (timeReport && weekly && weeklyParent && weeklyParent.id !== settings.weeklyParentDocId))));
   const keyNeeded = $derived(!settings || moved || settings.ownerGone);
+  const canConnect = $derived(Boolean(app.me?.features.outlineConnect));
+
+  // Back from Outline: says how the connection went, once.
+  const returned = { connected: router.params.get("outline") === "connected", error: router.params.get("outline_error") };
+  if (returned.connected || returned.error !== null) {
+    setParams({ outline: null, outline_error: null }, { replace: true });
+    if (returned.connected) app.toast(t("Outline account connected"));
+    else error = returned.error ?? "";
+  }
 
   $effect(() => {
     api.get<OutlineExport | null>(`/pipes/${pipe.id}/outline-export`)
@@ -68,14 +79,27 @@
     }
   }
 
+  const choices = () => ({
+    parentDocumentId: parent?.id ?? "", daily, sprints: inSprints && sprints,
+    ...(timeReport ? { weekly, weeklyParentDocumentId: weekly ? (weeklyParent?.id ?? "") : "" } : {}),
+  });
+
   const submit = (e: SubmitEvent) => {
     e.preventDefault();
-    save({
-      parentDocumentId: parent?.id ?? "", daily, sprints: inSprints && sprints,
-      ...(timeReport ? { weekly, weeklyParentDocumentId: weekly ? (weeklyParent?.id ?? "") : "" } : {}),
-      ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
-    });
+    save({ ...choices(), ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}) });
   };
+
+  /** Off to Outline to connect one's account; the choices are saved when it sends one back. */
+  async function connect() {
+    busy = true;
+    error = "";
+    try {
+      location.assign((await api.post<{ url: string }>(`/pipes/${pipe.id}/outline-export/connect`, choices())).url);
+    } catch (err) {
+      error = errorMessage(err);
+      busy = false;
+    }
+  }
 
   async function stop() {
     busy = true;
@@ -103,10 +127,16 @@
         {:else}
           <DocPicker onselect={(d) => (parent = d)} />
         {/if}
+        {#if canConnect}
+          <div class="row actions">
+            <button type="button" class="btn small" disabled={busy || !parent} onclick={connect}><Icon name="doc" size={16} />{t("Connect with Outline")}</button>
+            <span class="small muted">{t("Reports are published as your Outline account.")}</span>
+          </div>
+        {/if}
         <label class="field">
-          <span class="small muted">{t("Outline API key")}</span>
+          <span class="small muted">{canConnect ? t("Or an Outline API key") : t("Outline API key")}</span>
           <input class="input" type="password" autocomplete="off" bind:value={apiKey}
-            required={keyNeeded} placeholder={keyNeeded ? "ol_api_…" : t("Leave empty to keep the current key")} />
+            required={keyNeeded && !canConnect} placeholder={keyNeeded ? "ol_api_…" : t("Leave empty to keep the current key")} />
           {#if moved}<span class="small">{t("The current key is someone else's: give your own to publish under other documents.")}</span>{/if}
           <span class="small muted">{t("Create one in Outline › Settings › API. Reports are published as that account, even when nobody is signed in.")}</span>
         </label>
@@ -138,10 +168,12 @@
     {:else if settings}
       <p class="small">
         {t("Published under")} {#if settings.parentDocUrl}<a href={settings.parentDocUrl} target="_blank" rel="noopener noreferrer">{settings.parentDocTitle}</a>{:else}{settings.parentDocTitle}{/if}
-        {#if settings.outlineUser}<span class="muted">{" · "}{t("as {name}", { name: settings.outlineUser })}</span>{/if}
+        {#if settings.outlineUser}<span class="muted">{" · "}{t("as {name}", { name: settings.outlineUser })}{#if settings.connection === "oauth"}{" · "}{t("account connected")}{/if}</span>{/if}
       </p>
       {#if settings.ownerGone}
         <div class="error-text">{t("The member who gave the key is no longer in this space: give a new key to start again.")}</div>
+      {:else if settings.keyRefused && settings.connection === "oauth"}
+        <div class="error-text">{t("Outline ended the connection: {error}. Connect the account again to start again.", { error: settings.lastError ?? "" })}</div>
       {:else if settings.keyRefused}
         <div class="error-text">{t("Outline refused the key: {error}. Give a new key to start again.", { error: settings.lastError ?? "" })}</div>
       {:else if settings.lastError}
@@ -167,6 +199,7 @@
       {#if error}<div class="error-text">{error}</div>{/if}
     {:else}
       <button class="btn ghost small" onclick={edit}>{t("Publish the reports to Outline automatically…")}</button>
+      {#if error}<div class="error-text">{error}</div>{/if}
     {/if}
   </div>
 {/if}
