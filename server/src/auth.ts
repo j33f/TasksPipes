@@ -4,7 +4,7 @@ import type { CookieSerializeOptions } from "@fastify/cookie";
 import fp from "fastify-plugin";
 import { config } from "./config.js";
 import { ensureDefaultPipes, one, pool, query, tx, type Queryable, type Row } from "./db.js";
-import { absoluteOutlineUrl, normalizeOutlineUrl, outlineApi, outlineToken, OutlineError, type OutlineUser } from "./outline.js";
+import { absoluteOutlineUrl, normalizeOutlineUrl, outlineApi, outlineToken, OutlineError, type OutlineCall, type OutlineUser } from "./outline.js";
 import { isEmail, mailEnabled, sendLinkMail } from "./mail.js";
 import { LIMITS, rateLimited } from "./rate-limit.js";
 import { closeUserConnections } from "./realtime.js";
@@ -39,12 +39,10 @@ export interface SessionUser {
   theme: "light" | "dark" | null;
 }
 
-type OutlineCaller = <T = unknown>(method: string, body?: object) => Promise<{ data: T }>;
-
 declare module "fastify" {
   interface FastifyRequest {
     user: SessionUser | null;
-    outline: OutlineCaller;
+    outline: OutlineCall;
     /** Outline server of the session (the configured one for e-mail accounts). */
     outlineUrl: string;
   }
@@ -264,7 +262,7 @@ async function refreshSessionToken(session: Row): Promise<string | null> {
 
 const NO_OUTLINE = "Outline is not available to accounts invited by e-mail.";
 
-function outlineCallerFor(session: Row): OutlineCaller {
+function outlineCallerFor(session: Row): OutlineCall {
   return async (method, body) => {
     if (!session.access_token) throw new OutlineError(403, NO_OUTLINE);
     const instance = session.outline_url ?? config.outlineUrl;
@@ -283,7 +281,7 @@ function outlineCallerFor(session: Row): OutlineCaller {
   };
 }
 
-const noOutline: OutlineCaller = async () => {
+const noOutline: OutlineCall = async () => {
   throw new OutlineError(401, "Not signed in");
 };
 
