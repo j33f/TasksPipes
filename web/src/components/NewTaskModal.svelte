@@ -16,7 +16,9 @@
   import type { ChecklistItem } from "../lib/types";
   import { t } from "../lib/i18n.svelte";
 
-  let { pipe = null, stage: initialStage = null, spaceId: initialSpaceId = null, dueDate: initialDueDate = null, onclose }: {
+  let { pipe = null, stage: initialStage = null, spaceId: initialSpaceId = null, dueDate: initialDueDate = null, sprintId = null, onclose }: {
+    /** Sprint of the pipe the board shows: the task goes in it. */
+    sprintId?: string | null;
     /** Create directly in this pipe… */
     pipe?: { id: string; name: string; spaceId: string; kind: string } | null;
     /** Column of the pipe (its first one by default). */
@@ -104,7 +106,7 @@
         items: items.map(({ text, done }) => ({ text, done })),
         // Only the fields of the chosen type (the type may have changed after filling some).
         fields: Object.fromEntries(Object.entries(fields).filter(([k]) => taskType?.fields.some((f) => f.id === k))),
-        ...(pipe ? { pipeId: pipe.id, stage } : { spaceId }),
+        ...(pipe ? { pipeId: pipe.id, stage, ...(sprintId ? { sprintId } : {}) } : { spaceId }),
       };
       const { id } = await api.post<{ id: string }>("/tasks", body);
       for (const p of pending.filter((x) => taskType?.fields.some((f) => f.id === x.field))) {

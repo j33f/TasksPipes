@@ -5,7 +5,7 @@
   import { STATUSES, dueState, formatDate, formatDateTime, relativeTime } from "../lib/constants";
   import TaskFields, { type FieldFile } from "./TaskFields.svelte";
   import { eventChanges, eventIcon, eventSummary } from "../lib/events";
-  import type { ChecklistItem, DocRef, Label, Pipe, TaskDetail, UserRef } from "../lib/types";
+  import type { ChecklistItem, DocRef, Label, Pipe, Sprint, TaskDetail, UserRef } from "../lib/types";
   import Modal from "./Modal.svelte";
   import Markdown from "./Markdown.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
@@ -48,6 +48,8 @@
   let comment = $state("");
   let commentKey = $state(0);
   let dialog = $state<"send" | "refuse" | "accept" | "labels" | null>(null);
+  let sprints = $state<Sprint[]>([]);
+  const taskSprint = $derived(sprints.find((s) => s.id === task?.sprintId) ?? null);
   // Labels of the task's space, loaded when choosing them.
   let spaceLabels = $state<Label[] | null>(null);
   const loadLabels = () =>
@@ -67,6 +69,8 @@
         pipes = space.pipes;
         members = space.members;
       }
+      // A pipe in sprints: its sprints, to plan the task in one.
+      sprints = detail.pipe && app.pipeType(detail.pipe.kind)?.sprints ? await api.get<Sprint[]>(`/pipes/${detail.pipe.id}/sprints`) : [];
     } catch (err) {
       loadError = errorMessage(err);
     }
@@ -338,6 +342,23 @@
               onchange={(e) => move((e.currentTarget as HTMLSelectElement).value)}>
               {#each pipes.filter((p) => !p.archived || p.id === task!.pipe!.id) as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
             </select>
+          </div>
+        {/if}
+
+        {#if task.pipe && app.pipeType(task.pipe.kind)?.sprints}
+          <div class="prop">
+            <span class="label-text">{t("Sprint")}</span>
+            {#if perms?.manage && taskSprint?.status !== "closed"}
+              <select class="input" value={task.sprintId ?? ""} disabled={busy} aria-label={t("Sprint")}
+                onchange={(e) => patch({ sprintId: (e.currentTarget as HTMLSelectElement).value || null })}>
+                <option value="">{t("Backlog (no sprint)")}</option>
+                {#each sprints.filter((s) => s.status !== "closed") as s (s.id)}
+                  <option value={s.id}>{s.name}{s.status === "active" ? ` · ${t("under way")}` : ""}</option>
+                {/each}
+              </select>
+            {:else}
+              <div class="value">{#if taskSprint}{taskSprint.name}{#if taskSprint.status === "closed"} <span class="muted">· {t("closed")}</span>{/if}{:else}<span class="muted">{t("Backlog (no sprint)")}</span>{/if}</div>
+            {/if}
           </div>
         {/if}
 
