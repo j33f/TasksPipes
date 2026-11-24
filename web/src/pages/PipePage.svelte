@@ -5,6 +5,7 @@
   import { api, errorMessage } from "../lib/api";
   import { autosize } from "../lib/autosize";
   import { app } from "../lib/app.svelte";
+  import { router } from "../lib/router.svelte";
   import { openTaskCount } from "../lib/constants";
   import type { PipeDetail, Task } from "../lib/types";
   import SpaceIcon from "../components/SpaceIcon.svelte";
@@ -35,7 +36,8 @@
   let pipe = $state<PipeDetail | null>(null);
   let error = $state("");
   let editing = $state(false);
-  let reports = $state(false);
+  // Back from Outline after connecting an account for the reports (OutlineAutoPublish): they open again.
+  let reports = $state(router.params.has("outline") || router.params.has("outline_error"));
   let transfer = $state(false);
   let webhooks = $state(false);
   /** Column in which to create a task ("" = the first one). */

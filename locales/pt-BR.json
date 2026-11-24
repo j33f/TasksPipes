@@ -1283,7 +1283,13 @@
     "Document for the weekly report": "Documento do relatório semanal",
     "Use the parent document": "Usar o documento pai",
     "Under the parent document, or under another one:": "No documento pai, ou em outro:",
-    "under {title}": "em “{title}”"
+    "under {title}": "em “{title}”",
+    "Connect with Outline": "Conectar com o Outline",
+    "Reports are published as your Outline account.": "Os relatórios são publicados com a sua conta do Outline.",
+    "Or an Outline API key": "Ou uma chave de API do Outline",
+    "account connected": "conta conectada",
+    "Outline account connected": "Conta do Outline conectada",
+    "Outline ended the connection: {error}. Connect the account again to start again.": "O Outline encerrou a conexão: {error}. Conecte a conta novamente para retomar."
   },
   "server": {
     "{label} is required": "{label}: obrigatório",
@@ -1746,7 +1752,12 @@
     "Outline refused the API key given for this pipe: {error}": "O Outline recusou a chave de API informada para este pipe: {error}",
     "Give a new key in the pipe's reports (Outline section) to start again.": "Informe uma nova chave nos relatórios do pipe (seção Outline) para retomar.",
     "You receive this e-mail because you set up the publishing of this pipe's reports to Outline.": "Você recebe este e-mail porque configurou a publicação dos relatórios deste pipe no Outline.",
-    "This pipe has no weekly time report": "Este pipe não tem relatório semanal de tempo"
+    "This pipe has no weekly time report": "Este pipe não tem relatório semanal de tempo",
+    "Outline ended the connection made for this pipe: {error}": "O Outline encerrou a conexão feita para este pipe: {error}",
+    "Connect the Outline account again in the pipe's reports (Outline section) to start again.": "Conecte a conta do Outline novamente nos relatórios do pipe (seção Outline) para retomar.",
+    "Your Outline account is on another server: give an API key": "Sua conta do Outline está em outro servidor: informe uma chave de API",
+    "Connecting to Outline failed": "A conexão com o Outline falhou",
+    "The Outline connection cannot be renewed": "A conexão com o Outline não pode ser renovada"
   },
   "catalog": {
     "Prêt à démarrer": "Pronta para começar",

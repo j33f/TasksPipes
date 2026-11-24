@@ -136,6 +136,9 @@ export async function outlineToken(params: Record<string, string>): Promise<OAut
       client_secret: config.oauthClientSecret,
       ...params,
     }),
+    signal: AbortSignal.timeout(15_000),
+  }).catch((err: Error & { cause?: { message?: string } }) => {
+    throw new OutlineError(502, "Outline server unreachable: {cause}", { cause: err.cause?.message ?? err.message });
   });
   const json = (await res.json().catch(() => ({}))) as Partial<OAuthTokens> & { error_description?: string; message?: string };
   if (!res.ok || !json.access_token) {

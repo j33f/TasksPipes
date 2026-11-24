@@ -23,7 +23,7 @@ As an unprivileged user (here `taskspipes`, home `/opt/taskspipes`), get the sou
 ```shell
 git clone https://github.com/j33f/TasksPipes.git /opt/taskspipes/app
 cd /opt/taskspipes/app
-git checkout v0.30.3          # the latest release: https://github.com/j33f/TasksPipes/releases
+git checkout v0.31.0          # the latest release: https://github.com/j33f/TasksPipes/releases
 
 cd web && npm ci && npm run build && cd ..
 cd server && npm ci && npm run build && npm prune --omit=dev && cd ..
@@ -155,7 +155,7 @@ Administrators are told of each new release (e-mail, *About*), but there is no o
 
 ```shell
 cd /opt/taskspipes/app
-git fetch --tags && git checkout v0.30.3       # the new release
+git fetch --tags && git checkout v0.31.0       # the new release
 cd web && npm ci && npm run build && cd ..
 cd server && npm ci && npm run build && npm prune --omit=dev && cd ..
 sudo systemctl restart taskspipes
