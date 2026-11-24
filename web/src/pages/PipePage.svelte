@@ -28,6 +28,7 @@
   import SprintPlanning from "../components/SprintPlanning.svelte";
   import SprintModal from "../components/SprintModal.svelte";
   import Timeline from "../components/Timeline.svelte";
+  import PokerModal from "../components/PokerModal.svelte";
 
   let { id }: { id: string } = $props();
 
@@ -101,6 +102,7 @@
   const shownSprintId = $derived(inSprints ? (sprintChoice ?? activeSprint(pipe?.sprints)?.id ?? "all") : "all");
   const shownSprint = $derived(pipe?.sprints?.find((s) => s.id === shownSprintId) ?? null);
   let newSprint = $state(false);
+  let poker = $state(false);
   // A task reached from a notification is shown on the board, whatever the filters (not remembered).
   $effect(() => {
     const id = app.highlight;
@@ -366,6 +368,13 @@
       </div>
     </div>
 
+    {#if pipe.poker?.open && !poker}
+      <div class="callout row poker-open" role="status">
+        <Icon name="users" />
+        <span class="grow">{t("A Planning Poker session is open in this pipe.")}</span>
+        <button class="btn small" onclick={() => (poker = true)}>{t("Join it")}</button>
+      </div>
+    {/if}
     {#if pipeView === "board" && shownSprint}
       <SprintBanner {pipe} sprint={shownSprint} />
     {:else if pipeView === "board" && inSprints && !pipe.sprints?.length && pipe.canManage && !pipe.archived}
@@ -376,7 +385,7 @@
       </div>
     {/if}
     {#if pipeView === "planning" && inSprints}
-      <SprintPlanning {pipe} />
+      <SprintPlanning {pipe} onpoker={() => (poker = true)} />
     {:else if pipeView === "timeline" && inSprints}
       <Timeline {pipe} sprintId={shownSprintId} />
     {:else if pipeView === "board"}
@@ -443,12 +452,14 @@
       onclose={() => (newTaskStage = null)} />
   {/if}
   {#if newSprint}<SprintModal pipeId={pipe.id} onclose={() => (newSprint = false)} />{/if}
+  {#if poker}<PokerModal {pipe} onclose={() => (poker = false)} />{/if}
 {/if}
 
 <style>
   .page-header { margin-bottom: 16px; }
   .sprint-select { width: auto; max-width: 220px; }
-  .sprint-start { margin-bottom: 12px; align-items: center; }
+  .sprint-start, .poker-open { margin-bottom: 12px; align-items: center; }
+  .poker-open .btn { flex-shrink: 0; }
   .sprint-start .btn { flex-shrink: 0; }
   .archived { margin-top: 10px; align-items: center; }
   /* Keep the button at its natural size on narrow widths; let the message column shrink instead. */

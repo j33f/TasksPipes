@@ -8,7 +8,10 @@ const IDLE_MS = 5 * 60_000;
 const HIDDEN_MS = 60_000;
 
 interface LiveEvent {
-  type: "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "inbox" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello";
+  type: "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "inbox" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello" | "poker";
+  /** poker: the pipe whose session changed; whether it opened or closed. */
+  pipeId?: string;
+  opened?: boolean;
   /** "hello": version of the server. */
   version?: string;
   spaceId?: string;
@@ -27,6 +30,8 @@ class Live {
   idle = $state(false);
   /** Bumped on each arrival, to animate the badge. */
   arrivals = $state(0);
+  /** Bumped when a Planning Poker session changes (a vote, the cards shown…): its window fetches the state. */
+  poker = $state(0);
 
   #ws: WebSocket | null = null;
   #retry = 0;
@@ -124,6 +129,12 @@ class Live {
   #handle(e: LiveEvent) {
     if (e.type === "hello") return checkServerVersion(e.version);
     if (e.type === "inbox") return void inbox.load();
+    if (e.type === "poker") {
+      this.poker++;
+      // Opened or closed: the pipe's page shows it; a vote alone reloads nothing else.
+      if (e.opened !== undefined) app.refresh();
+      return;
+    }
     app.refresh();
     if (e.type === "connection.request") {
       return app.toast(t("{name} wants to connect with you", { name: e.by ?? "" }), "info", { label: t("View"), run: () => (app.dialog = "settings") });

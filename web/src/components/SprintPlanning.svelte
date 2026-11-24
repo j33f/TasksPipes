@@ -12,7 +12,7 @@
   import SprintProgressModal from "./SprintProgressModal.svelte";
 
   /** Planning of a pipe in sprints: its backlog beside the sprints still open; tasks go from one to another. */
-  let { pipe }: { pipe: PipeDetail } = $props();
+  let { pipe, onpoker }: { pipe: PipeDetail; onpoker?: () => void } = $props();
 
   const sprints = $derived(openSprints(pipe.sprints ?? []));
   const cap = $derived(capacity(pipe));
@@ -102,6 +102,9 @@
     <span class="muted">{pipe.velocity?.source === "learned" ? t("learned from the last sprints") : pipe.velocity?.source === "manual" ? t("set by hand") : t("the initial one, until three sprints count")}</span>
   </span>
   <button class="btn small neutral" onclick={() => (progress = true)}><Icon name="chart" size={14} />{t("Progress of the work")}</button>
+  {#if pipe.poker?.enabled && onpoker}
+    <button class="btn small neutral" onclick={onpoker}><Icon name="users" size={14} />{pipe.poker.open ? t("Join the Planning Poker") : t("Planning Poker")}</button>
+  {/if}
 </div>
 
 <div class="planning">

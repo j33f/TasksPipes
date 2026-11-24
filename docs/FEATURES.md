@@ -231,6 +231,22 @@ designer — plan their tasks in sprints of a few weeks.
   MCP.
 - Each change of sprint is kept in the task's history; a task moved to another pipe or sent leaves its sprint
   (noted too).
+
+### Planning Poker
+
+In team pipes only — on by default in *Sprint* pipes (and in model types with *Planning Poker on by default*), turned
+on or off per pipe in its settings — the members of the team estimate tasks together.
+
+- **A session** is opened from the planning (*Planning Poker*) with the tasks to estimate, those without points
+  chosen first; whoever opens it leads it. One session at a time per pipe: the others see a banner to join it.
+- **For the task under estimation**, everyone picks a card — 0, 1, 2, 3, 5, 8, 13, 21, 40, 100, *?* or ☕ — and can
+  change it until the cards are shown. The others only see *who* picked one: **no one's card leaves the server
+  before**. Those at the table are shown (their page says so every few seconds); those away are faded.
+- **The one who leads** shows the cards — with their spread, median, and a suggestion (the median rounded up to the
+  scale), or *Everyone agrees* — starts another round if needed, then sets the points: they go on the task, noted
+  in its history *(Planning Poker)*, and the next task not yet estimated comes. They can also pick the task to
+  estimate. Anyone of the team can take the lead (if the one leading left) or close the session.
+- Every page at the table follows at once through the live connection.
 - The members of the pipe's space plan sprints and put tasks in them; whoever sees the pipe sees its sprints.
 
 ## Time and reports
@@ -566,6 +582,7 @@ sending nothing but the server's version in its User-Agent, and, when there is a
 | Add or remove a pipe's linked documents | members of its space (Outline documents: Outline accounts) |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
 | Plan sprints (create, start, close, delete) and put tasks in them | members of the pipe's space |
+| Play Planning Poker (open a session, vote, lead, close) | members of the pipe's team (team spaces only) |
 | Edit title, description and fields, priority, points and labels | members, or the author of a task in an open pipe |
 | Manage a space's labels | members of the space (whoever sees the space sees them) |
 | Set an estimate, log one's own time | as for fields: members, or the author of a task in an open pipe |

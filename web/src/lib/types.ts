@@ -88,6 +88,23 @@ export interface Pipe {
   weeklyReport: boolean;
   /** How it works in sprints, for a pipe whose type does; null otherwise. */
   sprintSettings?: SprintSettings | null;
+  /** Planning Poker as chosen for the pipe; null: as its type says. */
+  pokerChoice?: boolean | null;
+}
+
+export type PokerCard = "0" | "1" | "2" | "3" | "5" | "8" | "13" | "21" | "40" | "100" | "?" | "coffee";
+
+/** An open Planning Poker session, as one member sees it: the others' cards only once shown. */
+export interface PokerSession {
+  id: string;
+  status: "open" | "closed";
+  facilitatorId: string | null;
+  tasks: { id: string; number: number; title: string; points: number | null; taskType: string; status: Status; estimated: number | null }[];
+  currentTaskId: string | null;
+  round: number;
+  revealed: boolean;
+  participants: { id: string; name: string; avatarUrl: string | null; present: boolean; voted: boolean; vote: PokerCard | null }[];
+  stats: { count: number; min: number | null; max: number | null; median: number | null; suggestion: number | null; consensus: boolean } | null;
 }
 
 export interface SprintSettings {
@@ -294,6 +311,8 @@ export interface TaskEvent {
     whileBlocked?: boolean;
     priority?: { from: Priority | null; to: Priority | null };
     points?: { from: number | null; to: number | null };
+    /** The points were set at Planning Poker. */
+    poker?: boolean;
     startDate?: { from: string | null; to: string | null };
     /** Moved from a sprint to another; null is the backlog. */
     sprint?: { from: { id: string; name: string } | null; to: { id: string; name: string } | null };
@@ -379,6 +398,8 @@ export interface PipeDetail extends Pipe {
   sprints?: Sprint[] | null;
   /** The points a sprint can take, and how they were found (pipes in sprints). */
   velocity?: Velocity | null;
+  /** Planning Poker: on for me in this pipe (its team's members), and whether a session is open. */
+  poker?: { enabled: boolean; open: boolean };
 }
 
 export interface SidebarPipe extends Pipe {
@@ -459,6 +480,8 @@ export interface PipeType extends CustomMeta {
   timeReport?: boolean;
   /** Work in sprints: sprints, planning, velocity. */
   sprints?: boolean;
+  /** Planning Poker on by default in team pipes of this type. */
+  planningPoker?: boolean;
   templates: string[];
 }
 
