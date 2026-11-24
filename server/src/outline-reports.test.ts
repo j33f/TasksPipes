@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dailyDocument, docId, md, sprintDocument } from "./outline-reports.js";
+import { dailyDocument, docId, md, mdBlock, sprintDocument } from "./outline-reports.js";
 
 const pipe = { id: "p1", name: "App", kind: "dev" };
 const task = (n: number, title: string) => ({ id: `t${n}`, number: n, title, taskType: "task", owner: "Ana", stage: null });
@@ -7,6 +7,15 @@ const task = (n: number, title: string) => ({ id: `t${n}`, number: n, title, tas
 describe("Markdown of reports published to Outline", () => {
   it("escapes what Markdown would read as formatting, on one line", () => {
     expect(md("Fix *bold* [link](x) #1\nnext")).toBe("Fix \\*bold\\* \\[link\\]\\(x\\) \\#1 next");
+  });
+
+  it("escapes, at the start of a paragraph, what would open a list, a rule or a heading", () => {
+    expect(mdBlock("1. Ship the sign-in")).toBe("1\\. Ship the sign-in");
+    expect(mdBlock(" 2) Ship")).toBe("2\\) Ship");
+    expect(mdBlock("- first")).toBe("\\- first");
+    expect(mdBlock("---")).toBe("\\---");
+    expect(mdBlock("=== ok")).toBe("\\=== ok");
+    expect(mdBlock("Sign-in in 2027. Then - more")).toBe("Sign-in in 2027. Then - more");
   });
 
   it("writes a daily report section by section, empty when nothing happened", () => {

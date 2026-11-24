@@ -164,7 +164,8 @@ describe("Automatic publishing of a pipe's reports", () => {
     const plain = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Plain" })).body.id;
     expect((await alice.post(`/api/pipes/${plain}/reports/weekly/outline`, { parentDocumentId: "doc-1" })).body.error).toBe("This pipe has no weekly time report");
     // The option is ignored on a pipe type without time reports.
-    expect((await alice.put(`/api/pipes/${plain}/outline-export`, { apiKey: "alice-token", parentDocumentId: "doc-1", weekly: true })).body.weekly).toBe(false);
+    expect((await alice.put(`/api/pipes/${plain}/outline-export`, { apiKey: "alice-token", parentDocumentId: "doc-1", weekly: true, weeklyParentDocumentId: "doc-2" })).body)
+      .toMatchObject({ weekly: false, weeklyParentDocId: null });
     const res = await alice.put(`/api/pipes/${pipe}/outline-export`, { weekly: true, weeklyParentDocumentId: "doc-1", daily: false });
     expect(res.body).toMatchObject({ weekly: true, weeklyParentDocId: "doc-1", weeklyParentDocTitle: "Roadmap 2027", parentDocId: "doc-2" });
     // By hand, from the weekly tab: under the weekly parent.

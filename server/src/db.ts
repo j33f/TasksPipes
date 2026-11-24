@@ -901,8 +901,10 @@ CREATE TABLE IF NOT EXISTS pipe_links (
 CREATE INDEX IF NOT EXISTS pipe_links_pipe_idx ON pipe_links(pipe_id);
 
 -- Reports a pipe publishes to Outline by itself (outline-reports.ts): under a parent document, with an Outline API
--- key (encrypted) given by a member; the daily activity, and/or each sprint as it closes. A key Outline refuses
--- stops the publishing until a new one is given.
+-- key (encrypted) given by a member (created_by, the only one who may point it at other documents); the daily
+-- activity, the weekly time report (below) and/or each sprint as it closes. A key Outline refuses stops the
+-- publishing until a new one is given. Each scheduled report is claimed per pipe in report_runs
+-- ('outline-daily:<pipe_id>', 'outline-weekly:<pipe_id>').
 CREATE TABLE IF NOT EXISTS pipe_outline_exports (
   pipe_id uuid PRIMARY KEY REFERENCES pipes(id) ON DELETE CASCADE,
   outline_url text NOT NULL,

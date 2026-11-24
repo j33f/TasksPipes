@@ -22,6 +22,9 @@ export interface OutlineUser {
   isSuspended?: boolean;
 }
 
+/** Calls an Outline API method as someone: a person's session, or the API key of a pipe. */
+export type OutlineCall = <T = unknown>(method: string, body?: object) => Promise<{ data: T }>;
+
 export interface OutlineDocument {
   id: string;
   title: string;
