@@ -12,6 +12,8 @@ const users = {
 const apiKeys = {
   "erin-token": { id: "55555555-5555-4555-8555-555555555555", name: "Erin Moreau", email: "erin@example.com", avatarUrl: null },
   "frank-token": { id: "66666666-6666-4666-8666-666666666666", name: "Frank Girard", email: "frank@example.com", avatarUrl: null },
+  // Connected with OAuth only (code=gina-token).
+  "gina-token": { id: "77777777-7777-4777-8777-777777777777", name: "Gina Roux", email: "gina@example.com", avatarUrl: null },
 };
 const docs = [
   { id: "doc-1", title: "Roadmap 2027", url: "/doc/roadmap-2027-abc123", updatedAt: new Date().toISOString(), collectionId: "col-1" },
@@ -19,6 +21,17 @@ const docs = [
 ];
 
 let failing = { times: 0, status: 503, created: false };
+
+// OAuth: a code is the token of the person who signs in (code=alice-token), also their first access token. Each
+// refresh token is used once: a refresh gives a new access token ("alice-token~3") and a new refresh token.
+const refreshTokens = {};
+const oauthAccess = {};
+let grants = 0;
+const issue = (person, access) => {
+  const refresh = `refresh-${++grants}`;
+  refreshTokens[refresh] = person;
+  return { access_token: access, refresh_token: refresh, token_type: "Bearer", expires_in: 3600 };
+};
 
 http.createServer((req, res) => {
   let body = "";
@@ -28,9 +41,12 @@ http.createServer((req, res) => {
       res.writeHead(status, { "Content-Type": "application/json" });
       res.end(JSON.stringify(json));
     };
-    // Tests: an API key revoked from now on (POST /test/revoke {"token": "erin-token"}).
+    // Tests: an API key revoked from now on (POST /test/revoke {"token": "erin-token"}); with "oauth": true, the
+    // OAuth connections of that person instead (their refresh and access tokens).
     if (req.url === "/test/revoke") {
-      delete apiKeys[JSON.parse(body || "{}").token];
+      const { token, oauth } = JSON.parse(body || "{}");
+      if (!oauth) delete apiKeys[token];
+      else for (const map of [refreshTokens, oauthAccess]) for (const [k, v] of Object.entries(map)) if (v === token) delete map[k];
       return send(200, { ok: true });
     }
     // Tests: the next documents.create calls fail (POST /test/fail {"times": 1, "status": 503}); with "created": true,
@@ -39,13 +55,22 @@ http.createServer((req, res) => {
       failing = { times: 1, status: 503, created: false, ...JSON.parse(body || "{}") };
       return send(200, { ok: true });
     }
-    // OAuth: the code is the token of the person who signed in (code=alice-token).
     if (req.url === "/oauth/token") {
-      const code = new URLSearchParams(body).get("code");
-      return users[code] ? send(200, { access_token: code, token_type: "Bearer", expires_in: 3600 }) : send(400, { error: "invalid_grant", error_description: "Invalid code" });
+      const params = new URLSearchParams(body);
+      if (params.get("grant_type") === "refresh_token") {
+        const person = refreshTokens[params.get("refresh_token")];
+        if (!person) return send(400, { error: "invalid_grant", error_description: "Invalid refresh token" });
+        delete refreshTokens[params.get("refresh_token")];
+        const access = `${person}~${grants + 1}`;
+        oauthAccess[access] = person;
+        return send(200, issue(person, access));
+      }
+      const code = params.get("code");
+      return users[code] || apiKeys[code] ? send(200, issue(code, code)) : send(400, { error: "invalid_grant", error_description: "Invalid code" });
     }
     const bearer = (req.headers.authorization || "").replace("Bearer ", "");
-    const user = users[bearer] ?? apiKeys[bearer];
+    const person = oauthAccess[bearer] ?? bearer;
+    const user = users[person] ?? apiKeys[person];
     if (!user) return send(401, { ok: false, error: "authentication_required", message: "Authentication required" });
     const input = body ? JSON.parse(body) : {};
     switch (req.url) {

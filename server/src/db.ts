@@ -929,6 +929,11 @@ ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS weekly boolean NOT NUL
 ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS weekly_parent_doc_id text;
 ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS weekly_parent_doc_title text;
 ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS weekly_parent_doc_url text;
+-- An Outline account connected with OAuth instead of an API key: api_key then holds its access token, refreshed
+-- with refresh_token when it expires.
+ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS oauth boolean NOT NULL DEFAULT false;
+ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS refresh_token text;
+ALTER TABLE pipe_outline_exports ADD COLUMN IF NOT EXISTS token_expires_at timestamptz;
 
 -- New versions the administrators were told of (once each).
 CREATE TABLE IF NOT EXISTS update_notices (version text PRIMARY KEY, notified_at timestamptz NOT NULL DEFAULT now());

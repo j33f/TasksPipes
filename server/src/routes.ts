@@ -725,6 +725,8 @@ export async function apiRoutes(app: FastifyInstance) {
     admin: await requestIsAdmin(req),
     features: {
       invitations: config.allowEmailInvitations, notifications: notificationState.enabled, outline: config.outlineEnabled,
+      // A pipe's publishing to Outline can connect an Outline account with OAuth (the configured server only).
+      outlineConnect: config.outlineEnabled && config.oauthEnabled && req.outlineUrl === config.outlineUrl,
       // AI agents over MCP (mcp.ts): agent tokens can be made.
       mcp: config.mcpEnabled,
     },

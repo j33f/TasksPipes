@@ -5,7 +5,7 @@ import { checkOutlineSessions, cleanupSessions, disableUnusedInvitations } from 
 import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
 import { cleanupReportRuns, runScheduledReports } from "./reports.js";
-import { runScheduledOutlineExports } from "./outline-reports.js";
+import { refreshIdleOutlineConnections, runScheduledOutlineExports } from "./outline-reports.js";
 import { cleanupNotifications, runNotifications, runPush } from "./notifications.js";
 import { cleanupInbox } from "./inbox.js";
 import { cleanupOAuth } from "./oauth.js";
@@ -32,6 +32,12 @@ setInterval(() => {
   cleanupOAuth().catch((err) => app.log.warn({ err }, "OAuth cleanup failed"));
   cleanupWebhookDeliveries().catch((err) => app.log.warn({ err }, "Webhook delivery cleanup failed"));
   cleanupReportRuns().catch((err) => app.log.warn({ err }, "Report run cleanup failed"));
+  // Outline accounts connected for a pipe's publishing (OAuth): kept alive when unused for a while.
+  refreshIdleOutlineConnections()
+    .then((failed) => {
+      for (const f of failed) app.log.warn({ pipeId: f.pipeId, error: f.message }, "Outline connection of a pipe not renewed");
+    })
+    .catch((err) => app.log.warn({ err }, "Renewing Outline connections failed"));
   // Outline accounts whose access was revoked or suspended in Outline lose their sessions.
   checkOutlineSessions()
     .then((n) => n && app.log.info({ closed: n }, "Sessions closed: Outline access ended"))
