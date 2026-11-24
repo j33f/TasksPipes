@@ -4,7 +4,7 @@ import { SETTINGS_REFRESH_MS } from "./settings.js";
 import { checkOutlineSessions, cleanupSessions, disableUnusedInvitations } from "./auth.js";
 import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
-import { runScheduledReports } from "./reports.js";
+import { cleanupReportRuns, runScheduledReports } from "./reports.js";
 import { runScheduledOutlineExports } from "./outline-reports.js";
 import { cleanupNotifications, runNotifications, runPush } from "./notifications.js";
 import { cleanupInbox } from "./inbox.js";
@@ -31,6 +31,7 @@ setInterval(() => {
   cleanupInbox().catch((err) => app.log.warn({ err }, "In-app notification cleanup failed"));
   cleanupOAuth().catch((err) => app.log.warn({ err }, "OAuth cleanup failed"));
   cleanupWebhookDeliveries().catch((err) => app.log.warn({ err }, "Webhook delivery cleanup failed"));
+  cleanupReportRuns().catch((err) => app.log.warn({ err }, "Report run cleanup failed"));
   // Outline accounts whose access was revoked or suspended in Outline lose their sessions.
   checkOutlineSessions()
     .then((n) => n && app.log.info({ closed: n }, "Sessions closed: Outline access ended"))

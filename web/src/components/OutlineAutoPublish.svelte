@@ -33,7 +33,7 @@
   const moved = $derived(Boolean(settings && !settings.mine && (
     (parent && parent.id !== settings.parentDocId)
     || (timeReport && weekly && weeklyParent && weeklyParent.id !== settings.weeklyParentDocId))));
-  const keyNeeded = $derived(!settings || moved);
+  const keyNeeded = $derived(!settings || moved || settings.ownerGone);
 
   $effect(() => {
     api.get<OutlineExport | null>(`/pipes/${pipe.id}/outline-export`)
@@ -140,7 +140,9 @@
         {t("Published under")} {#if settings.parentDocUrl}<a href={settings.parentDocUrl} target="_blank" rel="noopener noreferrer">{settings.parentDocTitle}</a>{:else}{settings.parentDocTitle}{/if}
         {#if settings.outlineUser}<span class="muted">{" · "}{t("as {name}", { name: settings.outlineUser })}</span>{/if}
       </p>
-      {#if settings.keyRefused}
+      {#if settings.ownerGone}
+        <div class="error-text">{t("The member who gave the key is no longer in this space: give a new key to start again.")}</div>
+      {:else if settings.keyRefused}
         <div class="error-text">{t("Outline refused the key: {error}. Give a new key to start again.", { error: settings.lastError ?? "" })}</div>
       {:else if settings.lastError}
         <div class="error-text small">{t("Last attempt failed: {error}", { error: settings.lastError })}</div>

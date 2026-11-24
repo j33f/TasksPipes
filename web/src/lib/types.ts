@@ -507,6 +507,8 @@ export interface OutlineExport {
   setBy: string | null;
   /** The key was given by the person reading: only they may point it at other documents. */
   mine: boolean;
+  /** The member who gave the key left the space: nothing is published until a new key is given. */
+  ownerGone: boolean;
   /** Outline refused the key: nothing is published until a new one is given. */
   keyRefused: boolean;
   lastError: string | null;

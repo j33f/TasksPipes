@@ -1259,6 +1259,7 @@
     "In Outline": "Dans Outline",
     "Parent document": "Document parent",
     "Leave empty to keep the current key": "Laisser vide pour garder la clé actuelle",
+    "The member who gave the key is no longer in this space: give a new key to start again.": "La personne qui a donné la clé ne fait plus partie de cet espace : donnez une nouvelle clé pour reprendre.",
     "The current key is someone else's: give your own to publish under other documents.": "La clé actuelle est celle de quelqu'un d'autre : donnez la vôtre pour publier sous d'autres documents.",
     "Create one in Outline › Settings › API. Reports are published as that account, even when nobody is signed in.": "Créez-en une dans Outline › Paramètres › API. Les rapports sont publiés au nom de ce compte, même quand personne n'est connecté.",
     "Publish the daily activity every day at {hour}:00 (days with activity)": "Publier l'activité du jour chaque jour à {hour} h (les jours avec activité)",
