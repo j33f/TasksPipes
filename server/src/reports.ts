@@ -364,6 +364,14 @@ const wrap = (lang: Locale, title: string, intro: string, body: string, pipe: Pi
 // ---------------------------------------------------------------------------
 // Scheduled sending
 
+/** How long a sending is remembered: past periods are never claimed again. */
+const KEEP_RUNS_DAYS = 90;
+
+/** Forgets the sendings of periods long gone (e-mails, digests, reports published to Outline). */
+export async function cleanupReportRuns() {
+  await query(`DELETE FROM report_runs WHERE period_end < now() - make_interval(days => $1)`, [KEEP_RUNS_DAYS]);
+}
+
 /** Records a sending; false if it was already done (by this or another run). */
 export async function claim(kind: string, end: Date) {
   return Boolean(await one(`INSERT INTO report_runs (kind, period_end) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING kind`, [kind, end]));

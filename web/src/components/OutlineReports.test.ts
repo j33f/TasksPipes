@@ -14,7 +14,7 @@ const me = (kind: "outline" | "email"): Me => ({
 });
 const settings: OutlineExport = {
   parentDocId: "d1", parentDocTitle: "Daily reports", parentDocUrl: "https://outline.test/doc/daily-abc", outlineUser: "Bot",
-  daily: true, weekly: false, weeklyParentDocId: null, weeklyParentDocTitle: null, weeklyParentDocUrl: null, sprints: false, setBy: "Gina", mine: true, keyRefused: false, lastError: null, lastErrorAt: null, lastExportAt: null, lastExportUrl: null,
+  daily: true, weekly: false, weeklyParentDocId: null, weeklyParentDocTitle: null, weeklyParentDocUrl: null, sprints: false, setBy: "Gina", mine: true, ownerGone: false, keyRefused: false, lastError: null, lastErrorAt: null, lastExportAt: null, lastExportUrl: null,
 };
 
 let calls: { method: string; url: string; body: unknown }[];
@@ -116,6 +116,18 @@ describe("publishing a pipe's reports automatically", () => {
     await userEvent.type(screen.getByPlaceholderText("ol_api_…"), "ol_api_mine");
     expect(save.hasAttribute("disabled")).toBe(false);
     app.pipeTypes = [];
+  });
+
+  it("says when the member who gave the key left the space, and asks for a new key", async () => {
+    app.me = me("outline");
+    exportSettings = { ...settings, setBy: "Hugo", mine: false, ownerGone: true };
+    render(OutlineAutoPublish, { pipe: { id: "p", kind: "dev" }, hour: 18 });
+    expect(await screen.findByText("The member who gave the key is no longer in this space: give a new key to start again.")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Change the key or the document" }));
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save.hasAttribute("disabled")).toBe(true);
+    await userEvent.type(screen.getByPlaceholderText("ol_api_…"), "ol_api_mine");
+    expect(save.hasAttribute("disabled")).toBe(false);
   });
 
   it("shows a refused key, and stops", async () => {

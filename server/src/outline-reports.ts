@@ -204,6 +204,8 @@ export interface ExportSettings {
   setBy: string | null;
   /** The key was given by the person who reads the settings: only they may point it at other documents. */
   mine: boolean;
+  /** The member who gave the key left the space (or their account was closed): nothing is published until a new key. */
+  ownerGone: boolean;
   keyRefused: boolean;
   lastError: string | null;
   lastErrorAt: string | null;
@@ -224,6 +226,7 @@ const present = (r: Row, viewerId: string): ExportSettings => ({
   sprints: r.sprints,
   setBy: r.created_by_name ?? null,
   mine: r.created_by === viewerId,
+  ownerGone: !r.owner_active,
   keyRefused: r.key_refused,
   lastError: r.last_error,
   lastErrorAt: iso(r.last_error_at),
@@ -303,13 +306,24 @@ async function saveSettings(pipeId: string, values: Record<string, unknown>) {
   );
 }
 
+/**
+ * The key publishes while the member who gave it is still in the pipe's space, with an active account (`e` the
+ * settings, `p` the pipe): it is their Outline account, not the space's.
+ */
+const OWNER_ACTIVE = `EXISTS (SELECT 1 FROM space_members sm JOIN users ou ON ou.id = sm.user_id
+  WHERE sm.space_id = p.space_id AND sm.user_id = e.created_by AND ou.disabled_at IS NULL)`;
+
 const settingsOf = (pipeId: string) =>
-  one(`SELECT e.*, u.name AS created_by_name FROM pipe_outline_exports e LEFT JOIN users u ON u.id = e.created_by WHERE e.pipe_id = $1`, [pipeId]);
+  one(
+    `SELECT e.*, u.name AS created_by_name, ${OWNER_ACTIVE} AS owner_active
+     FROM pipe_outline_exports e JOIN pipes p ON p.id = e.pipe_id LEFT JOIN users u ON u.id = e.created_by WHERE e.pipe_id = $1`,
+    [pipeId]
+  );
 
 /** Publishes a sprint just closed, when its pipe asks for it. */
 export async function exportSprintToOutline(pipe: Row, sprint: Row): Promise<PublishedDoc | null> {
   const row = await settingsOf(pipe.id);
-  if (!row?.sprints || row.key_refused || !config.outlineEnabled) return null;
+  if (!row?.sprints || row.key_refused || !row.owner_active || !config.outlineEnabled) return null;
   return publishForPipe(row, pipe, sprintDocument(pipe, sprint, row.locale ?? config.defaultLocale));
 }
 
@@ -346,7 +360,7 @@ async function publishDue(run: ScheduledRun, kind: "daily" | "weekly", now: Date
   // published: such a failure delays the next attempt too.
   const { rows } = await query(
     `SELECT e.*, p.name, p.kind FROM pipe_outline_exports e JOIN pipes p ON p.id = e.pipe_id
-     WHERE ${kind === "daily" ? "e.daily" : "e.weekly"} AND NOT e.key_refused AND p.archived_at IS NULL
+     WHERE ${kind === "daily" ? "e.daily" : "e.weekly"} AND NOT e.key_refused AND p.archived_at IS NULL AND ${OWNER_ACTIVE}
        AND (e.last_error_at IS NULL OR e.last_error_at <= $2)
        AND NOT EXISTS (SELECT 1 FROM report_runs r WHERE r.kind = $1::text || e.pipe_id::text AND r.period_end = $3)`,
     [prefix, new Date(now.getTime() - RETRY_AFTER_MS), end]
