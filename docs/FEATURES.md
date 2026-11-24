@@ -272,7 +272,8 @@ on or off per pipe in its settings — the members of the team estimate tasks to
   pipes in sprints, each sprint's report when it closes. It needs a parent document and an **Outline API key** (Outline › Settings ›
   API), stored encrypted and never shown again; reports are published as that key's account, in the language of the
   member who set it up. Other members can turn the reports on or off, but publishing under other documents takes
-  their own key. When Outline cannot be reached or fails on its side, the pipe is tried again every 10 minutes until
+  their own key. The key stops publishing when the member who gave it leaves the space or their account is closed;
+  the settings say so, and another member's key starts it again. When Outline cannot be reached or fails on its side, the pipe is tried again every 10 minutes until
   midnight, without publishing the same report twice. If Outline refuses the key, publishing stops, the settings say
   why, and the member who gave the key is told by e-mail once; a new key starts it again.
 

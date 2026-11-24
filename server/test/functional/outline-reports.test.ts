@@ -3,6 +3,7 @@ import { signIn, startApp, stopApp, type Agent } from "./helpers.js";
 import { config } from "../../src/config.js";
 import { pool } from "../../src/db.js";
 import { runScheduledOutlineExports } from "../../src/outline-reports.js";
+import { cleanupReportRuns } from "../../src/reports.js";
 import { addDays, dailyPeriod, lastWeekday, localDay } from "../../src/time.js";
 
 let alice: Agent, bob: Agent, carol: Agent, team: string, pipe: string, board: string;
@@ -258,5 +259,34 @@ describe("When Outline fails for a passing reason", () => {
     expect(await runScheduledOutlineExports(at(30))).toMatchObject({ published: 0, failed: [] });
     const claims = await pool.query(`SELECT 1 FROM report_runs WHERE kind = $1 AND period_end = $2`, [`outline-daily:${retried}`, end]);
     expect(claims.rowCount).toBe(1);
+  });
+});
+
+describe("A key whose giver left the space", () => {
+  it("publishes nothing more, and says so, until a member gives a new key", async () => {
+    const left = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Left behind", kind: "dev" })).body.id;
+    const t = (await alice.post("/api/tasks", { title: "Work", pipeId: left })).body.id;
+    await alice.patch(`/api/tasks/${t}`, { stage: "en_cours" });
+    expect((await bob.put(`/api/pipes/${left}/outline-export`, { apiKey: "bob-token", parentDocumentId: "doc-1", daily: true })).body.ownerGone).toBe(false);
+    const bobId = (await bob.get("/api/me")).body.user.id;
+    expect((await alice.del(`/api/spaces/${team}/members/${bobId}`)).status).toBe(200);
+    expect((await alice.get(`/api/pipes/${left}/outline-export`)).body).toMatchObject({ ownerGone: true, setBy: "Bob Durand", mine: false });
+    const end = dailyPeriod(addDays(day, 20), 18, "UTC").end;
+    await pool.query(`UPDATE task_events SET created_at = $2 WHERE task_id IN (SELECT id FROM tasks WHERE pipe_id = $1)`, [left, new Date(end.getTime() - 3600_000)]);
+    expect(await runScheduledOutlineExports(new Date(end.getTime() + 60_000))).toMatchObject({ published: 0, failed: [] });
+    // Alice gives her own key: it starts again.
+    expect((await alice.put(`/api/pipes/${left}/outline-export`, { apiKey: "alice-token" })).body).toMatchObject({ ownerGone: false, mine: true });
+    expect((await runScheduledOutlineExports(new Date(end.getTime() + 120_000))).published).toBe(1);
+  });
+});
+
+describe("Sendings of past periods", () => {
+  it("are forgotten after 90 days", async () => {
+    await pool.query(
+      `INSERT INTO report_runs (kind, period_end) VALUES ('test-old', now() - interval '91 days'), ('test-recent', now() - interval '89 days')`
+    );
+    await cleanupReportRuns();
+    const { rows } = await pool.query(`SELECT kind FROM report_runs WHERE kind LIKE 'test-%'`);
+    expect(rows.map((r) => r.kind)).toEqual(["test-recent"]);
   });
 });
