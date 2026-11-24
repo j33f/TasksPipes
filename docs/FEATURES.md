@@ -203,7 +203,25 @@ designer — plan their tasks in sprints of a few weeks.
 - **Planning** (a view beside *Board* and *Agenda*): the backlog beside the sprints still open, with their points
   against the velocity. Tasks go from one to another by drag and drop or with their *Sprint* menu (on a phone too),
   and their points are set there. A task's page also offers its sprint.
-- Each change of sprint is kept in the task's history; a task moved to another pipe or sent leaves its sprint.
+- **Velocity**: set by hand, or learned from the last 6 closed sprints, as points done per week (sprints of other
+  lengths compare): the sprints marked exceptional are left out, and so are outliers (a modified z-score above 3.5:
+  0.6745 × distance to the median ÷ median absolute deviation); the velocity is the mean of the values left that
+  are not above their median — a cautious figure — times the length of a sprint. Until 3 sprints count, the velocity
+  typed in the settings is used. The planning shows it with where it comes from; *Progress of the work* shows how it
+  was learned, sprint by sprint.
+- **Burndown** of a sprint (*Burndown* on its banner): the points still to do at the end of each working day, against
+  the ideal line, and the points of all its tasks (*scope*, which rises when tasks are added during the sprint); a day
+  shows its figures on hover, and all the figures are in a table below. It is read from the tasks' history (their
+  sprint, points and status at each moment), so it is right even when opened later.
+- **Report** of a closed sprint (*Report* on its banner): points committed, done, carried over and added during the
+  sprint, its burndown as it ended, what was done per person and per task type, and the velocity it leads to. It is
+  frozen when the sprint closes. With *E-mail the report of each closed sprint* in the settings, the space's members
+  get it by e-mail (in their language), without the chart.
+- **Progress of the work** (in the planning): at the start, then at the end of each sprint, the points of the pipe
+  done and still to do; the points left, the tasks still without points, and the expected end: the sprint under way
+  finishes its own tasks, the rest takes whole sprints at the velocity.
+- Each change of sprint is kept in the task's history; a task moved to another pipe or sent leaves its sprint
+  (noted too).
 - The members of the pipe's space plan sprints and put tasks in them; whoever sees the pipe sees its sprints.
 
 ## Time and reports

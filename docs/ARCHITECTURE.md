@@ -42,6 +42,9 @@ Outline through its RPC-style API.
 | `worklog.ts` | Estimates and time logged by hand: checks, who may change what, the time of a weekly report. |
 | `labels.ts` | Labels of a space and priority of tasks: who manages them, checks of a task's labels, labels lost on leaving a space. |
 | `points.ts` | Complexity points of tasks: the planning poker scale, checks, rounding of imported values. |
+| `velocity.ts` | Velocity of a pipe in sprints: by hand, or learned (last 6 sprints per week, exceptional and outlying ones left out, low average). |
+| `burndown.ts` | A task's state at any moment, from its history; a sprint's burndown and a pipe's progress sprint after sprint. |
+| `sprint-report.ts` | E-mail of a closed sprint's report to the space's members. |
 | `sprints.ts` | Sprints of pipes in sprints: settings, dates, start (points committed), close (unfinished tasks moved, report frozen), and their routes. |
 | `dependencies.ts` | Dependencies between tasks: what a linked task shows to whom, loops, and releasing the tasks waiting for one just finished. |
 | `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |

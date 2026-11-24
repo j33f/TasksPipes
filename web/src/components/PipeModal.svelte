@@ -215,6 +215,8 @@
             <span class="muted">{t("pts")}</span>
           </label>
         </fieldset>
+        <label class="check"><input type="checkbox" bind:checked={sprint.sendReport} />
+          {t("E-mail the report of each closed sprint to the space's members")}</label>
       </details>
     {/if}
     {#if pipe}

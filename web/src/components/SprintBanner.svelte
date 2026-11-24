@@ -8,6 +8,7 @@
   import Icon from "./Icon.svelte";
   import SprintModal from "./SprintModal.svelte";
   import CloseSprintModal from "./CloseSprintModal.svelte";
+  import SprintReportModal from "./SprintReportModal.svelte";
 
   /** The sprint a board shows: where it stands, and what its members can do with it. */
   let { pipe, sprint }: { pipe: PipeDetail; sprint: Sprint } = $props();
@@ -15,7 +16,7 @@
   const settings = $derived(pipe.sprintSettings);
   const stats = $derived(sprintStats(pipe.tasks, sprint.id));
   const day = $derived(sprintDay(sprint, localDay(), settings?.workDays ?? [1, 2, 3, 4, 5]));
-  const cap = $derived(capacity(settings));
+  const cap = $derived(capacity(pipe));
   const next = $derived(openSprints(pipe.sprints ?? []).find((s) => s.status === "planned" && s.id !== sprint.id) ?? null);
   // Done points over all points: for a closed sprint, those kept when it closed.
   const total = $derived(sprint.status === "closed" ? (sprint.report?.committed ?? 0) : stats.points);
@@ -23,6 +24,7 @@
   const ratio = $derived(total ? Math.min(1, done / total) : 0);
   let editing = $state(false);
   let closing = $state(false);
+  let report = $state(false);
   let busy = $state(false);
 
   async function start() {
@@ -48,6 +50,10 @@
       <span class="muted">{t("Day {day} of {total}", { day: day.day, total: day.total })}</span>
     {/if}
     <span class="spacer"></span>
+    {#if sprint.status !== "planned"}
+      <button class="btn small neutral" onclick={() => (report = true)}>
+        <Icon name="chart" size={14} />{sprint.status === "closed" ? t("Report") : t("Burndown")}</button>
+    {/if}
     {#if pipe.canManage && !pipe.archived}
       {#if sprint.status === "planned"}
         <button class="btn small" disabled={busy || pipe.sprints?.some((s) => s.status === "active")} onclick={start}
@@ -69,7 +75,8 @@
     <span class="figures">{t("{done} / {total} pts", { done, total })}</span>
     {#if sprint.status !== "closed"}
       {#if cap !== null}
-        <span class="muted" class:over={stats.points > cap}>{t("velocity {n}", { n: cap })}</span>
+        <span class="muted" class:over={stats.points > cap}
+          title={pipe.velocity?.source === "learned" ? t("Learned from the last sprints") : undefined}>{t("velocity {n}", { n: cap })}</span>
       {/if}
       {#if stats.unestimated}<span class="muted">{tn(stats.unestimated, "{n} task without points", "{n} tasks without points")}</span>{/if}
     {:else if sprint.report}
@@ -79,6 +86,7 @@
 </section>
 
 {#if editing}<SprintModal pipeId={pipe.id} {sprint} onclose={() => (editing = false)} />{/if}
+{#if report}<SprintReportModal {sprint} onclose={() => (report = false)} />{/if}
 {#if closing}<CloseSprintModal {sprint} tasks={pipe.tasks} {next} onclose={() => (closing = false)} />{/if}
 
 <style>

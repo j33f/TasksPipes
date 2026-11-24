@@ -9,12 +9,13 @@
   import Icon, { iconOf } from "./Icon.svelte";
   import SprintModal from "./SprintModal.svelte";
   import CloseSprintModal from "./CloseSprintModal.svelte";
+  import SprintProgressModal from "./SprintProgressModal.svelte";
 
   /** Planning of a pipe in sprints: its backlog beside the sprints still open; tasks go from one to another. */
   let { pipe }: { pipe: PipeDetail } = $props();
 
   const sprints = $derived(openSprints(pipe.sprints ?? []));
-  const cap = $derived(capacity(pipe.sprintSettings));
+  const cap = $derived(capacity(pipe));
   const open = (x: Task) => x.status !== "done" && x.status !== "abandoned";
   // The backlog: unfinished tasks in no sprint (a task of a closed sprint stays there).
   const backlog = $derived(pipe.tasks.filter((x) => !x.sprintId && open(x)));
@@ -23,6 +24,7 @@
 
   let editing = $state<Sprint | "new" | null>(null);
   let closing = $state<Sprint | null>(null);
+  let progress = $state(false);
   let dragged = $state<string | null>(null);
   let over = $state<string | null>(null);
 
@@ -94,6 +96,14 @@
   </li>
 {/snippet}
 
+<div class="plan-head">
+  <span><Icon name="target" size={16} />{t("Velocity")}
+    <strong>{cap === null ? "–" : t("{n} pts", { n: cap })}</strong>
+    <span class="muted">{pipe.velocity?.source === "learned" ? t("learned from the last sprints") : pipe.velocity?.source === "manual" ? t("set by hand") : t("the initial one, until three sprints count")}</span>
+  </span>
+  <button class="btn small neutral" onclick={() => (progress = true)}><Icon name="chart" size={14} />{t("Progress of the work")}</button>
+</div>
+
 <div class="planning">
   <section class="plan-col" class:over={over === "backlog"} aria-label={t("Backlog")} {...dropZone("backlog")} ondrop={(e) => ondrop(e, null)}>
     <header>
@@ -151,11 +161,14 @@
 </div>
 
 {#if editing}<SprintModal pipeId={pipe.id} sprint={editing === "new" ? null : editing} onclose={() => (editing = null)} />{/if}
+{#if progress}<SprintProgressModal pipeId={pipe.id} weeks={pipe.sprintSettings?.weeks ?? 2} onclose={() => (progress = false)} />{/if}
 {#if closing}
   <CloseSprintModal sprint={closing} tasks={pipe.tasks} next={sprints.find((x) => x.status === "planned") ?? null} onclose={() => (closing = null)} />
 {/if}
 
 <style>
+  .plan-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: 14px; }
+  .plan-head > span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .planning { display: flex; gap: 12px; align-items: flex-start; overflow-x: auto; padding-bottom: 12px; }
   .plan-col {
     flex: 0 0 340px; max-width: 86vw; background: var(--background-secondary); border-radius: 10px; padding: 10px;
