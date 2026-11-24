@@ -134,6 +134,8 @@ export interface Task {
   blockers: number;
   /** 1 urgent, 2 high, 3 medium, 4 low; null for none. */
   priority: Priority | null;
+  /** Complexity points, on the planning poker scale (POINTS); null for none. */
+  points: number | null;
   /** Labels of its space. */
   labels: Label[];
   /** Estimate and time logged by hand, in minutes. */
@@ -196,6 +198,7 @@ export interface TaskEvent {
     /** Moved forward while it still waited for other tasks. */
     whileBlocked?: boolean;
     priority?: { from: Priority | null; to: Priority | null };
+    points?: { from: number | null; to: number | null };
     labels?: { added: string[]; removed: string[] };
     estimate?: { from: number | null; to: number | null };
     /** A team admin deleted someone else's time entry (event "time"). */

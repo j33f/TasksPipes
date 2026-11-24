@@ -437,8 +437,8 @@ export const TASK_TYPES: TaskType[] = [
     id: "user_story", label: "User story", icon: "user", description: "Un besoin exprimé du point de vue de l'utilisateur.",
     fields: [
       f("role", "En tant que…", "text"), f("besoin", "Je veux…", "textarea"), f("benefice", "Afin de…", "textarea"),
-      // Its priority is that of every task (tasks.priority).
-      f("criteres", "Critères d'acceptation", "textarea"), f("points", "Points", "number"),
+      // Its priority and points are those of every task (tasks.priority, tasks.points).
+      f("criteres", "Critères d'acceptation", "textarea"),
     ],
   },
   {
@@ -452,7 +452,7 @@ export const TASK_TYPES: TaskType[] = [
   },
   {
     id: "tache_technique", label: "Tâche technique", icon: "settings", description: "Refactoring, mise à jour, infrastructure…",
-    fields: [f("composant", "Composant", "text"), f("points", "Points", "number"), f("notes", "Notes techniques", "textarea")],
+    fields: [f("composant", "Composant", "text"), f("notes", "Notes techniques", "textarea")],
   },
   {
     id: "experimentation", label: "Expérimentation", icon: "search", description: "Une hypothèse à vérifier par une expérience, un prototype ou une preuve de concept.",

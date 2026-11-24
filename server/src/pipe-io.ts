@@ -4,6 +4,7 @@
  * line first; it is written only when every line is valid, in one transaction (see the routes).
  */
 import { HttpError } from "./errors.js";
+import { roundPoints } from "./points.js";
 import { cleanFieldValue } from "./fields.js";
 import { LOCALES, localize, tr, type Locale } from "./i18n.js";
 import { parseCsv, toCsv, type Separator } from "./csv.js";
@@ -32,6 +33,7 @@ export interface ImportTask {
   dueDate: string | null;
   taskType: string;
   fields: Record<string, unknown>;
+  points: number | null;
   items: { text: string; done: boolean }[];
   /** Comments to add to the history (Trello), already prefixed with their author and date. */
   comments: string[];
@@ -72,6 +74,7 @@ export interface ExportedTask {
   updated_at: Date | string;
   items: { text: string; done: boolean }[];
   priority?: number | null;
+  points?: number | null;
   labels?: string[];
   estimate_minutes?: number | null;
   logged_minutes?: number | string;
@@ -121,6 +124,7 @@ const headers = (lang: Locale) => ({
   taskType: tr(lang, "Task type"),
   items: tr(lang, "Sub-tasks"),
   priority: tr(lang, "Priority"),
+  points: tr(lang, "Points"),
   labels: tr(lang, "Labels"),
   estimate: tr(lang, "Estimate (hours)"),
   logged: tr(lang, "Logged time (hours)"),
@@ -138,7 +142,7 @@ export function exportCsv(kind: string, tasks: ExportedTask[], lang: Locale, nam
   const label = (s: string) => localize(lang, s);
   const rows: unknown[][] = [[
     h.key, h.title, h.description, h.column, h.owner, h.dueDate, h.taskType, h.items,
-    ...fields.map((f) => label(f.label)), h.priority, h.labels, h.estimate, h.logged, h.author, h.created, h.updated,
+    ...fields.map((f) => label(f.label)), h.priority, h.points, h.labels, h.estimate, h.logged, h.author, h.created, h.updated,
   ]];
   for (const t of tasks) {
     const type = taskTypeById(t.task_type);
@@ -146,7 +150,7 @@ export function exportCsv(kind: string, tasks: ExportedTask[], lang: Locale, nam
       key(t.number), t.title, t.description, label(resolveStage(kind, t.stage, t.status).label), t.owner_name ?? "", t.due_date ?? "",
       type ? label(type.label) : t.task_type, itemsText(t.items),
       ...fields.map((f) => (type?.fields.some((x) => x.id === f.id) ? fieldText(f, t.fields[f.id], names) : "")),
-      priorityText(lang, t.priority), (t.labels ?? []).join("; "), hours(t.estimate_minutes), hours(t.logged_minutes), t.author_name, iso(t.created_at), iso(t.updated_at),
+      priorityText(lang, t.priority), t.points ?? "", (t.labels ?? []).join("; "), hours(t.estimate_minutes), hours(t.logged_minutes), t.author_name, iso(t.created_at), iso(t.updated_at),
     ]);
   }
   return toCsv(rows, sep);
@@ -169,6 +173,7 @@ export function exportJson(pipe: { name: string; kind: string }, tasks: Exported
         dueDate: t.due_date,
         taskType: { id: t.task_type, label: type ? label(type.label) : t.task_type },
         priority: t.priority ?? null,
+        points: t.points ?? null,
         labels: t.labels ?? [],
         estimateMinutes: t.estimate_minutes ?? null,
         loggedMinutes: Number(t.logged_minutes ?? 0),
@@ -190,7 +195,7 @@ export function exportJson(pipe: { name: string; kind: string }, tasks: Exported
 
 /** What a column of the file can hold. */
 export type Target =
-  | "ignore" | "title" | "description" | "column" | "owner" | "dueDate" | "taskType" | "items" | "comments" | `field:${string}`;
+  | "ignore" | "title" | "description" | "column" | "owner" | "dueDate" | "taskType" | "items" | "comments" | "points" | `field:${string}`;
 
 /** The targets offered for a pipe, with their labels in `lang`. */
 export function targetsFor(kind: string, lang: Locale): { id: Target; label: string }[] {
@@ -205,6 +210,7 @@ export function targetsFor(kind: string, lang: Locale): { id: Target; label: str
     { id: "dueDate", label: h.dueDate },
     { id: "taskType", label: h.taskType },
     { id: "items", label: h.items },
+    { id: "points", label: h.points },
     ...fields.map((f) => ({ id: `field:${f.id}` as Target, label: localize(lang, f.label) })),
   ];
 }
@@ -220,6 +226,7 @@ export function suggestTarget(header: string, kind: string): Target {
     ["dueDate", ["due date", "due", "echeance", "date d'echeance", "deadline"]],
     ["taskType", ["task type", "type de tache", "type"]],
     ["items", ["sub-tasks", "sous-taches", "subtasks", "checklist", "checklists"]],
+    ["points", ["points", "story points", "story point estimate", "story point", "complexity", "complexite", "points de complexite"]],
   ];
   for (const [target, words] of synonyms) if (words.includes(h)) return target;
   for (const f of exportFields(kind)) {
@@ -359,6 +366,10 @@ export function planImport(kind: string, lang: Locale, input: ImportInput, peopl
       const dueDate = parseDate(cell("dueDate"));
       if (dueDate === undefined) return fail("Invalid due date: {date}", { date: cell("dueDate").trim() });
 
+      const rawPoints = cell("points").trim();
+      const points = rawPoints ? roundPoints(Number(rawPoints.replace(",", "."))) : null;
+      if (points === undefined) return fail("Invalid points: {value}", { value: rawPoints });
+
       const fields: Record<string, unknown> = {};
       mapping.forEach((t, idx) => {
         if (!t.startsWith("field:") || !(cells[idx] ?? "").trim()) return;
@@ -370,7 +381,7 @@ export function planImport(kind: string, lang: Locale, input: ImportInput, peopl
 
       tasks.push({
         line, title, description: cell("description").slice(0, 100_000), stage: column.id, status: column.status, assigneeId,
-        dueDate, taskType: type.id, fields, items: parseItems(cell("items")),
+        dueDate, taskType: type.id, fields, points, items: parseItems(cell("items")),
         comments: cell("comments") ? cell("comments").split("\u0000").filter(Boolean) : [],
       });
     } catch (err) {

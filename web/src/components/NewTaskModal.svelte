@@ -4,7 +4,7 @@
   import { app } from "../lib/app.svelte";
   import type { DocRef, Label, Pipe, UserRef } from "../lib/types";
   import TaskBadges from "./TaskBadges.svelte";
-  import { PRIORITIES } from "../lib/labels";
+  import { POINTS, PRIORITIES, pointsText } from "../lib/labels";
   import Modal from "./Modal.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import SpaceSelect from "./SpaceSelect.svelte";
@@ -48,6 +48,7 @@
   let assigneeId = $state<string | null>(null);
   let dueDate = $state(untrack(() => initialDueDate ?? ""));
   let priority = $state("");
+  let points = $state("");
   let labelIds = $state<string[]>([]);
   // Labels are put by those who edit the space's tasks: in a pipe, or in one's own incoming.
   let spaceLabels = $state<Label[]>([]);
@@ -97,6 +98,7 @@
         assigneeId: isTeam ? assigneeId : null,
         dueDate: dueDate || null,
         priority: priority ? Number(priority) : null,
+        points: points === "" ? null : Number(points),
         ...(labelIds.length ? { labelIds } : {}),
         taskType: taskTypeId,
         items: items.map(({ text, done }) => ({ text, done })),
@@ -194,6 +196,13 @@
         <select id="nt-priority" class="input" bind:value={priority}>
           <option value="">{t("No priority")}</option>
           {#each PRIORITIES as p (p.value)}<option value={String(p.value)}>{t(p.label)}</option>{/each}
+        </select>
+      </div>
+      <div class="field">
+        <label for="nt-points">{t("Points")}</label>
+        <select id="nt-points" class="input" bind:value={points}>
+          <option value="">{t("No points")}</option>
+          {#each POINTS as n (n)}<option value={String(n)}>{pointsText(n)}</option>{/each}
         </select>
       </div>
       {#if spaceLabels.length}

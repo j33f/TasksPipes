@@ -1,6 +1,6 @@
-/** Labels and priority of tasks: names, colors, and the filters of pipes, "My tasks" and the search. */
+/** Labels, priority and points of tasks: names, colors, and the filters of pipes, "My tasks" and the search. */
 import type { Label, Priority, Task } from "./types";
-import { t } from "./i18n.svelte";
+import { t, tn } from "./i18n.svelte";
 
 /** From 1 (urgent) to 4 (low); names shown with t(). */
 export const PRIORITIES: { value: Priority; label: string; color: string }[] = [
@@ -12,6 +12,12 @@ export const PRIORITIES: { value: Priority; label: string; color: string }[] = [
 
 export const priorityOf = (p: Priority | null | undefined) => PRIORITIES.find((x) => x.value === p);
 export const priorityName = (p: Priority | null | undefined) => (p ? t(priorityOf(p)!.label) : t("No priority"));
+
+/** Complexity points: the planning poker scale (the server takes no other value). */
+export const POINTS = [0, 1, 2, 3, 5, 8, 13, 21, 40, 100] as const;
+export const pointsText = (n: number | null | undefined) => (n === null || n === undefined ? t("No points") : tn(n, "{n} point", "{n} points"));
+/** Points of tasks added up (those without points count for nothing). */
+export const sumPoints = (tasks: { points: number | null }[]) => tasks.reduce((s, x) => s + (x.points ?? 0), 0);
 
 /** Colors offered for a new label. */
 export const LABEL_COLORS = ["#ed2651", "#f08a24", "#f5c518", "#2a9d63", "#2bc2ff", "#0366d6", "#8e44ad", "#8b95a7"];
@@ -30,10 +36,12 @@ export interface TaskFilters {
   /** An owner's id, or "none" for unassigned. */
   owner?: string;
   type?: string;
+  /** A value of the scale, or "none" for tasks without points; undefined for any. */
+  points?: number | "none";
 }
 
 /** Whether a task passes the filters (labels are compared by name, case ignored). */
-export function matches(task: Pick<Task, "labels" | "priority" | "assignee" | "taskType">, f: TaskFilters): boolean {
+export function matches(task: Pick<Task, "labels" | "priority" | "assignee" | "taskType"> & { points?: number | null }, f: TaskFilters): boolean {
   if (f.labels?.length) {
     const wanted = new Set(f.labels.map((n) => n.toLowerCase()));
     if (!task.labels.some((l) => wanted.has(l.name.toLowerCase()))) return false;
@@ -41,6 +49,7 @@ export function matches(task: Pick<Task, "labels" | "priority" | "assignee" | "t
   if (f.priority !== undefined && (task.priority ?? 0) !== f.priority) return false;
   if (f.owner && (f.owner === "none" ? task.assignee !== null : task.assignee?.id !== f.owner)) return false;
   if (f.type && task.taskType !== f.type) return false;
+  if (f.points !== undefined && (task.points ?? "none") !== f.points) return false;
   return true;
 }
 

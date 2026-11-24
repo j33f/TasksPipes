@@ -103,6 +103,7 @@ const taskBody = {
   taskType: { type: "string" },
   fields: { type: "object", additionalProperties: true, description: "Values by field id of the task type" },
   priority: { type: "integer", minimum: 1, maximum: 4, nullable: true, description: "1 urgent, 2 high, 3 medium, 4 low; null for none" },
+  points: { type: "integer", enum: [0, 1, 2, 3, 5, 8, 13, 21, 40, 100], nullable: true, description: "Complexity points; null for none" },
   labelIds: { type: "array", items: uuid, description: "Labels of the task's space (all of them: the others are taken off)" },
   estimateMinutes: { type: "integer", minimum: 1, maximum: 60000, nullable: true, description: "Estimate, in minutes; null for none" },
 } as const;

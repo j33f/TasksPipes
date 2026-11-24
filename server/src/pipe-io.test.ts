@@ -56,6 +56,14 @@ describe("import of a CSV file", () => {
     expect(plan.tasks[0]).toMatchObject({ stage: "ongoing", status: "ongoing" });
   });
 
+  it("reads points, rounded up to the scale", () => {
+    expect(["Story Points", "Complexité", "Points"].map((h) => suggestTarget(h, "dev"))).toEqual(["points", "points", "points"]);
+    const rows = [["Title", "Story points"], ["A", "4"], ["B", ""], ["C", "2,5"], ["D", "lots"]];
+    const plan = planImport("dev", "en", { rows }, people, null);
+    expect(plan.tasks.map((t) => t.points)).toEqual([5, null, 3]);
+    expect(plan.errors).toEqual([{ line: 5, message: "Invalid points: lots" }]);
+  });
+
   it("needs a title column, and owners only in personal spaces' holder", () => {
     expect(planImport("general", "en", { rows: [["Notes"], ["x"]] }, people, null).errors[0]).toEqual({ line: 1, message: "No column holds the title" });
     const plan = planImport("general", "fr", { rows: [["Titre", "Propriétaire"], ["A", "Bob Durand"]] }, people, "u-alice");
