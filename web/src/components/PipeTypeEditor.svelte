@@ -39,6 +39,7 @@
       confidential: Boolean(src?.confidential),
       teamOnly: Boolean(src?.teamOnly),
       timeReport: Boolean(src?.timeReport),
+      sprints: Boolean(src?.sprints),
       templates: (src?.templates ?? []).join("\n"),
     };
   }
@@ -209,6 +210,8 @@
         {t("Reserved to a team: only in a team space, tasks cannot leave it")}</label>
       <label class="check"><input type="checkbox" bind:checked={draft.timeReport} />
         {t("Weekly time report: pipes of this type can send the time spent per task type every Friday")}</label>
+      <label class="check"><input type="checkbox" bind:checked={draft.sprints} />
+        {t("Work in sprints: sprints, planning, complexity points and velocity")}</label>
     </div>
 
     <div class="field">

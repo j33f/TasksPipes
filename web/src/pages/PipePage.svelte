@@ -23,6 +23,10 @@
   import { confirmWhileBlocked } from "../lib/dependencies";
   import { PRIORITIES, distinctLabels, matches, pointsText, sumPoints, type TaskFilters } from "../lib/labels";
   import { boardLanes, loadLabel, overLimit } from "../lib/lanes";
+  import { activeSprint } from "../lib/sprints";
+  import SprintBanner from "../components/SprintBanner.svelte";
+  import SprintPlanning from "../components/SprintPlanning.svelte";
+  import SprintModal from "../components/SprintModal.svelte";
 
   let { id }: { id: string } = $props();
 
@@ -80,24 +84,36 @@
     try { localStorage.setItem("tp:pipeLanes", v); } catch { /* storage unavailable */ }
   }
 
-  // Board (kanban) or agenda (calendar) view of the pipe; remembered in the browser.
-  const readView = (): "board" | "calendar" => {
-    try { return localStorage.getItem("tp:pipeView") === "calendar" ? "calendar" : "board"; } catch { return "board"; }
+  // Board (kanban), sprint planning or agenda (calendar) view of the pipe; remembered in the browser.
+  type PipeView = "board" | "calendar" | "planning";
+  const readView = (): PipeView => {
+    try {
+      const v = localStorage.getItem("tp:pipeView");
+      return v === "calendar" || v === "planning" ? v : "board";
+    } catch { return "board"; }
   };
-  let pipeView = $state<"board" | "calendar">(readView());
+  let chosenView = $state<PipeView>(readView());
+  // Pipes in sprints: their sprints, and the one the board shows (the one under way by default).
+  const inSprints = $derived(Boolean(app.pipeType(pipe?.kind)?.sprints && pipe?.sprints));
+  const pipeView = $derived<PipeView>(chosenView === "planning" && !inSprints ? "board" : chosenView);
+  let sprintChoice = $state<string | null>(null);
+  const shownSprintId = $derived(inSprints ? (sprintChoice ?? activeSprint(pipe?.sprints)?.id ?? "all") : "all");
+  const shownSprint = $derived(pipe?.sprints?.find((s) => s.id === shownSprintId) ?? null);
+  let newSprint = $state(false);
   // A task reached from a notification is shown on the board, whatever the filters (not remembered).
   $effect(() => {
     const id = app.highlight;
     if (!id || !pipe?.tasks.some((x) => x.id === id)) return;
     untrack(() => {
-      pipeView = "board";
+      chosenView = "board";
+      sprintChoice = "all";
       filter = "";
       mineOnly = false;
       labelFilter = priorityFilter = ownerFilter = typeFilter = pointsFilter = "";
     });
   });
-  function setPipeView(v: "board" | "calendar") {
-    pipeView = v;
+  function setPipeView(v: PipeView) {
+    chosenView = v;
     try { localStorage.setItem("tp:pipeView", v); } catch { /* storage unavailable */ }
   }
 
@@ -111,6 +127,7 @@
       (x) =>
         (!filter.trim() || x.title.toLowerCase().includes(filter.trim().toLowerCase())) &&
         (!mineOnly || x.assignee?.id === app.me?.user.id) &&
+        (shownSprintId === "all" || (shownSprintId === "backlog" ? !x.sprintId : x.sprintId === shownSprintId)) &&
         matches(x, filters)
     )
   );
@@ -264,8 +281,19 @@
       <div class="row wrap">
         <div class="seg" role="group" aria-label={t("View")}>
           <button class:active={pipeView === "board"} onclick={() => setPipeView("board")}>{t("Board")}</button>
+          {#if inSprints}<button class:active={pipeView === "planning"} onclick={() => setPipeView("planning")}>{t("Planning")}</button>{/if}
           <button class:active={pipeView === "calendar"} onclick={() => setPipeView("calendar")}>{t("Agenda")}</button>
         </div>
+        {#if pipeView === "board" && inSprints}
+          <select class="input sprint-select" value={shownSprintId} aria-label={t("Sprint")}
+            onchange={(e) => (sprintChoice = (e.currentTarget as HTMLSelectElement).value)}>
+            <option value="all">{t("All the sprints")}</option>
+            <option value="backlog">{t("Backlog (no sprint)")}</option>
+            {#each pipe.sprints ?? [] as s (s.id)}
+              <option value={s.id}>{s.name}{s.status === "active" ? ` · ${t("under way")}` : s.status === "closed" ? ` · ${t("closed")}` : ""}</option>
+            {/each}
+          </select>
+        {/if}
         {#if pipeView === "board"}
         <input class="input filter" placeholder={t("Filter…")} bind:value={filter} />
         <!-- On a phone the filters fold into one button (they took four lines before the board). -->
@@ -336,7 +364,18 @@
       </div>
     </div>
 
-    {#if pipeView === "board"}
+    {#if pipeView === "board" && shownSprint}
+      <SprintBanner {pipe} sprint={shownSprint} />
+    {:else if pipeView === "board" && inSprints && !pipe.sprints?.length && pipe.canManage && !pipe.archived}
+      <div class="callout row sprint-start">
+        <Icon name="target" />
+        <span class="grow">{t("This pipe works in sprints: plan the first one, then put tasks of the backlog in it.")}</span>
+        <button class="btn small" onclick={() => (newSprint = true)}><Icon name="plus" size={16} />{t("New sprint")}</button>
+      </div>
+    {/if}
+    {#if pipeView === "planning" && inSprints}
+      <SprintPlanning {pipe} />
+    {:else if pipeView === "board"}
     <div class="board" style="--columns:{boardColumns.length}">
       <div class="board-row">
         {#each boardColumns as s (s.id)}
@@ -396,12 +435,17 @@
   {#if webhooks}<WebhooksModal pipeId={pipe.id} onclose={() => (webhooks = false)} />{/if}
   {#if newTaskStage !== null}
     <NewTaskModal pipe={{ id: pipe.id, name: pipe.name, spaceId: pipe.space.id, kind: pipe.kind }} stage={newTaskStage || null}
+      sprintId={shownSprint && shownSprint.status !== "closed" && pipeView === "board" ? shownSprint.id : null}
       onclose={() => (newTaskStage = null)} />
   {/if}
+  {#if newSprint}<SprintModal pipeId={pipe.id} onclose={() => (newSprint = false)} />{/if}
 {/if}
 
 <style>
   .page-header { margin-bottom: 16px; }
+  .sprint-select { width: auto; max-width: 220px; }
+  .sprint-start { margin-bottom: 12px; align-items: center; }
+  .sprint-start .btn { flex-shrink: 0; }
   .archived { margin-top: 10px; align-items: center; }
   /* Keep the button at its natural size on narrow widths; let the message column shrink instead. */
   .archived .btn { flex-shrink: 0; }

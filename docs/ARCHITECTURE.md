@@ -42,6 +42,7 @@ Outline through its RPC-style API.
 | `worklog.ts` | Estimates and time logged by hand: checks, who may change what, the time of a weekly report. |
 | `labels.ts` | Labels of a space and priority of tasks: who manages them, checks of a task's labels, labels lost on leaving a space. |
 | `points.ts` | Complexity points of tasks: the planning poker scale, checks, rounding of imported values. |
+| `sprints.ts` | Sprints of pipes in sprints: settings, dates, start (points committed), close (unfinished tasks moved, report frozen), and their routes. |
 | `dependencies.ts` | Dependencies between tasks: what a linked task shows to whom, loops, and releasing the tasks waiting for one just finished. |
 | `search.ts` | Global search: full text in PostgreSQL, the view rule of `taskPermissions` applied in the query. |
 | `notifications.ts` | E-mail notifications: queued with the history, sent at once, in a daily digest or as morning due-date reminders; unsubscribe links. |

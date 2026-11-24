@@ -86,8 +86,9 @@ quality & Qualiopi, admin & finance, and processes (recruitment / admission, ses
 session end) that can fill their first column with starter tasks.
 
 The *Software* group covers product teams: UX research, UI design, product documentation, translation / i18n,
-R&D (hypotheses, experiments and prototypes), software development (with an *In review* column) and testing / QA.
-R&D and software development pipes get the weekly time report.
+R&D (hypotheses, experiments and prototypes), software development (with an *In review* column), **Sprint**
+(software development in [sprints](#sprints)) and testing / QA. R&D, software development and Sprint pipes get the
+weekly time report.
 
 The *Personal life* group covers everyday life: chores in a flat share, as a couple or as a family (who does it,
 room, frequency, points for the kids), moving house, shared custody (swaps agreed with the other parent), home
@@ -181,6 +182,29 @@ those types keep working. This is a personal choice: others still see every type
   sub-tasks (unchecked) — in the first column, due on its date, and is recorded like any creation (notifications,
   webhooks). The task shows the rule in words and the next dates; stopping the repetition keeps the tasks made. A
   series stops by itself when its pipe is archived.
+
+## Sprints
+
+Pipes whose type works in sprints — the built-in *Sprint* type, or a model with *Work in sprints* checked in the
+designer — plan their tasks in sprints of a few weeks.
+
+- **Settings** (*Edit the pipe › Sprints*): the length of a sprint (1 to 4 weeks), the day it starts, the days
+  worked, and the velocity: learned from the last sprints, or set by hand (points per sprint, also used until
+  enough sprints are closed).
+- **A sprint** has a name (*Sprint 1*, *Sprint 2*… by default), a goal and dates: a new one follows the last one,
+  or starts on the next start day. It is *planned*, then *under way* — one at a time per pipe: starting it commits
+  the points of its tasks — then *closed*. Closing it keeps the points done and a short report (committed, done,
+  carried over, dropped); its unfinished tasks go to the next sprint (made if there is none) or back to the backlog.
+  Only a planned sprint can be deleted (its tasks go back to the backlog). A closed sprint can be marked
+  *exceptional* (holidays, an incident…), to leave it out of the learned velocity.
+- **The board** shows the sprint under way by default, under a banner: its dates, goal, day of work, points done
+  out of planned, against the velocity, and the tasks still without points. A selector shows another sprint, all of
+  them, or the backlog (tasks in no sprint). A task added while a sprint is shown goes in it.
+- **Planning** (a view beside *Board* and *Agenda*): the backlog beside the sprints still open, with their points
+  against the velocity. Tasks go from one to another by drag and drop or with their *Sprint* menu (on a phone too),
+  and their points are set there. A task's page also offers its sprint.
+- Each change of sprint is kept in the task's history; a task moved to another pipe or sent leaves its sprint.
+- The members of the pipe's space plan sprints and put tasks in them; whoever sees the pipe sees its sprints.
 
 ## Time and reports
 
@@ -514,6 +538,7 @@ sending nothing but the server's version in its User-Agent, and, when there is a
 | Manage a pipe's webhooks | members of its space (not on confidential pipes) |
 | Add or remove a pipe's linked documents | members of its space (Outline documents: Outline accounts) |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
+| Plan sprints (create, start, close, delete) and put tasks in them | members of the pipe's space |
 | Edit title, description and fields, priority, points and labels | members, or the author of a task in an open pipe |
 | Manage a space's labels | members of the space (whoever sees the space sees them) |
 | Set an estimate, log one's own time | as for fields: members, or the author of a task in an open pipe |

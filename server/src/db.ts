@@ -811,6 +811,44 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Sprints of the pipes whose type works in sprints (sprints.ts): planned, then active (one at a time), then closed.
+-- The points committed when it starts and done when it closes are kept, with a report frozen at its close.
+CREATE TABLE IF NOT EXISTS sprints (
+  id uuid PRIMARY KEY DEFAULT gen_uuidv7(),
+  pipe_id uuid NOT NULL REFERENCES pipes(id) ON DELETE CASCADE,
+  number integer NOT NULL,
+  name text NOT NULL,
+  goal text NOT NULL DEFAULT '',
+  starts_on date NOT NULL,
+  ends_on date NOT NULL CHECK (ends_on >= starts_on),
+  status text NOT NULL DEFAULT 'planned' CHECK (status IN ('planned', 'active', 'closed')),
+  committed_points integer,
+  completed_points integer,
+  -- Left out of the learned velocity (holidays, an incident…).
+  exceptional boolean NOT NULL DEFAULT false,
+  report jsonb,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  started_at timestamptz,
+  started_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  closed_at timestamptz,
+  closed_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE (pipe_id, number)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS sprints_one_active_idx ON sprints(pipe_id) WHERE status = 'active';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sprint_id uuid REFERENCES sprints(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS tasks_sprint_idx ON tasks(sprint_id) WHERE sprint_id IS NOT NULL;
+-- How a pipe works in sprints: length, days, velocity (null: the defaults of sprints.ts).
+ALTER TABLE pipes ADD COLUMN IF NOT EXISTS sprint_settings jsonb;
+-- A task leaving its pipe (moved, sent) leaves its sprint.
+CREATE OR REPLACE FUNCTION task_sprint_on_move() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.pipe_id IS DISTINCT FROM OLD.pipe_id THEN NEW.sprint_id := NULL; END IF;
+  RETURN NEW;
+END $$;
+CREATE OR REPLACE TRIGGER tasks_sprint_on_move BEFORE UPDATE OF pipe_id ON tasks
+  FOR EACH ROW EXECUTE FUNCTION task_sprint_on_move();
+
 -- Documents linked to a pipe: Outline documents, or pages elsewhere (office suites, design tools, code forges…).
 CREATE TABLE IF NOT EXISTS pipe_links (
   id uuid PRIMARY KEY DEFAULT gen_uuidv7(),

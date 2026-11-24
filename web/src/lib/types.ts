@@ -86,6 +86,52 @@ export interface Pipe {
   /** Reports sent by e-mail at the report hour: daily activity, weekly time (development pipes). */
   dailyReport: boolean;
   weeklyReport: boolean;
+  /** How it works in sprints, for a pipe whose type does; null otherwise. */
+  sprintSettings?: SprintSettings | null;
+}
+
+export interface SprintSettings {
+  /** Length of a sprint, in weeks (1 to 4). */
+  weeks: number;
+  /** ISO day a sprint starts: 1 Monday … 7 Sunday. */
+  startDay: number;
+  /** ISO days worked. */
+  workDays: number[];
+  velocityMode: "manual" | "learned";
+  /** Points per sprint expected while none is learned. */
+  initialVelocity: number | null;
+  sendReport: boolean;
+}
+
+export type SprintStatus = "planned" | "active" | "closed";
+
+export interface SprintReport {
+  committed: number;
+  completed: number;
+  done: number;
+  carried: number;
+  carriedPoints: number;
+  abandoned: number;
+  carriedTo: { id: string; name: string } | null;
+}
+
+export interface Sprint {
+  id: string;
+  number: number;
+  name: string;
+  goal: string;
+  startsOn: string;
+  endsOn: string;
+  status: SprintStatus;
+  /** Points of its tasks when it started. */
+  committedPoints: number | null;
+  /** Points of its tasks done when it closed. */
+  completedPoints: number | null;
+  /** Left out of the learned velocity. */
+  exceptional: boolean;
+  report: SprintReport | null;
+  startedAt: string | null;
+  closedAt: string | null;
 }
 
 export interface Member extends UserRef {
@@ -136,6 +182,8 @@ export interface Task {
   priority: Priority | null;
   /** Complexity points, on the planning poker scale (POINTS); null for none. */
   points: number | null;
+  /** Sprint it is planned in (pipes in sprints); null in the backlog. */
+  sprintId?: string | null;
   /** Labels of its space. */
   labels: Label[];
   /** Estimate and time logged by hand, in minutes. */
@@ -199,6 +247,8 @@ export interface TaskEvent {
     whileBlocked?: boolean;
     priority?: { from: Priority | null; to: Priority | null };
     points?: { from: number | null; to: number | null };
+    /** Moved from a sprint to another; null is the backlog. */
+    sprint?: { from: { id: string; name: string } | null; to: { id: string; name: string } | null };
     labels?: { added: string[]; removed: string[] };
     estimate?: { from: number | null; to: number | null };
     /** A team admin deleted someone else's time entry (event "time"). */
@@ -277,6 +327,8 @@ export interface PipeDetail extends Pipe {
   canManage: boolean;
   canAddTasks: boolean;
   tasks: Task[];
+  /** Its sprints, latest first, for a pipe whose type works in sprints; null otherwise. */
+  sprints?: Sprint[] | null;
 }
 
 export interface SidebarPipe extends Pipe {
@@ -355,6 +407,8 @@ export interface PipeType extends CustomMeta {
   teamOnly?: boolean;
   /** Development pipes: a weekly time report can be sent. */
   timeReport?: boolean;
+  /** Work in sprints: sprints, planning, velocity. */
+  sprints?: boolean;
   templates: string[];
 }
 

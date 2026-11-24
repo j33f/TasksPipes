@@ -68,6 +68,8 @@ export interface PipeType extends CustomMeta {
   teamOnly?: boolean;
   /** Development pipes: a weekly report of the time spent per task type can be sent. */
   timeReport?: boolean;
+  /** Work in sprints (sprints.ts): tasks are planned in sprints of a few weeks, with points and velocity. */
+  sprints?: boolean;
   templates: string[];
 }
 
@@ -935,6 +937,21 @@ export const PIPE_TYPES: PipeType[] = [
       col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
     ],
     taskTypes: ["user_story", "bug", "tache_technique", "release"], templates: [], timeReport: true,
+  },
+  {
+    id: "sprint", label: "Sprint", group: "Logiciel",
+    description: "Développement logiciel en sprints : points de complexité, vélocité, burndown et rapport de sprint.",
+    color: "#7c3aed", icon: "bolt",
+    columns: [
+      col("backlog", "Backlog", "backlog", "#66778F"),
+      col("a_faire", "À faire", "ready", "#2BC2FF"),
+      col("en_cours", "En cours", "started", "#9E5CF7"),
+      col("revue", "En revue", "ongoing", "#0366d6"),
+      col("bloque", "Bloqué", "blocked", "#ed2651"),
+      col("termine", "Terminé", "done", "#3ad984"),
+      col("abandonne", "Abandonné", "abandoned", "#a2b2c3"),
+    ],
+    taskTypes: ["user_story", "bug", "tache_technique", "release"], templates: [], timeReport: true, sprints: true,
   },
   {
     id: "rnd", label: "R&D", group: "Logiciel",
