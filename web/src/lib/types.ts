@@ -105,6 +105,15 @@ export interface SprintSettings {
 
 export type SprintStatus = "planned" | "active" | "closed";
 
+export interface DoneBy {
+  /** Owner's name ("" for none) or task type id. */
+  key: string;
+  points: number;
+  tasks: number;
+  done: number;
+  donePoints: number;
+}
+
 export interface SprintReport {
   committed: number;
   completed: number;
@@ -113,6 +122,42 @@ export interface SprintReport {
   carriedPoints: number;
   abandoned: number;
   carriedTo: { id: string; name: string } | null;
+  /** Points of all its tasks when it started and ended (reports made since the burndown came). */
+  scopeStart?: number;
+  scopeEnd?: number;
+  burndown?: BurndownPoint[];
+  byOwner?: DoneBy[];
+  byType?: DoneBy[];
+  /** The velocity it led to. */
+  velocity?: { value: number | null; source: Velocity["source"] };
+}
+
+/** A point of a sprint's burndown: the start (day null), then the end of each working day. */
+export interface BurndownPoint {
+  day: string | null;
+  ideal: number;
+  /** Null for days to come. */
+  remaining: number | null;
+  scope: number | null;
+}
+
+export interface Velocity {
+  /** Points per sprint to plan with. */
+  value: number | null;
+  source: "manual" | "learned" | "initial";
+  /** The learned figure per week, also when not used yet. */
+  perWeek: number | null;
+  samples: { id: string; name: string; perWeek: number; excluded: "exceptional" | "outlier" | null }[];
+}
+
+/** The pipe's work sprint after sprint, and the end it points to. */
+export interface SprintProgress {
+  velocity: Velocity;
+  /** The start (sprintId null), then the end of each sprint: points done and to do in the pipe. */
+  rows: { sprintId: string | null; name: string | null; endsOn: string; done: number; remaining: number }[];
+  remaining: number;
+  unestimated: number;
+  projection: { sprintsLeft: number; endsOn: string } | null;
 }
 
 export interface Sprint {
@@ -329,6 +374,8 @@ export interface PipeDetail extends Pipe {
   tasks: Task[];
   /** Its sprints, latest first, for a pipe whose type works in sprints; null otherwise. */
   sprints?: Sprint[] | null;
+  /** The points a sprint can take, and how they were found (pipes in sprints). */
+  velocity?: Velocity | null;
 }
 
 export interface SidebarPipe extends Pipe {

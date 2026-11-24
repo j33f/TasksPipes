@@ -101,6 +101,15 @@ describe("a sprint", () => {
     expect((await alice.patch(`/api/tasks/${b}`, { sprintId: s1 })).body.error).toBe("A closed sprint takes no more tasks");
     expect((await alice.patch(`/api/sprints/${s1}`, { startsOn: "2026-01-01" })).body.error).toBe("The dates of a closed sprint cannot change");
     expect((await alice.patch(`/api/sprints/${s1}`, { exceptional: true })).body.exceptional).toBe(true);
+    // Its report, frozen: scope, burndown, what was done per owner and type, and the velocity it leads to.
+    expect(closed.report).toMatchObject({
+      scopeStart: expect.any(Number), scopeEnd: expect.any(Number),
+      byType: expect.arrayContaining([expect.objectContaining({ key: "task", done: 1, donePoints: 5 })]),
+      velocity: { value: 20, source: "initial" },
+    });
+    expect(closed.report.burndown[0]).toMatchObject({ day: null, remaining: expect.any(Number) });
+    expect((await carol.get(`/api/sprints/${s1}/burndown`)).body).toEqual(closed.report.burndown);
+    expect((await alice.get(`/api/sprints/${s2}/burndown`)).status).toBe(200);
   });
 
   it("closed, sends its unfinished tasks to a new sprint, or to the backlog", async () => {
@@ -113,6 +122,17 @@ describe("a sprint", () => {
     expect((await get(alice, b)).sprintId).toBeNull();
   });
 
+  it("gives the pipe's velocity and the progress of its work", async () => {
+    // Three closed sprints, the first left out: still too few to learn from, the initial velocity is used.
+    expect((await pipe(alice, board)).velocity).toMatchObject({ value: 20, source: "initial" });
+    const progress = (await carol.get(`/api/pipes/${board}/sprint-progress`)).body;
+    expect(progress.velocity.samples.map((x: { excluded: string | null }) => x.excluded)).toEqual([null, null, "exceptional"]);
+    // Its start counts once it has come (these sprints start next Monday).
+    expect(progress.rows.filter((r: { name: string | null }) => r.name).map((r: { name: string }) => r.name)).toEqual(["Sprint 1", "Sprint 2", "Sprint 3"]);
+    expect(progress).toMatchObject({ remaining: 11, unestimated: 0, projection: { sprintsLeft: 1 } });
+    expect((await alice.get(`/api/pipes/${general}/sprint-progress`)).body.error).toBe("This pipe does not work in sprints");
+  });
+
   it("planned, is deleted with its tasks back to the backlog; a task leaving the pipe leaves its sprint", async () => {
     const s = (await alice.post(`/api/pipes/${board}/sprints`, {})).body.id;
     await alice.patch(`/api/tasks/${b}`, { sprintId: s });
@@ -122,5 +142,6 @@ describe("a sprint", () => {
     await alice.patch(`/api/tasks/${c}`, { sprintId: s5 });
     expect((await alice.post(`/api/tasks/${c}/move`, { pipeId: general })).status).toBe(200);
     expect((await get(alice, c)).sprintId).toBeNull();
+    expect((await get(alice, c)).events.at(-1)).toMatchObject({ type: "moved", details: { sprint: { from: { id: s5 }, to: null } } });
   });
 });

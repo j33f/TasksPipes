@@ -12,7 +12,10 @@ import { one, query, tx, type Queryable, type Row } from "./db.js";
 import { bad, forbidden, notFound } from "./errors.js";
 import { pipeTypeById } from "./pipeTypes.js";
 import { notifySpace } from "./realtime.js";
-import { addDays, isDay } from "./time.js";
+import { addDays, isDay, localDay, zonedInstant } from "./time.js";
+import { config } from "./config.js";
+import { WINDOW, velocity, type Velocity } from "./velocity.js";
+import { pipeBurndown, pipeTasks, sprintBurndown, sprintTasks, type TaskNow } from "./burndown.js";
 
 export type VelocityMode = "manual" | "learned";
 
@@ -130,6 +133,76 @@ export const presentSprint = (s: Row) => ({
   closedAt: s.closed_at ?? null,
 });
 
+/** The velocity of a pipe in sprints, from its last closed sprints and its settings. */
+export async function pipeVelocity(p: Row, db?: Queryable): Promise<Velocity> {
+  const { rows } = await query(
+    `SELECT id, name, starts_on, ends_on, completed_points, exceptional FROM sprints
+     WHERE pipe_id = $1 AND status = 'closed' ORDER BY ends_on DESC LIMIT ${WINDOW}`, [p.id], db
+  );
+  return velocity(
+    rows.map((r) => ({ id: r.id, name: r.name, startsOn: dayString(r.starts_on), endsOn: dayString(r.ends_on), completedPoints: r.completed_points, exceptional: r.exceptional })),
+    sprintSettings(p.sprint_settings)
+  );
+}
+
+/** A sprint's burndown as it stands now (as it ended, for a closed one), with the tasks it holds. */
+async function burndownOf(s: Row, p: Row, db?: Queryable, now = new Date()) {
+  const { tasks, history } = await sprintTasks(s.id, db);
+  const points = sprintBurndown(
+    { id: s.id, startsOn: dayString(s.starts_on), endsOn: dayString(s.ends_on) }, sprintSettings(p.sprint_settings).workDays, tasks, history, now
+  );
+  return { points, tasks: tasks.filter((t) => t.sprintId === s.id) };
+}
+
+/** Points and tasks done, per owner or per task type. */
+function doneBy(tasks: TaskNow[], key: (t: TaskNow) => string) {
+  const out = new Map<string, { key: string; points: number; tasks: number; done: number; donePoints: number }>();
+  for (const t of tasks) {
+    if (t.status === "abandoned") continue;
+    const k = key(t);
+    const row = out.get(k) ?? { key: k, points: 0, tasks: 0, done: 0, donePoints: 0 };
+    row.tasks++;
+    row.points += t.points ?? 0;
+    if (t.status === "done") {
+      row.done++;
+      row.donePoints += t.points ?? 0;
+    }
+    out.set(k, row);
+  }
+  return [...out.values()].sort((a, b) => b.donePoints - a.donePoints || b.points - a.points);
+}
+
+/** Where the pipe's work stands, sprint after sprint, and when it should be over at this velocity. */
+export async function pipeProgress(p: Row, db?: Queryable, now = new Date()) {
+  const settings = sprintSettings(p.sprint_settings);
+  const v = await pipeVelocity(p, db);
+  const { rows: sprints } = await query(
+    `SELECT id, name, starts_on, ends_on, status, closed_at FROM sprints WHERE pipe_id = $1 AND status <> 'planned' ORDER BY number`, [p.id], db
+  );
+  const { tasks, history } = await pipeTasks(p.id, db);
+  const first = sprints[0];
+  const marks = [
+    ...(first ? [{ id: "", name: "", endsOn: dayString(first.starts_on), endAt: zonedInstant(dayString(first.starts_on), 0, config.timezone) }] : []),
+    ...sprints.map((s) => ({ id: s.id, name: s.name, endsOn: dayString(s.ends_on), endAt: s.status === "closed" && s.closed_at ? new Date(s.closed_at) : now })),
+  ].filter((m) => m.endAt <= now);
+  const rows = pipeBurndown(p.id, marks, tasks, history);
+  const open = tasks.filter((t) => t.pipeId === p.id && t.status !== "done" && t.status !== "abandoned");
+  const remaining = open.reduce((n, t) => n + (t.points ?? 0), 0);
+  const active = sprints.find((s) => s.status === "active");
+  // The sprint under way finishes its own tasks; the rest takes whole sprints at the velocity.
+  const inActive = active ? open.filter((t) => t.sprintId === active.id).reduce((n, t) => n + (t.points ?? 0), 0) : 0;
+  const after = Math.max(0, remaining - inActive);
+  const sprintsLeft = v.value ? Math.ceil(after / v.value) : null;
+  const base = active ? dayString(active.ends_on) : localDay(now, config.timezone);
+  return {
+    velocity: v,
+    rows: rows.map((r) => ({ ...r, sprintId: r.sprintId || null, name: r.name || null })),
+    remaining,
+    unestimated: open.filter((t) => t.points === null).length,
+    projection: sprintsLeft === null ? null : { sprintsLeft, endsOn: addDays(base, sprintsLeft * settings.weeks * 7) },
+  };
+}
+
 /** The sprints of a pipe, latest first. */
 export async function pipeSprints(pipeId: string, db?: Queryable) {
   const { rows } = await query(`SELECT * FROM sprints WHERE pipe_id = $1 ORDER BY number DESC LIMIT ${MAX_LISTED}`, [pipeId], db);
@@ -158,6 +231,8 @@ export interface SprintDeps {
   recordSprintChange: (db: Queryable, taskId: string, actorId: string, details: object) => Promise<void>;
   /** Today in the instance's time zone, as YYYY-MM-DD. */
   today: () => string;
+  /** E-mails the report of a sprint just closed to the space's members (sprint-report.ts). */
+  sendReport: (p: Row, sprint: Row) => Promise<unknown>;
 }
 
 type Req = FastifyRequest<{ Params: Record<string, string>; Body: Record<string, unknown> | undefined }>;
@@ -208,6 +283,30 @@ export async function sprintRoutes(app: FastifyInstance, deps: SprintDeps) {
   app.get("/pipes/:id/sprints", async (req: Req) => {
     const { p } = await deps.loadPipeFor(req.params.id, me(req));
     return worksInSprints(p.kind) ? pipeSprints(p.id) : [];
+  });
+
+  /** A sprint, for whoever sees its pipe. */
+  async function viewSprint(id: string, uid: string) {
+    const s = UUID.test(id) ? await one(`SELECT * FROM sprints WHERE id = $1`, [id]) : null;
+    if (!s) throw notFound("Sprint not found");
+    const { p } = await deps.loadPipeFor(s.pipe_id, uid).catch((err) => {
+      throw err?.statusCode === 404 ? notFound("Sprint not found") : err;
+    });
+    return { s, p };
+  }
+
+  // Its burndown: as it stands, or as it was when it closed.
+  app.get("/sprints/:id/burndown", async (req: Req) => {
+    const { s, p } = await viewSprint(req.params.id, me(req));
+    if (s.status === "closed" && s.report?.burndown) return s.report.burndown;
+    return (await burndownOf(s, p)).points;
+  });
+
+  // The pipe's work sprint after sprint, its velocity and the end it points to.
+  app.get("/pipes/:id/sprint-progress", async (req: Req) => {
+    const { p } = await deps.loadPipeFor(req.params.id, me(req));
+    if (!worksInSprints(p.kind)) throw bad("This pipe does not work in sprints");
+    return pipeProgress(p);
   });
 
   // A new sprint, planned: after the last one by default.
@@ -272,6 +371,8 @@ export async function sprintRoutes(app: FastifyInstance, deps: SprintDeps) {
       const fresh = await one(`SELECT status FROM sprints WHERE id = $1 FOR UPDATE`, [s.id], client);
       if (fresh?.status !== "active") throw bad("Only the sprint under way can be closed");
       const { rows: tasks } = await client.query(`SELECT id, status, points FROM tasks WHERE sprint_id = $1 ORDER BY position`, [s.id]);
+      // As it ends, before its unfinished tasks leave it.
+      const burndown = await burndownOf(s, p, client);
       const unfinished = tasks.filter((t) => t.status !== "done" && t.status !== "abandoned");
       const done = tasks.filter((t) => t.status === "done");
       const sum = (list: Row[]) => list.reduce((n, t) => n + (t.points ?? 0), 0);
@@ -292,14 +393,26 @@ export async function sprintRoutes(app: FastifyInstance, deps: SprintDeps) {
         carriedPoints: sum(unfinished),
         abandoned: tasks.filter((t) => t.status === "abandoned").length,
         carriedTo: ref(target),
+        // Points of all its tasks when it started and when it ended: tasks added on the way show in the difference.
+        scopeStart: burndown.points[0]?.scope ?? 0,
+        scopeEnd: burndown.points.findLast((x) => x.scope !== null)?.scope ?? 0,
+        burndown: burndown.points,
+        byOwner: doneBy(burndown.tasks, (t) => t.assignee ?? ""),
+        byType: doneBy(burndown.tasks, (t) => t.taskType),
       };
+      await client.query(
+        `UPDATE sprints SET status = 'closed', completed_points = $2, report = $3, closed_at = now(), closed_by = $4 WHERE id = $1`,
+        [s.id, report.completed, JSON.stringify(report), uid]
+      );
+      // The velocity it leads to, for the next sprints.
+      const v = await pipeVelocity(p, client);
       return one(
-        `UPDATE sprints SET status = 'closed', completed_points = $2, report = $3, closed_at = now(), closed_by = $4
-         WHERE id = $1 RETURNING *`,
-        [s.id, report.completed, JSON.stringify(report), uid], client
+        `UPDATE sprints SET report = report || $2::jsonb WHERE id = $1 RETURNING *`,
+        [s.id, JSON.stringify({ velocity: { value: v.value, source: v.source } })], client
       );
     });
     notifySpace(p.space_id, { type: "task.updated" }, uid);
+    if (sprintSettings(p.sprint_settings).sendReport) deps.sendReport(p, row!).catch((err) => req.log.error({ err }, "Sprint report not sent"));
     return presentSprint(row!);
   });
 

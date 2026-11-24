@@ -38,7 +38,8 @@ import { updateRoutes } from "./updates.js";
 import { emailDomainAllowed } from "./settings.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
 import { cleanPoints } from "./points.js";
-import { cleanSprintId, cleanSprintSettings, pipeSprints, sprintChange, sprintRoutes, sprintSettings, worksInSprints } from "./sprints.js";
+import { cleanSprintId, cleanSprintSettings, pipeSprints, pipeVelocity, sprintChange, sprintRoutes, sprintSettings, worksInSprints } from "./sprints.js";
+import { sendSprintReport } from "./sprint-report.js";
 import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
 import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
 import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
@@ -393,6 +394,12 @@ async function recordEvent(
   }
 }
 
+/** A task that left its pipe left its sprint too (tasks_sprint_on_move): noted in its history, for the burndown. */
+async function leftSprint(db: Queryable, before: Row, after: Row) {
+  if (!before.sprint_id || after.sprint_id) return null;
+  return sprintChange(await one(`SELECT id, name FROM sprints WHERE id = $1`, [before.sprint_id], db), null);
+}
+
 /** Statuses of work under way or finished: reaching one while blocked is allowed, and noted in the history. */
 const FORWARD: Status[] = ["started", "ongoing", "done"];
 const movedWhileBlocked = async (db: Queryable, t: Row, to: Status) =>
@@ -677,6 +684,7 @@ export async function apiRoutes(app: FastifyInstance) {
       await recordEvent(db, taskId, actorId, "fields", s, s, null, details, false);
     },
     today: () => localDay(new Date(), config.timezone),
+    sendReport: (p, sprint) => sendSprintReport(p, sprint),
   });
 
   app.get("/me", async (req) => ({
@@ -1489,7 +1497,8 @@ export async function apiRoutes(app: FastifyInstance) {
       query(`${TASK_SELECT} WHERE t.pipe_id = $1 ORDER BY t.position, t.created_at`, [p.id]),
       query(`SELECT * FROM pipe_links WHERE pipe_id = $1 ORDER BY created_at`, [p.id]),
     ]);
-    const sprints = worksInSprints(p.kind) ? await pipeSprints(p.id) : null;
+    const inSprints = worksInSprints(p.kind);
+    const [sprints, velocity] = inSprints ? await Promise.all([pipeSprints(p.id), pipeVelocity(p)]) : [null, null];
     const counts: Record<string, number> = {};
     for (const t of tasks.rows) counts[t.status] = (counts[t.status] ?? 0) + 1;
     return {
@@ -1501,6 +1510,8 @@ export async function apiRoutes(app: FastifyInstance) {
       links: links.rows.map(presentLink),
       tasks: tasks.rows.map(presentTask),
       sprints,
+      // The points a sprint can take (velocity.ts), with how it was found.
+      velocity,
     };
   });
 
@@ -1850,7 +1861,10 @@ export async function apiRoutes(app: FastifyInstance) {
       const row = await getTaskRow(t.id, client);
       const before = snapshot(t);
       const after = snapshot(row!);
-      const details = retyped ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: retyped.label } } : null;
+      const left = await leftSprint(client, t, row!);
+      const details = retyped || left
+        ? { ...(retyped ? { taskType: { from: taskTypeById(t.task_type)?.label ?? t.task_type, to: retyped.label } } : {}), ...left }
+        : null;
       if (before.pipe_id !== after.pipe_id || before.stage !== after.stage || comment) {
         const type = !t.pipe_id ? "accepted" : before.pipe_id !== after.pipe_id ? "moved" : "status";
         const blocked = await movedWhileBlocked(client, t, after.status);
@@ -1887,7 +1901,9 @@ export async function apiRoutes(app: FastifyInstance) {
       // Labels belong to the space it left.
       const lost = await keepSpaceLabels(client, t.id, spaceId);
       const row = await getTaskRow(t.id, client);
-      await recordEvent(client, t.id, uid, "sent", snapshot(t), snapshot(row!), comment, lost.length ? { labels: { added: [], removed: lost } } : null);
+      const left = await leftSprint(client, t, row!);
+      const sent = { ...(lost.length ? { labels: { added: [], removed: lost } } : {}), ...left };
+      await recordEvent(client, t.id, uid, "sent", snapshot(t), snapshot(row!), comment, Object.keys(sent).length ? sent : null);
     });
     notifySpace(spaceId, { type: "task.sent", task: { id: t.id, number: t.number, title: t.title }, by: req.user!.name }, uid);
     // The incoming it left (if any) has one task less.
