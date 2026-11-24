@@ -40,6 +40,7 @@ import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabe
 import { cleanPoints } from "./points.js";
 import { cleanSprintId, cleanSprintSettings, pipeSprints, pipeVelocity, sprintChange, sprintRoutes, sprintSettings, worksInSprints } from "./sprints.js";
 import { sendSprintReport } from "./sprint-report.js";
+import { exportSprintToOutline, outlineReportRoutes } from "./outline-reports.js";
 import { pokerEnabled, pokerRoutes } from "./poker.js";
 import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
 import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
@@ -702,7 +703,9 @@ export async function apiRoutes(app: FastifyInstance) {
     },
     today: () => localDay(new Date(), config.timezone),
     sendReport: (p, sprint) => sendSprintReport(p, sprint),
+    exportReport: (p, sprint) => exportSprintToOutline(p, sprint),
   });
+  await app.register(outlineReportRoutes, { loadPipeFor, latestReportDay: () => latestReportDay(), reportDay });
   await app.register(pokerRoutes, {
     loadPipeFor,
     setPoints: async (db, taskId, actorId, points) => {

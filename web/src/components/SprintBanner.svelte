@@ -86,7 +86,7 @@
 </section>
 
 {#if editing}<SprintModal pipeId={pipe.id} {sprint} onclose={() => (editing = false)} />{/if}
-{#if report}<SprintReportModal {sprint} onclose={() => (report = false)} />{/if}
+{#if report}<SprintReportModal {sprint} pipeId={pipe.id} onclose={() => (report = false)} />{/if}
 {#if closing}<CloseSprintModal {sprint} tasks={pipe.tasks} {next} onclose={() => (closing = false)} />{/if}
 
 <style>
