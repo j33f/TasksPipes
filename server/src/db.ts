@@ -900,6 +900,29 @@ CREATE TABLE IF NOT EXISTS pipe_links (
 );
 CREATE INDEX IF NOT EXISTS pipe_links_pipe_idx ON pipe_links(pipe_id);
 
+-- Reports a pipe publishes to Outline by itself (outline-reports.ts): under a parent document, with an Outline API
+-- key (encrypted) given by a member; the daily activity, and/or each sprint as it closes. A key Outline refuses
+-- stops the publishing until a new one is given.
+CREATE TABLE IF NOT EXISTS pipe_outline_exports (
+  pipe_id uuid PRIMARY KEY REFERENCES pipes(id) ON DELETE CASCADE,
+  outline_url text NOT NULL,
+  api_key text NOT NULL,
+  parent_doc_id text NOT NULL,
+  parent_doc_title text NOT NULL,
+  parent_doc_url text,
+  outline_user text,
+  daily boolean NOT NULL DEFAULT false,
+  sprints boolean NOT NULL DEFAULT false,
+  locale text,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  key_refused boolean NOT NULL DEFAULT false,
+  last_error text,
+  last_error_at timestamptz,
+  last_export_at timestamptz,
+  last_export_url text
+);
+
 -- New versions the administrators were told of (once each).
 CREATE TABLE IF NOT EXISTS update_notices (version text PRIMARY KEY, notified_at timestamptz NOT NULL DEFAULT now());
 

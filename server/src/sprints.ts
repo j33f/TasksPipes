@@ -234,6 +234,8 @@ export interface SprintDeps {
   today: () => string;
   /** E-mails the report of a sprint just closed to the space's members (sprint-report.ts). */
   sendReport: (p: Row, sprint: Row) => Promise<unknown>;
+  /** Publishes it to Outline when the pipe asks for it (outline-reports.ts). */
+  exportReport: (p: Row, sprint: Row) => Promise<unknown>;
 }
 
 type Req = FastifyRequest<{ Params: Record<string, string>; Body: Record<string, unknown> | undefined }>;
@@ -418,6 +420,7 @@ export async function sprintRoutes(app: FastifyInstance, deps: SprintDeps) {
     });
     notifySpace(p.space_id, { type: "task.updated" }, uid);
     if (sprintSettings(p.sprint_settings).sendReport) deps.sendReport(p, row!).catch((err) => req.log.error({ err }, "Sprint report not sent"));
+    deps.exportReport(p, row!).catch((err) => req.log.error({ err }, "Sprint report not published to Outline"));
     return presentSprint(row!);
   });
 

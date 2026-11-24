@@ -5,6 +5,7 @@ import { checkOutlineSessions, cleanupSessions, disableUnusedInvitations } from 
 import { buildApp } from "./app.js";
 import { mailEnabled } from "./mail.js";
 import { runScheduledReports } from "./reports.js";
+import { runScheduledOutlineExports } from "./outline-reports.js";
 import { cleanupNotifications, runNotifications, runPush } from "./notifications.js";
 import { cleanupInbox } from "./inbox.js";
 import { cleanupOAuth } from "./oauth.js";
@@ -83,6 +84,13 @@ setInterval(() => {
     .catch((err) => app.log.error({ err }, "Push sending failed"))
     .finally(() => (pushing = false));
 }, 15_000).unref();
+
+// Daily reports published to Outline, for the pipes that ask for it (independent of e-mail).
+setInterval(() => {
+  runScheduledOutlineExports()
+    .then((n) => n && app.log.info({ published: n }, "Reports published to Outline"))
+    .catch((err) => app.log.error({ err }, "Report publishing to Outline failed"));
+}, 60_000).unref();
 
 // Reports and notifications by e-mail: checked every minute, each one sent once. E-mail can be set up while the
 // server runs (Administration › Settings): each pass checks it.

@@ -216,7 +216,8 @@ designer — plan their tasks in sprints of a few weeks.
 - **Report** of a closed sprint (*Report* on its banner): points committed, done, carried over and added during the
   sprint, its burndown as it ended, what was done per person and per task type, and the velocity it leads to. It is
   frozen when the sprint closes. With *E-mail the report of each closed sprint* in the settings, the space's members
-  get it by e-mail (in their language), without the chart.
+  get it by e-mail (in their language), without the chart. It can also be published to Outline (see
+  [In Outline](#time-and-reports)).
 - **Progress of the work** (in the planning): at the start, then at the end of each sprint, the points of the pipe
   done and still to do; the points left, the tasks still without points, and the expected end: the sprint under way
   finishes its own tasks, the rest takes whole sprints at the velocity.
@@ -262,6 +263,15 @@ on or off per pipe in its settings — the members of the team estimate tasks to
 - **By e-mail**: members of a pipe's space can have its daily report sent to them every day at the report hour, and
   for development pipes the weekly time report every Friday. Each member gets it in their language; a day without
   any activity sends nothing.
+- **In Outline**: the daily activity of a day and the report of a closed sprint can be **published to Outline** as a
+  document (headings, task lists linking back to TasksPipes, tables for the sprint), under a parent document — the
+  one the pipe publishes under, or any document picked. This is done with one's own Outline account (*Publish to
+  Outline* in the report). A pipe can also **publish by itself** (*Reports* › *In Outline*, for its space's
+  members): the daily activity every day at the report hour (days with activity only) and, for pipes in sprints,
+  each sprint's report when it closes. It needs a parent document and an **Outline API key** (Outline › Settings ›
+  API), stored encrypted and never shown again; reports are published as that key's account, in the language of the
+  member who set it up. If Outline refuses the key, publishing stops, the settings say why, and the member who gave
+  the key is told by e-mail once; a new key starts it again.
 
 The report hour (18:00 by default) and time zone are set by the instance (`REPORT_HOUR`, `TIMEZONE`).
 

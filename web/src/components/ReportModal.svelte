@@ -8,6 +8,8 @@
   import type { DailyReport, Pipe, ReportTask, WeeklyReport } from "../lib/types";
   import Modal from "./Modal.svelte";
   import Icon from "./Icon.svelte";
+  import OutlinePublish from "./OutlinePublish.svelte";
+  import OutlineAutoPublish from "./OutlineAutoPublish.svelte";
 
   /** Daily activity and weekly time reports of a pipe, and their sending by e-mail. */
   let { pipe, onclose }: { pipe: Pipe & { canManage: boolean }; onclose: () => void } = $props();
@@ -92,6 +94,7 @@
   {#if error}<div class="error-text">{error}</div>{/if}
 
   {#if tab === "daily" && daily}
+    <OutlinePublish pipeId={pipe.id} path={`/pipes/${pipe.id}/reports/daily/outline`} body={{ date: daily.day }} />
     {#if sections.every(([, list]) => !list.length)}
       <div class="empty">{t("Nothing happened in this pipe during this period.")}</div>
     {/if}
@@ -142,6 +145,7 @@
         <label class="check"><input type="checkbox" bind:checked={sendWeekly} onchange={() => setSending({ weeklyReport: sendWeekly })} />
           {t("Send the weekly time report every Friday at {hour}:00", { hour: daily?.hour ?? weekly?.hour ?? 18 })}</label>
       {/if}
+      <OutlineAutoPublish {pipe} hour={daily?.hour ?? weekly?.hour ?? 18} />
     </div>
   {/if}
 </Modal>
