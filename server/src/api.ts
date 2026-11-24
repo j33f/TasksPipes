@@ -124,6 +124,12 @@ export const V1_ROUTES: Record<string, Doc> = {
   "GET /spaces": { tag: "Spaces", summary: "Spaces one can reach: personal spaces and teams", response: list("Spaces") },
   "GET /spaces/:id": { tag: "Spaces", summary: "A space, its members, pipes and incoming", params: idParams, response: object("Space") },
   "GET /pipes/:id": { tag: "Pipes", summary: "A pipe and its tasks", params: idParams, response: object("Pipe with its tasks") },
+  "GET /pipes/:id/sprints": { tag: "Sprints", summary: "The sprints of a pipe in sprints, latest first", params: idParams, response: list("Sprints") },
+  "GET /pipes/:id/sprint-progress": {
+    tag: "Sprints", summary: "A pipe's velocity, points done and to do at the end of each sprint, and the expected end", params: idParams,
+    response: object("Velocity, progress and projection"),
+  },
+  "GET /sprints/:id/burndown": { tag: "Sprints", summary: "A sprint's burndown: remaining, ideal and scope per working day", params: idParams, response: list("Burndown points") },
   "GET /spaces/:id/labels": { tag: "Labels", summary: "The labels of a space", params: idParams, response: list("Labels") },
   "POST /spaces/:id/labels": {
     tag: "Labels", summary: "Create a label in a space one is a member of", params: idParams,

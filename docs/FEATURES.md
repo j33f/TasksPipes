@@ -293,7 +293,8 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   **read and write**. It acts with exactly your rights, through the same checks as the app, and can be revoked at
   any time; a disabled account's tokens stop working.
 - **API `/api/v1`** — the documented, versioned part of the API: your account, people, spaces, pipes and their tasks,
-  your tasks, the calendar, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, logged time, and sub-tasks. Send the token as
+  your tasks, the calendar, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, logged time, sub-tasks, and the
+  sprints of a pipe with its velocity, progress and their burndowns. Send the token as
   `Authorization: Bearer tp_…`. Its OpenAPI description is at `/api/v1/openapi.json`, browsable at **`/api/v1/docs`**
   (Swagger UI). Tokens are accepted on `/api/v1` only, and never manage tokens, account settings, data export,
   deletion or administration: those need a signed-in session.
@@ -304,8 +305,10 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   *via* it; tasks changed through an access token show it too. Connect it with an agent token, or let a connector
   that signs in (claude.ai, OAuth) ask for your consent. See [MCP.md](MCP.md).
 - **Webhooks** (*a pipe's page › Webhooks*, members of its space) — task events of the pipe are POSTed as JSON to an
-  https address: task created, moved (column or pipe), given an owner, commented, done. Each delivery carries the
-  task (key, title, column, owner, due date, link), who acted and the change, and is signed:
+  https address: task created, moved (column or pipe), given an owner, commented, done — and, in pipes in sprints, a
+  sprint started (its points committed) or closed (its report: points done, carried over, the velocity it leads to).
+  Each task delivery carries the task (key, title, column, owner, start and due dates, points, link), who acted and the
+  change; a sprint delivery carries the sprint and who acted. Each one is signed:
   `X-TasksPipes-Signature: sha256=<HMAC-SHA256 of "<X-TasksPipes-Timestamp>.<body>" with the webhook's secret>`.
   A failed delivery is retried after 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours, then given up; the last
   deliveries show in the dialog, with their answer. A *Test* button sends a `ping`. Addresses on internal networks

@@ -445,7 +445,7 @@
   {#if editing}<PipeModal spaceId={pipe.space.id} pipe={pipe} onclose={() => (editing = false)} />{/if}
   {#if reports}<ReportModal {pipe} onclose={() => (reports = false)} />{/if}
   {#if transfer}<TransferModal {pipe} onclose={() => (transfer = false)} />{/if}
-  {#if webhooks}<WebhooksModal pipeId={pipe.id} onclose={() => (webhooks = false)} />{/if}
+  {#if webhooks}<WebhooksModal pipeId={pipe.id} sprints={inSprints} onclose={() => (webhooks = false)} />{/if}
   {#if newTaskStage !== null}
     <NewTaskModal pipe={{ id: pipe.id, name: pipe.name, spaceId: pipe.space.id, kind: pipe.kind }} stage={newTaskStage || null}
       sprintId={shownSprint && shownSprint.status !== "closed" && pipeView === "board" ? shownSprint.id : null}
