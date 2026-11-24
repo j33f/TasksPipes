@@ -8,6 +8,10 @@ const users = {
   "carol-token": { id: "33333333-3333-4333-8333-333333333333", name: "Carol Petit", email: "carol@example.com", avatarUrl: null },
   "dave-token": { id: "44444444-4444-4444-8444-444444444444", name: "Dave Leroy", email: "dave@example.com", avatarUrl: null },
 };
+// API keys of people who never sign in nor show in the workspace: the tests revoke them (reports published to Outline).
+const apiKeys = {
+  "erin-token": { id: "55555555-5555-4555-8555-555555555555", name: "Erin Moreau", email: "erin@example.com", avatarUrl: null },
+};
 const docs = [
   { id: "doc-1", title: "Roadmap 2027", url: "/doc/roadmap-2027-abc123", updatedAt: new Date().toISOString(), collectionId: "col-1" },
   { id: "doc-2", title: "Guide d'onboarding", url: "/doc/guide-onboarding-def456", updatedAt: new Date().toISOString(), collectionId: "col-1" },
@@ -21,12 +25,18 @@ http.createServer((req, res) => {
       res.writeHead(status, { "Content-Type": "application/json" });
       res.end(JSON.stringify(json));
     };
+    // Tests: an API key revoked from now on (POST /test/revoke {"token": "erin-token"}).
+    if (req.url === "/test/revoke") {
+      delete apiKeys[JSON.parse(body || "{}").token];
+      return send(200, { ok: true });
+    }
     // OAuth: the code is the token of the person who signed in (code=alice-token).
     if (req.url === "/oauth/token") {
       const code = new URLSearchParams(body).get("code");
       return users[code] ? send(200, { access_token: code, token_type: "Bearer", expires_in: 3600 }) : send(400, { error: "invalid_grant", error_description: "Invalid code" });
     }
-    const user = users[(req.headers.authorization || "").replace("Bearer ", "")];
+    const bearer = (req.headers.authorization || "").replace("Bearer ", "");
+    const user = users[bearer] ?? apiKeys[bearer];
     if (!user) return send(401, { ok: false, error: "authentication_required", message: "Authentication required" });
     const input = body ? JSON.parse(body) : {};
     switch (req.url) {
@@ -41,7 +51,13 @@ http.createServer((req, res) => {
       }
       case "/api/collections.list": return send(200, { data: [{ id: "col-1", name: "Général" }] });
       case "/api/documents.create": {
-        const d = { id: `doc-${docs.length + 1}`, title: input.title, url: `/doc/new-${docs.length + 1}`, updatedAt: new Date().toISOString(), collectionId: input.collectionId };
+        const parent = input.parentDocumentId && docs.find((x) => x.id === input.parentDocumentId);
+        if (input.parentDocumentId && !parent) return send(404, { ok: false, message: "Parent document not found" });
+        const d = {
+          id: `doc-${docs.length + 1}`, title: input.title, url: `/doc/new-${docs.length + 1}`, updatedAt: new Date().toISOString(),
+          collectionId: input.collectionId ?? parent?.collectionId, parentDocumentId: input.parentDocumentId ?? null, text: input.text ?? "",
+          createdBy: user.name,
+        };
         docs.push(d);
         return send(200, { data: d });
       }

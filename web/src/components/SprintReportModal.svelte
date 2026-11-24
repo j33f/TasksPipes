@@ -6,9 +6,10 @@
   import type { BurndownPoint, DoneBy, Sprint } from "../lib/types";
   import Modal from "./Modal.svelte";
   import BurndownChart from "./BurndownChart.svelte";
+  import OutlinePublish from "./OutlinePublish.svelte";
 
   /** A sprint's burndown — live for the one under way — and, once closed, its report. */
-  let { sprint, onclose }: { sprint: Sprint; onclose: () => void } = $props();
+  let { sprint, pipeId, onclose }: { sprint: Sprint; pipeId: string; onclose: () => void } = $props();
 
   let points = $state<BurndownPoint[] | null>(null);
   let error = $state("");
@@ -45,10 +46,12 @@
   {#if r?.byOwner?.length}{@render table(t("Done per person"), r.byOwner, (k) => k || t("Unassigned"))}{/if}
   {#if r?.byType?.length}{@render table(t("Done per task type"), r.byType, typeLabel)}{/if}
   {#if r && r.carriedTo}<p class="muted small">{t("Unfinished tasks went to {name}.", { name: r.carriedTo.name })}</p>{/if}
+  {#if sprint.status === "closed"}<div class="export"><OutlinePublish {pipeId} path={`/sprints/${sprint.id}/report/outline`} /></div>{/if}
 </Modal>
 
 <style>
   .dates { margin: -4px 0 12px; }
+  .export { margin-top: 16px; }
   .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 0 0 16px; }
   .summary div { background: var(--background-secondary); border-radius: 8px; padding: 8px 10px; }
   .summary dt { font-size: 12px; color: var(--text-tertiary); }

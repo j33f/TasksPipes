@@ -45,6 +45,7 @@ Outline through its RPC-style API.
 | `velocity.ts` | Velocity of a pipe in sprints: by hand, or learned (last 6 sprints per week, exceptional and outlying ones left out, low average). |
 | `burndown.ts` | A task's state at any moment, from its history; a sprint's burndown and a pipe's progress sprint after sprint. |
 | `sprint-report.ts` | E-mail of a closed sprint's report to the space's members. |
+| `outline-reports.ts` | Daily, weekly and sprint reports published to Outline as Markdown documents: by hand with one's session, or by the pipe itself with an encrypted API key (`pipe_outline_exports`), at the report hour (weekly on Fridays, optionally under its own parent) and when a sprint closes. |
 | `poker.ts` | Planning Poker of team pipes: sessions, hidden votes until shown, stats, points set in the task's history; live "poker" events. |
 | `sprints.ts` | Sprints of pipes in sprints: settings, dates, start (points committed), close (unfinished tasks moved, report frozen), and their routes. |
 | `dependencies.ts` | Dependencies between tasks: what a linked task shows to whom, loops, and releasing the tasks waiting for one just finished. |

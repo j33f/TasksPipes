@@ -489,6 +489,30 @@ export interface OutlineDoc extends DocRef {
   updatedAt?: string;
 }
 
+/** Reports a pipe publishes to Outline by itself (its key is never sent back). */
+export interface OutlineExport {
+  parentDocId: string;
+  parentDocTitle: string;
+  parentDocUrl: string | null;
+  /** The Outline account the key belongs to. */
+  outlineUser: string | null;
+  daily: boolean;
+  /** The weekly time report, on Fridays (pipes with time reports), under its own parent when one is set. */
+  weekly: boolean;
+  weeklyParentDocId: string | null;
+  weeklyParentDocTitle: string | null;
+  weeklyParentDocUrl: string | null;
+  sprints: boolean;
+  /** Who gave the key. */
+  setBy: string | null;
+  /** Outline refused the key: nothing is published until a new one is given. */
+  keyRefused: boolean;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  lastExportAt: string | null;
+  lastExportUrl: string | null;
+}
+
 export interface Invitation {
   id: string;
   name: string;
