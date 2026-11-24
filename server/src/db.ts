@@ -846,6 +846,8 @@ BEGIN
   IF NEW.pipe_id IS DISTINCT FROM OLD.pipe_id THEN NEW.sprint_id := NULL; END IF;
   RETURN NEW;
 END $$;
+-- When work on a task is planned to start (the timeline of pipes in sprints); none when null.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date date;
 CREATE OR REPLACE TRIGGER tasks_sprint_on_move BEFORE UPDATE OF pipe_id ON tasks
   FOR EACH ROW EXECUTE FUNCTION task_sprint_on_move();
 

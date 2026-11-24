@@ -145,3 +145,29 @@ describe("a sprint", () => {
     expect((await get(alice, c)).events.at(-1)).toMatchObject({ type: "moved", details: { sprint: { from: { id: s5 }, to: null } } });
   });
 });
+
+describe("a task's start date", () => {
+  it("is set with its due date, kept in its history, and never after it", async () => {
+    const t = await newTask(alice, { title: "Timeline", pipeId: board, startDate: "2026-12-01", dueDate: "2026-12-04" });
+    expect(await get(alice, t)).toMatchObject({ startDate: "2026-12-01", dueDate: "2026-12-04" });
+    expect((await bob.patch(`/api/tasks/${t}`, { startDate: "2026-12-02" })).status).toBe(200);
+    expect((await get(alice, t)).events.at(-1)).toMatchObject({ details: { startDate: { from: "2026-12-01", to: "2026-12-02" } } });
+    expect((await alice.patch(`/api/tasks/${t}`, { startDate: "2026-12-05" })).body.error).toBe("A task cannot be due before it starts");
+    expect((await alice.patch(`/api/tasks/${t}`, { dueDate: "2026-11-30" })).body.error).toBe("A task cannot be due before it starts");
+    expect((await alice.post("/api/tasks", { title: "Bad", pipeId: board, startDate: "2026-1-1" })).body.error).toBe("Invalid start date");
+    // Moved and dated by those who move tasks forward.
+    expect((await carol.patch(`/api/tasks/${t}`, { startDate: null })).status).toBe(403);
+    expect((await alice.patch(`/api/tasks/${t}`, { startDate: null })).status).toBe(200);
+    expect((await get(alice, t)).startDate).toBeNull();
+  });
+
+  it("goes with the dependencies between the pipe's tasks, for the timeline", async () => {
+    const first = await newTask(alice, { title: "Design", pipeId: board });
+    const then = await newTask(alice, { title: "Build", pipeId: board });
+    const outside = await newTask(alice, { title: "Elsewhere", pipeId: general });
+    expect((await alice.post(`/api/tasks/${then}/dependencies`, { blockerId: first })).status).toBe(200);
+    expect((await alice.post(`/api/tasks/${then}/dependencies`, { blockerId: outside })).status).toBe(200);
+    expect((await carol.get(`/api/pipes/${board}/dependencies`)).body).toContainEqual({ taskId: then, waitsFor: first });
+    expect((await alice.get(`/api/pipes/${board}/dependencies`)).body).not.toContainEqual({ taskId: then, waitsFor: outside });
+  });
+});

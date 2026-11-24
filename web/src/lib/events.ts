@@ -106,6 +106,10 @@ export function eventChanges(e: TaskEvent): string[] {
   }
   if (e.details?.whileBlocked) out.push(t("While it still waited for other tasks"));
   if (e.details?.priority) out.push(t("Priority: {from} → {to}", { from: priorityName(e.details.priority.from), to: priorityName(e.details.priority.to) }));
+  if (e.details?.startDate) {
+    const d = (v: string | null) => (v ? formatDate(v) : t("none"));
+    out.push(t("Start date: {from} → {to}", { from: d(e.details.startDate.from), to: d(e.details.startDate.to) }));
+  }
   if (e.details?.sprint) {
     const name = (s: { name: string } | null) => s?.name ?? t("Backlog");
     out.push(t("Sprint: {from} → {to}", { from: name(e.details.sprint.from), to: name(e.details.sprint.to) }));

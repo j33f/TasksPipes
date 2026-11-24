@@ -81,6 +81,7 @@ follow Outline's design tokens (`web/src/app.css`).
 | `lib/api.ts` | API client (sends the page's language). |
 | `lib/i18n.svelte.ts`, `lib/locales/` | Translations, language and theme preferences. |
 | `lib/realtime.svelte.ts` | WebSocket connection, closed when the page is idle. |
+| `lib/sprints.ts`, `lib/timeline.ts` | Sprints (working days, points, order) and the timeline (a task's span from its dates or its sprint, range, moves). |
 
 ## Data model
 

@@ -27,6 +27,7 @@
   import SprintBanner from "../components/SprintBanner.svelte";
   import SprintPlanning from "../components/SprintPlanning.svelte";
   import SprintModal from "../components/SprintModal.svelte";
+  import Timeline from "../components/Timeline.svelte";
 
   let { id }: { id: string } = $props();
 
@@ -85,17 +86,17 @@
   }
 
   // Board (kanban), sprint planning or agenda (calendar) view of the pipe; remembered in the browser.
-  type PipeView = "board" | "calendar" | "planning";
+  type PipeView = "board" | "calendar" | "planning" | "timeline";
   const readView = (): PipeView => {
     try {
       const v = localStorage.getItem("tp:pipeView");
-      return v === "calendar" || v === "planning" ? v : "board";
+      return v === "calendar" || v === "planning" || v === "timeline" ? v : "board";
     } catch { return "board"; }
   };
   let chosenView = $state<PipeView>(readView());
   // Pipes in sprints: their sprints, and the one the board shows (the one under way by default).
   const inSprints = $derived(Boolean(app.pipeType(pipe?.kind)?.sprints && pipe?.sprints));
-  const pipeView = $derived<PipeView>(chosenView === "planning" && !inSprints ? "board" : chosenView);
+  const pipeView = $derived<PipeView>((chosenView === "planning" || chosenView === "timeline") && !inSprints ? "board" : chosenView);
   let sprintChoice = $state<string | null>(null);
   const shownSprintId = $derived(inSprints ? (sprintChoice ?? activeSprint(pipe?.sprints)?.id ?? "all") : "all");
   const shownSprint = $derived(pipe?.sprints?.find((s) => s.id === shownSprintId) ?? null);
@@ -282,9 +283,10 @@
         <div class="seg" role="group" aria-label={t("View")}>
           <button class:active={pipeView === "board"} onclick={() => setPipeView("board")}>{t("Board")}</button>
           {#if inSprints}<button class:active={pipeView === "planning"} onclick={() => setPipeView("planning")}>{t("Planning")}</button>{/if}
+          {#if inSprints}<button class:active={pipeView === "timeline"} onclick={() => setPipeView("timeline")}>{t("Timeline")}</button>{/if}
           <button class:active={pipeView === "calendar"} onclick={() => setPipeView("calendar")}>{t("Agenda")}</button>
         </div>
-        {#if pipeView === "board" && inSprints}
+        {#if (pipeView === "board" || pipeView === "timeline") && inSprints}
           <select class="input sprint-select" value={shownSprintId} aria-label={t("Sprint")}
             onchange={(e) => (sprintChoice = (e.currentTarget as HTMLSelectElement).value)}>
             <option value="all">{t("All the sprints")}</option>
@@ -375,6 +377,8 @@
     {/if}
     {#if pipeView === "planning" && inSprints}
       <SprintPlanning {pipe} />
+    {:else if pipeView === "timeline" && inSprints}
+      <Timeline {pipe} sprintId={shownSprintId} />
     {:else if pipeView === "board"}
     <div class="board" style="--columns:{boardColumns.length}">
       <div class="board-row">

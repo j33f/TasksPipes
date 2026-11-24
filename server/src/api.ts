@@ -99,6 +99,7 @@ const taskBody = {
   description: { type: "string" },
   stage: { type: "string", description: "Column id of the pipe type" },
   dueDate: { type: "string", format: "date", nullable: true },
+  startDate: { type: "string", format: "date", nullable: true, description: "When work is planned to start; not after the due date" },
   assigneeId: { ...uuid, nullable: true, description: "Owner, a member of a team space" },
   taskType: { type: "string" },
   fields: { type: "object", additionalProperties: true, description: "Values by field id of the task type" },

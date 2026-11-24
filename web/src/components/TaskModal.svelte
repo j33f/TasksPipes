@@ -442,6 +442,19 @@
           {/if}
         </div>
 
+        {#if task.pipe && app.pipeType(task.pipe.kind)?.sprints}
+          <!-- When work starts: with the due date, its bar on the timeline. -->
+          <div class="prop">
+            <span class="label-text">{t("Start date")}</span>
+            {#if perms?.manage}
+              <input class="input" type="date" value={task.startDate ?? ""} max={task.dueDate ?? undefined} aria-label={t("Start date")}
+                onchange={(e) => patch({ startDate: (e.currentTarget as HTMLInputElement).value || null })} />
+            {:else}
+              <div class="value">{formatDate(task.startDate) || "—"}</div>
+            {/if}
+          </div>
+        {/if}
+
         <div class="prop">
           <span class="label-text">{t("Outline document")}</span>
           {#if task.outlineDoc}
