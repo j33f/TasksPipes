@@ -505,6 +505,8 @@ export interface OutlineExport {
   sprints: boolean;
   /** Who gave the key. */
   setBy: string | null;
+  /** The key was given by the person reading: only they may point it at other documents. */
+  mine: boolean;
   /** Outline refused the key: nothing is published until a new one is given. */
   keyRefused: boolean;
   lastError: string | null;

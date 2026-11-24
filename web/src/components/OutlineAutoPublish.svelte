@@ -29,6 +29,11 @@
   let weekly = $state(false);
   // Null: the weekly report goes under the main parent.
   let weeklyParent = $state<DocRef | null>(null);
+  // Someone else's key stays where they chose: other documents take one's own key.
+  const moved = $derived(Boolean(settings && !settings.mine && (
+    (parent && parent.id !== settings.parentDocId)
+    || (timeReport && weekly && weeklyParent && weeklyParent.id !== settings.weeklyParentDocId))));
+  const keyNeeded = $derived(!settings || moved);
 
   $effect(() => {
     api.get<OutlineExport | null>(`/pipes/${pipe.id}/outline-export`)
@@ -101,7 +106,8 @@
         <label class="field">
           <span class="small muted">{t("Outline API key")}</span>
           <input class="input" type="password" autocomplete="off" bind:value={apiKey}
-            placeholder={settings ? t("Leave empty to keep the current key") : "ol_api_…"} />
+            required={keyNeeded} placeholder={keyNeeded ? "ol_api_…" : t("Leave empty to keep the current key")} />
+          {#if moved}<span class="small">{t("The current key is someone else's: give your own to publish under other documents.")}</span>{/if}
           <span class="small muted">{t("Create one in Outline › Settings › API. Reports are published as that account, even when nobody is signed in.")}</span>
         </label>
         <label class="check"><input type="checkbox" bind:checked={daily} />{t("Publish the daily activity every day at {hour}:00 (days with activity)", { hour })}</label>
@@ -125,7 +131,7 @@
         {/if}
         {#if error}<div class="error-text">{error}</div>{/if}
         <div class="row actions">
-          <button class="btn primary small" disabled={busy || !parent || (!settings && !apiKey.trim())}>{t("Save")}</button>
+          <button class="btn primary small" disabled={busy || !parent || (keyNeeded && !apiKey.trim())}>{t("Save")}</button>
           <button type="button" class="btn ghost small" onclick={() => (editing = false)}>{t("Cancel")}</button>
         </div>
       </form>
