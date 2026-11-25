@@ -152,6 +152,17 @@ describe("a read-only agent", () => {
     expect((await tool(token, "create_task", { pipeId: personalPipe, title: "No" })).error).toBeTruthy();
   });
 
+  it("sees every column of a pipe, which tells where each task stands", async () => {
+    const pipe = await tool(token, "get_pipe", { pipeId: personalPipe });
+    expect(pipe.columns.map((x: { id: string; status: string }) => [x.id, x.status])).toEqual([
+      ["backlog", "backlog"], ["ready", "ready"], ["ongoing", "ongoing"], ["blocked", "blocked"], ["done", "done"], ["abandoned", "abandoned"],
+    ]);
+    expect(pipe.taskTypes.map((x: { id: string }) => x.id)).toEqual(["task"]);
+    const task = pipe.tasks.find((t: { id: string }) => t.id === personalTask);
+    expect(pipe.columns.map((x: { id: string }) => x.id)).toContain(task.stage);
+    expect(task).toMatchObject({ estimateMinutes: null, loggedMinutes: 0 });
+  });
+
   it("never sees confidential tasks, and says how many were left out", async () => {
     const found = await tool(token, "search_tasks", { query: "Zephyr" });
     const titles = found.tasks.map((t: { title: string }) => t.title);
@@ -203,6 +214,37 @@ describe("an agent limited to a team space, allowed to write", () => {
     });
     expect(await tool(token, "update_task", { taskId: task, sprintId: sprint.id })).toMatchObject({ sprintId: sprint.id, points: 5 });
     expect((await tool(token, "get_sprints", { pipeId: teamPipe })).sprints).toEqual([]);
+  });
+
+  it("reads a pipe's columns and task types, and fills a task's fields", async () => {
+    const pipe = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Agent dev", kind: "dev" })).body.id;
+    const read = await tool(token, "get_pipe", { pipeId: pipe });
+    expect(read.columns.map((x: { id: string }) => x.id)).toEqual(["backlog", "a_faire", "en_cours", "revue", "bloque", "termine", "abandonne"]);
+    expect(read.columns[2]).toMatchObject({ id: "en_cours", status: "started", label: expect.any(String) });
+    expect(read.taskTypes.map((x: { id: string }) => x.id)).toEqual(["task", "user_story", "bug", "tache_technique", "release"]);
+    const bug = read.taskTypes.find((x: { id: string }) => x.id === "bug");
+    expect(bug.fields.find((f: { id: string }) => f.id === "severite")).toMatchObject({ type: "select", options: ["Bloquant", "Critique", "Majeur", "Mineur"] });
+    expect(bug.fields.find((f: { id: string }) => f.id === "captures")).toMatchObject({ type: "files", readOnly: true });
+
+    const created = await tool(token, "create_task", {
+      pipeId: pipe, title: "Crash", stage: "en_cours", taskType: "bug", estimateMinutes: 90, fields: { severite: "Majeur", version: "0.31.0" },
+    });
+    expect(created).toMatchObject({ stage: "en_cours", status: "started", type: "bug", estimateMinutes: 90 });
+    const task = await tool(token, "get_task", { taskId: created.id });
+    expect(task.column).toMatchObject({ id: "en_cours", label: expect.any(String) });
+    expect(task.fields).toEqual([
+      expect.objectContaining({ id: "severite", type: "select", value: "Majeur" }),
+      expect.objectContaining({ id: "version", type: "text", value: "0.31.0" }),
+    ]);
+
+    await tool(token, "update_task", { taskId: created.id, fields: { severite: "Critique", version: null } });
+    expect((await tool(token, "get_task", { taskId: created.id })).fields).toEqual([expect.objectContaining({ id: "severite", value: "Critique" })]);
+    expect((await tool(token, "update_task", { taskId: created.id, fields: { severite: "Énorme" } })).error).toMatch(/invalid choice/i);
+    expect((await tool(token, "update_task", { taskId: created.id, fields: { captures: [] } })).error).toMatch(/uploaded separately/);
+    // Only the types the pipe offers, never a confidential one.
+    expect((await tool(token, "create_task", { pipeId: pipe, title: "No", taskType: "echange_garde" })).error).toMatch(/does not offer/);
+    expect((await tool(token, "update_task", { taskId: created.id, taskType: "opportunite" })).error).toMatch(/does not offer/);
+    expect(await tool(token, "update_task", { taskId: created.id, taskType: "user_story" })).toMatchObject({ type: "user_story" });
   });
 
   it("cannot send tasks to others or log time without those scopes", async () => {

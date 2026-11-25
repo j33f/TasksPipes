@@ -18,6 +18,8 @@ import * as z from "zod";
 import { config } from "./config.js";
 import { isConfidential } from "./access.js";
 import { POINTS } from "./points.js";
+import { DEFAULT_PIPE_TYPE, pipeTypeById, taskTypeById, type TaskType } from "./pipeTypes.js";
+import { localizePipeType, localizeTaskType } from "./i18n.js";
 import { INTERNAL_HEADER, INTERNAL_SECRET, V1, type McpScope } from "./api.js";
 import { LIMITS, enforceLimit } from "./rate-limit.js";
 import { resourceMetadataUrl } from "./oauth.js";
@@ -86,6 +88,9 @@ const visible = (c: Caller, t: Json) => {
   return !isConfidential({ pipe_kind: t?.pipe?.kind ?? null, task_type: t?.taskType ?? null });
 };
 
+/** Values of a task type's fields, by field id (each checked by the API against its type). */
+const fieldsSchema = z.record(z.string().max(100), z.unknown());
+
 /** Complexity points: a value of the planning poker scale. */
 const pointsSchema = z.number().int().refine((n) => (POINTS as readonly number[]).includes(n), { message: `One of ${POINTS.join(", ")}` });
 
@@ -101,6 +106,8 @@ const brief = (t: Json) => ({
   startDate: t.startDate ?? null,
   priority: t.priority,
   points: t.points ?? null,
+  estimateMinutes: t.estimateMinutes ?? null,
+  loggedMinutes: t.loggedMinutes ?? 0,
   sprintId: t.sprintId ?? null,
   assignee: t.assignee?.name ?? null,
   space: t.space ? { id: t.space.id, name: t.space.name } : null,
@@ -129,6 +136,52 @@ async function ownPipe(app: FastifyInstance, c: Caller, id: string) {
   const p = await call(app, c, "GET", `/pipes/${id}`).catch(() => null);
   if (!p || !allowedSpace(c, p.space?.id) || secretPipe(p.kind)) throw new ToolError("Pipe not found");
   return p;
+}
+
+/** The columns of a pipe of this kind (its stages: a task's `stage` is one of their ids), in the caller's language. */
+function columnsOf(c: Caller, kind: string) {
+  const type = pipeTypeById(kind) ?? pipeTypeById(DEFAULT_PIPE_TYPE)!;
+  return localizePipeType(c.locale, type).columns.map((col) => ({
+    id: col.id, label: col.label, status: col.status, ...(col.wipLimit ? { wipLimit: col.wipLimit } : {}),
+  }));
+}
+
+/** Task types a pipe of this kind offers (the plain task first), never a confidential one. */
+function taskTypesOf(kind: string | null | undefined): TaskType[] {
+  const ids = ["task", ...(pipeTypeById(kind)?.taskTypes ?? [])];
+  return ids
+    .map((id) => taskTypeById(id))
+    .filter((t): t is TaskType => Boolean(t) && !isConfidential({ pipe_kind: null, task_type: t!.id }));
+}
+
+/** A task type and its fields as an agent fills them: select options take their stored value. */
+function describeTaskType(c: Caller, t: TaskType) {
+  const l = localizeTaskType(c.locale, t);
+  return {
+    id: l.id, label: l.label, description: l.description,
+    fields: l.fields.map((f) => ({
+      id: f.id, label: f.label, type: f.type,
+      ...(f.options ? { options: f.options } : {}),
+      ...(f.optionLabels && f.optionLabels.some((x, i) => x !== f.options![i]) ? { optionLabels: f.optionLabels } : {}),
+      ...(f.hint ? { hint: f.hint } : {}),
+      ...(f.type === "files" ? { readOnly: true } : {}),
+    })),
+  };
+}
+
+/** A task's field values, with the label and type of each field of its type. */
+function fieldValues(c: Caller, t: Json) {
+  const type = taskTypeById(t.taskType);
+  if (!type) return [];
+  const values = t.fields ?? {};
+  return localizeTaskType(c.locale, type).fields
+    .filter((f) => values[f.id] !== undefined && values[f.id] !== null)
+    .map((f) => ({ id: f.id, label: f.label, type: f.type, value: values[f.id] }));
+}
+
+/** A task type the agent may give a task of a pipe of this kind. */
+function checkTaskType(kind: string | null | undefined, id: string) {
+  if (!taskTypesOf(kind).some((t) => t.id === id)) throw new ToolError("This pipe does not offer this task type (see get_pipe)");
 }
 
 const result = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 1) }] });
@@ -217,11 +270,18 @@ function buildServer(app: FastifyInstance, c: Caller) {
 
   server.registerTool(
     "get_pipe",
-    { title: "Get a pipe", description: "A pipe (board), its stages and its tasks.", inputSchema: z.object({ pipeId: id }), annotations: read },
+    {
+      title: "Get a pipe",
+      description: "A pipe (board): its columns (a task's stage is a column id; each column has a generic status), the task types it offers with their fields, and its tasks.",
+      inputSchema: z.object({ pipeId: id }),
+      annotations: read,
+    },
     run(async ({ pipeId }) => {
       const p = await ownPipe(app, c, pipeId);
       return {
-        id: p.id, name: p.name, kind: p.kind, space: { id: p.space.id, name: p.space.name }, stages: p.stages,
+        id: p.id, name: p.name, kind: p.kind, space: { id: p.space.id, name: p.space.name },
+        columns: columnsOf(c, p.kind),
+        taskTypes: taskTypesOf(p.kind).map((t) => describeTaskType(c, t)),
         ...filtered(c, p.tasks), notice: NOTICE,
       };
     })
@@ -275,12 +335,20 @@ function buildServer(app: FastifyInstance, c: Caller) {
 
   server.registerTool(
     "get_task",
-    { title: "Get a task", description: "A task with its description, sub-tasks and history.", inputSchema: z.object({ taskId: id }), annotations: read },
+    {
+      title: "Get a task",
+      description: "A task with its column, description, the values of its type's fields, sub-tasks and history.",
+      inputSchema: z.object({ taskId: id }),
+      annotations: read,
+    },
     run(async ({ taskId }) => {
       const t = await ownTask(app, c, taskId);
+      const column = t.pipe ? columnsOf(c, t.pipe.kind).find((x) => x.id === t.stage) : undefined;
       return {
         ...brief(t),
+        column: column ? { id: column.id, label: column.label } : null,
         description: t.description,
+        fields: fieldValues(c, t),
         checklist: t.checklist,
         blockers: t.blockers,
         history: (t.events ?? []).map((e: Json) => ({
@@ -296,15 +364,21 @@ function buildServer(app: FastifyInstance, c: Caller) {
       "create_task",
       {
         title: "Create a task",
-        description: "Create a task in a pipe. stage: a stage id of the pipe (see get_pipe); dueDate: YYYY-MM-DD; priority: 1 urgent … 4 low; points: complexity, one of 0 1 2 3 5 8 13 21 40 100.",
+        description: "Create a task in a pipe. stage: a column id of the pipe (see get_pipe); startDate, dueDate: YYYY-MM-DD; priority: 1 urgent … 4 low; points: complexity, one of 0 1 2 3 5 8 13 21 40 100; sprintId: an open sprint of the pipe (see get_sprints); estimateMinutes: estimated time; taskType: one the pipe offers (see get_pipe, \"task\" by default); fields: values of that type's fields by field id (select: one of its options; multiselect: a list of them; files cannot be set here).",
         inputSchema: z.object({
           pipeId: id, title: z.string().min(1).max(300), description: z.string().max(20000).optional(), stage: z.string().max(100).optional(),
+          startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
           dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), priority: z.number().int().min(1).max(4).optional(),
           points: pointsSchema.optional(),
+          sprintId: id.optional(),
+          estimateMinutes: z.number().int().min(1).max(60000).optional(),
+          taskType: z.string().max(100).optional(),
+          fields: fieldsSchema.optional(),
         }),
       },
       run(async ({ pipeId, ...fields }) => {
-        await ownPipe(app, c, pipeId);
+        const p = await ownPipe(app, c, pipeId);
+        if (fields.taskType) checkTaskType(p.kind, fields.taskType);
         const created = await call(app, c, "POST", "/tasks", { pipeId, ...fields });
         return brief(await call(app, c, "GET", `/tasks/${created.id}`));
       })
@@ -314,7 +388,7 @@ function buildServer(app: FastifyInstance, c: Caller) {
       "update_task",
       {
         title: "Change a task",
-        description: "Change a task's title, description, stage, start and due dates (YYYY-MM-DD, null to clear), priority (null for none), points (complexity: 0 1 2 3 5 8 13 21 40 100, null for none), sprint (an open sprint of its pipe, see get_sprints; null for the backlog) or estimate.",
+        description: "Change a task's title, description, stage (a column id of its pipe, see get_pipe), start and due dates (YYYY-MM-DD, null to clear), priority (null for none), points (complexity: 0 1 2 3 5 8 13 21 40 100, null for none), sprint (an open sprint of its pipe, see get_sprints; null for the backlog), estimate, task type (one its pipe offers) or field values (by field id of its type, merged with the others; null clears one; files cannot be set here).",
         inputSchema: z.object({
           taskId: id, title: z.string().min(1).max(300).optional(), description: z.string().max(20000).optional(), stage: z.string().max(100).optional(),
           dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), priority: z.number().int().min(1).max(4).nullable().optional(),
@@ -322,11 +396,17 @@ function buildServer(app: FastifyInstance, c: Caller) {
           sprintId: id.nullable().optional(),
           points: pointsSchema.nullable().optional(),
           estimateMinutes: z.number().int().min(1).max(60000).nullable().optional(),
+          taskType: z.string().max(100).optional(),
+          fields: fieldsSchema.optional(),
         }),
         annotations: { idempotentHint: true },
       },
       run(async ({ taskId, ...changes }) => {
-        await ownTask(app, c, taskId);
+        const t = await ownTask(app, c, taskId);
+        if (changes.taskType && changes.taskType !== t.taskType) {
+          if (!t.pipe) throw new ToolError("A task waiting in an incoming bucket keeps its type until it is accepted into a pipe");
+          checkTaskType(t.pipe.kind, changes.taskType);
+        }
         await call(app, c, "PATCH", `/tasks/${taskId}`, changes);
         // The task as it now is (the change answers only "ok").
         return brief(await call(app, c, "GET", `/tasks/${taskId}`));
