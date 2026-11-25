@@ -3,6 +3,7 @@
   import { dueState, formatDate } from "../lib/constants";
   import type { Task } from "../lib/types";
   import Avatar from "./Avatar.svelte";
+  import McpTag from "./McpTag.svelte";
   import TaskBadges from "./TaskBadges.svelte";
   import { pointsText } from "../lib/labels";
   import { formatWork } from "../lib/worklog";
@@ -59,9 +60,10 @@
     {#if task.commentCount}<span class="row" style="gap:3px"><Icon name="comment" size={13} />{task.commentCount}</span>{/if}
     <span class="spacer"></span>
     {#if task.author.id !== task.assignee?.id && task.author.id !== app.me?.user.id}
-      <span class="muted" title={t("Created by {name}", { name: task.author.name })}>{t("by {name}", { name: task.author.name.split(" ")[0] })}</span>
+      <span class="muted" title={t("Created by {name}", { name: task.author.name })}>{t("by {name}", { name: task.author.name.split(" ")[0] })}{#if task.createdVia?.kind === "agent"}<McpTag agent={task.createdVia.name} />{/if}</span>
     {/if}
     {#if task.assignee && task.space.kind === "team"}<Avatar user={task.assignee} size={20} />{/if}
+    {#if task.assignee?.agent}<McpTag />{/if}
   </div>
 </div>
 
