@@ -129,7 +129,7 @@ those types keep working. This is a personal choice: others still see every type
   Members of its space see all of it; others only *Open the task*.
 - **Deleting a task** (members of its space; from its right-click menu, or `DELETE /api/v1/tasks/:id`): for good,
   after a confirmation, with its history, comments, sub-tasks, files, logged time and dependencies. To keep a trace,
-  move it to *Abandoned* instead. AI agents never delete a task.
+  move it to *Dropped* instead. AI agents never delete a task.
 - **Owner**: a task in a personal space belongs to its holder; to hand it to someone, send it to their incoming. In a
   team space, the owner is chosen among the team's members.
 - **Sub-tasks**: a checklist inside the task. Paste several lines to add several items, rename, reorder by drag and
