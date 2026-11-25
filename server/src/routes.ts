@@ -2026,6 +2026,16 @@ export async function apiRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // Deleting a task, for the members of its space: for good, with all of it (history, sub-tasks, files, time…).
+  app.delete("/tasks/:id", async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "manage");
+    await query(`DELETE FROM tasks WHERE id = $1`, [t.id]);
+    req.log.info({ taskId: t.id, number: t.number, spaceId: t.space_id, userId: uid }, "Task deleted");
+    notifySpace(t.space_id, { type: "task.updated" }, uid);
+    return { ok: true };
+  });
+
   app.post("/tasks/:id/comments", async (req: Req) => {
     const { t } = await loadTaskFor(req.params.id, me(req), "comment");
     const body = text(req.body?.body, "Comment", { required: true });

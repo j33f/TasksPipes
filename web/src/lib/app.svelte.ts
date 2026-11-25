@@ -21,6 +21,8 @@ class AppState {
   noOutline = $derived(this.isGuest || this.me?.features.outline === false);
   /** Dialog opened from the user menu (or the dashboard, notifications…, the search with Ctrl/⌘ + K). */
   dialog = $state<"settings" | "calendar" | "about" | "invite" | "search" | "inbox" | null>(null);
+  /** The menu of a task opened with a right click (TaskContextMenu.svelte), where it was asked for. */
+  taskMenu = $state<{ task: Task; x: number; y: number } | null>(null);
   /** A task to show in yellow on the page it is on, reached from a notification (highlight.ts). */
   highlight = $state<string | null>(null);
   /** Tasks waiting in my incoming and in my teams' ones. */
@@ -166,6 +168,19 @@ class AppState {
 
   openTask(id: string | null) {
     setParams({ task: id });
+  }
+
+  /** Opens the menu of a task at the pointer, or under the element for the keyboard's menu key. */
+  openTaskMenu(e: MouseEvent, task: Task) {
+    e.preventDefault();
+    e.stopPropagation();
+    let { clientX: x, clientY: y } = e;
+    if (!x && !y && e.currentTarget instanceof Element) {
+      const r = e.currentTarget.getBoundingClientRect();
+      x = r.left + 16;
+      y = r.bottom - 8;
+    }
+    this.taskMenu = { task, x, y };
   }
 
   async logout() {

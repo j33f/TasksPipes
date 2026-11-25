@@ -1293,7 +1293,15 @@
     "This person's AI agent (MCP)": "O agente de IA desta pessoa (MCP)",
     "{name} (MCP)": "{name} (MCP)",
     "Deletes": "Elimina",
-    "Delete, as I could: sub-tasks, time entries, files": "Eliminar, como eu poderia: subtarefas, tempos registados, ficheiros"
+    "Delete, as I could: sub-tasks, time entries, files": "Eliminar, como eu poderia: subtarefas, tempos registados, ficheiros",
+    "Task actions": "Ações da tarefa",
+    "Move to another pipe": "Mover para outro pipe",
+    "Delete the task": "Eliminar a tarefa",
+    "Delete “{title}” for good, with its history, sub-tasks, files and logged time?": "Eliminar definitivamente «{title}», com o seu histórico, subtarefas, ficheiros e tempo registado?",
+    "Task deleted": "Tarefa eliminada",
+    "Back": "Voltar",
+    "No other pipe in this space": "Nenhum outro pipe neste espaço",
+    "Moved to {name}": "Movida para {name}"
   },
   "server": {
     "{label} is required": "{label}: obrigatório",
