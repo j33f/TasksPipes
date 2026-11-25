@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { CookieSerializeOptions } from "@fastify/cookie";
 import fp from "fastify-plugin";
 import { config } from "./config.js";
+import type pg from "pg";
 import { ensureDefaultPipes, one, pool, query, tx, type Queryable, type Row } from "./db.js";
 import { absoluteOutlineUrl, normalizeOutlineUrl, outlineApi, outlineToken, OutlineError, type OutlineCall, type OutlineUser } from "./outline.js";
 import { isEmail, mailEnabled, sendLinkMail } from "./mail.js";
@@ -129,10 +130,11 @@ export const loginError = (reply: FastifyReply, message: string) => reply.redire
 /**
  * Inserts or updates a user coming from an Outline server and makes sure they have a personal space.
  * Returns their internal id: the Outline id on the configured server, a new id on another one.
- * `db` must be a transaction (tx): the account's lock lasts until it ends.
+ * `db` must be the client of a transaction (tx): the account's lock lasts until it ends, and is let go at once
+ * anywhere else (the pool, a client outside BEGIN), silently.
  */
 export async function upsertOutlineUser(
-  db: Queryable,
+  db: pg.PoolClient,
   u: OutlineUser,
   { login = false, instance = config.outlineUrl, lang = config.defaultLocale as Locale } = {}
 ): Promise<string> {

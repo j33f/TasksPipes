@@ -1,6 +1,10 @@
 /**
  * Accounts from Outline made at the same time by two transactions: the import of a workspace after a sign-in
  * (auth.ts syncWorkspaceUsers, in the background) and someone of it signing in meanwhile. Neither may fail.
+ *
+ * The collision needs one insert to land between the other's conflict check and its own insert: this test makes it
+ * likely (many rounds of many people), not certain. Without the per-account lock it failed about one run in three
+ * locally; a pass is no proof, a failure here is the bug.
  */
 import crypto from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
