@@ -3,6 +3,7 @@
   import { dueState, formatDate } from "../lib/constants";
   import type { Task } from "../lib/types";
   import Avatar from "./Avatar.svelte";
+  import McpTag from "./McpTag.svelte";
   import TaskBadges from "./TaskBadges.svelte";
   import StatusBadge from "./StatusBadge.svelte";
   import Icon from "./Icon.svelte";
@@ -23,7 +24,7 @@
     <span class="small muted row" style="gap:3px" title={t("Sub-tasks")}><Icon name="checklist" size={14} />{task.checklist.done}/{task.checklist.total}</span>
   {/if}
   {#if task.dueDate}<span class="small due {due}">{formatDate(task.dueDate)}</span>{/if}
-  {#if task.assignee}<Avatar user={task.assignee} size={20} />{/if}
+  {#if task.assignee}<Avatar user={task.assignee} size={20} />{#if task.assignee.agent}<McpTag />{/if}{/if}
 </button>
 
 <style>

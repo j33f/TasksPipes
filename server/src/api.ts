@@ -18,7 +18,7 @@ export const MAX_TOKEN_DAYS = 366;
 /** Agent tokens (MCP) live 90 days at most when they expire; any token may also never expire (days: null). */
 export const MAX_AGENT_TOKEN_DAYS = 90;
 /** What an agent token may do over MCP (mcp.ts); reading is always among them. */
-export const MCP_SCOPES = ["tasks:read", "tasks:write", "comments:write", "time:write", "tasks:send"] as const;
+export const MCP_SCOPES = ["tasks:read", "tasks:write", "comments:write", "time:write", "tasks:send", "tasks:delete"] as const;
 export type McpScope = (typeof MCP_SCOPES)[number];
 /**
  * The MCP endpoint calls /api/v1 itself (app.inject) with the agent's token and this header: agent tokens are refused
@@ -101,6 +101,7 @@ const taskBody = {
   dueDate: { type: "string", format: "date", nullable: true },
   startDate: { type: "string", format: "date", nullable: true, description: "When work is planned to start; not after the due date" },
   assigneeId: { ...uuid, nullable: true, description: "Owner, a member of a team space" },
+  assigneeAgent: { type: "boolean", description: "Handed to its owner's AI agent (\"Toto (MCP)\"): only that person may set it, with an AI agent that works" },
   taskType: { type: "string" },
   fields: { type: "object", additionalProperties: true, description: "Values by field id of the task type" },
   priority: { type: "integer", minimum: 1, maximum: 4, nullable: true, description: "1 urgent, 2 high, 3 medium, 4 low; null for none" },
@@ -220,6 +221,7 @@ export const V1_ROUTES: Record<string, Doc> = {
     body: { type: "object", properties: { text: { type: "string" }, done: { type: "boolean" } } }, response: ok,
   },
   "DELETE /items/:id": { tag: "Sub-tasks", summary: "Delete a sub-task", params: idParams, response: ok },
+  "DELETE /files/:id": { tag: "Tasks", summary: "Delete a file of a task's files field", params: idParams, response: ok },
 };
 
 /**

@@ -9,6 +9,7 @@
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import SpaceSelect from "./SpaceSelect.svelte";
   import UserSelect from "./UserSelect.svelte";
+  import { agentChoices, ownerBody } from "../lib/agents";
   import DocPicker from "./DocPicker.svelte";
   import Icon, { iconOf } from "./Icon.svelte";
   import TaskFields, { type FieldFile } from "./TaskFields.svelte";
@@ -97,7 +98,7 @@
     try {
       const body = {
         title, description, outlineDoc, comment,
-        assigneeId: isTeam ? assigneeId : null,
+        ...(isTeam ? ownerBody(assigneeId) : { assigneeId: null }),
         dueDate: dueDate || null,
         priority: priority ? Number(priority) : null,
         points: points === "" ? null : Number(points),
@@ -186,7 +187,8 @@
       {#if isTeam}
         <div class="field">
           <label for="nt-owner">{t("Owner")}</label>
-          <UserSelect bind:value={assigneeId} users={members} placeholder={t("Unassigned")} />
+          <UserSelect bind:value={assigneeId} users={members} placeholder={t("Unassigned")}
+            agents={agentChoices(members.some((m) => m.id === app.me?.user.id) ? app.me?.user : null, Boolean(app.me?.hasAgent))} />
         </div>
       {/if}
       <div class="field">

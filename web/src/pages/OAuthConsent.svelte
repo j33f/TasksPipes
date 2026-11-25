@@ -26,6 +26,7 @@
   let comment = $state(false);
   let time = $state(false);
   let send = $state(false);
+  let remove = $state(false);
   let everywhere = $state(true);
   let chosen = $state<string[]>([]);
 
@@ -48,6 +49,7 @@
         ...(comment ? (["comments:write"] as const) : []),
         ...(time ? (["time:write"] as const) : []),
         ...(send ? (["tasks:send"] as const) : []),
+        ...(remove ? (["tasks:delete"] as const) : []),
       ];
       const r = allow
         ? await api.post<{ redirect: string }>(`/oauth/requests/${encodeURIComponent(id)}/approve`, { scopes, ...(everywhere ? {} : { spaceIds: chosen }) })
@@ -90,6 +92,7 @@
         <label><input type="checkbox" bind:checked={comment} /> {t("Comment")}{#if asked("comments:write")} <span class="asked">{t("asked")}</span>{/if}</label>
         <label><input type="checkbox" bind:checked={time} /> {t("Log my time")}{#if asked("time:write")} <span class="asked">{t("asked")}</span>{/if}</label>
         <label><input type="checkbox" bind:checked={send} /> {t("Send tasks to other people")}{#if asked("tasks:send")} <span class="asked">{t("asked")}</span>{/if}</label>
+        <label><input type="checkbox" bind:checked={remove} /> {t("Delete, as I could: sub-tasks, time entries, files")}{#if asked("tasks:delete")} <span class="asked">{t("asked")}</span>{/if}</label>
       </fieldset>
 
       <fieldset>
@@ -106,7 +109,7 @@
       </fieldset>
 
       <p class="small muted note">{t("Only allow it if you started this connection yourself, from an application you trust.")}</p>
-      <p class="small muted note">{t("It never sees confidential pipes and deletes nothing. You can disconnect it at any time in Settings › AI agents.")}</p>
+      <p class="small muted note">{t("It never sees confidential pipes, and deletes nothing unless you allow it above. You can disconnect it at any time in Settings › AI agents.")}</p>
 
       <div class="actions">
         <button class="btn neutral" disabled={busy} onclick={() => answer(false)}>{t("Refuse")}</button>
