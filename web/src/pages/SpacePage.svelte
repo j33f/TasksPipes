@@ -232,6 +232,9 @@
   .actions { flex-shrink: 0; }
   .description { margin: -8px 0 24px; color: var(--text-secondary); }
   .pipe-card h3 { font-size: 16px; }
+  /* A long name wraps: the icon and the badge stay on its first line (20px high, like them). */
+  .pipe-card .row { align-items: flex-start; }
+  .pipe-card .row .badge { flex-shrink: 0; }
   .pipe-card .kind { margin-top: 2px; }
   .pipe-card.archived { opacity: 0.6; }
   .show-archived { margin-top: 16px; color: var(--text-tertiary); }
