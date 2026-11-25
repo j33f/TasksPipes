@@ -247,6 +247,19 @@ describe("an agent limited to a team space, allowed to write", () => {
     expect(await tool(token, "update_task", { taskId: created.id, taskType: "user_story" })).toMatchObject({ type: "user_story" });
   });
 
+  it("names the people in a task's fields, as its owner sees them", async () => {
+    const pipe = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Agent chores", kind: "menage_coloc" })).body.id;
+    const bobId = (await bob.get("/api/me")).body.user.id;
+    const created = await tool(token, "create_task", { pipeId: pipe, title: "Dishes", taskType: "corvee", fields: { qui: bobId } });
+    const qui = (await tool(token, "get_task", { taskId: created.id })).fields.find((f: { id: string }) => f.id === "qui");
+    expect(qui).toMatchObject({ type: "user", value: { id: bobId, name: "Bob Durand" } });
+    // Someone its owner cannot see keeps only their id.
+    const stranger = "00000000-0000-4000-8000-000000000001";
+    await tool(token, "update_task", { taskId: created.id, fields: { qui: stranger } });
+    const unknown = (await tool(token, "get_task", { taskId: created.id })).fields.find((f: { id: string }) => f.id === "qui");
+    expect(unknown.value).toEqual({ id: stranger, name: null });
+  });
+
   it("cannot send tasks to others or log time without those scopes", async () => {
     const names = (await rpc(token, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
     expect(names).not.toContain("send_task");

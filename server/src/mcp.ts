@@ -169,14 +169,24 @@ function describeTaskType(c: Caller, t: TaskType) {
   };
 }
 
-/** A task's field values, with the label and type of each field of its type. */
-function fieldValues(c: Caller, t: Json) {
+/**
+ * A task's field values, with the label and type of each field of its type. A person (user field) comes with their
+ * name, from the people its owner may see (as in the app); one they may not see keeps only their id.
+ */
+async function fieldValues(app: FastifyInstance, c: Caller, t: Json) {
   const type = taskTypeById(t.taskType);
   if (!type) return [];
   const values = t.fields ?? {};
-  return localizeTaskType(c.locale, type).fields
-    .filter((f) => values[f.id] !== undefined && values[f.id] !== null)
-    .map((f) => ({ id: f.id, label: f.label, type: f.type, value: values[f.id] }));
+  const fields = localizeTaskType(c.locale, type).fields.filter((f) => values[f.id] !== undefined && values[f.id] !== null);
+  const names = new Map<string, string>();
+  if (fields.some((f) => f.type === "user")) {
+    const people: Json[] = await call(app, c, "GET", "/users");
+    for (const u of people ?? []) names.set(u.id, u.name);
+  }
+  return fields.map((f) => ({
+    id: f.id, label: f.label, type: f.type,
+    value: f.type === "user" ? { id: values[f.id], name: names.get(values[f.id]) ?? null } : values[f.id],
+  }));
 }
 
 /** A task type the agent may give a task of a pipe of this kind. */
@@ -348,7 +358,7 @@ function buildServer(app: FastifyInstance, c: Caller) {
         ...brief(t),
         column: column ? { id: column.id, label: column.label } : null,
         description: t.description,
-        fields: fieldValues(c, t),
+        fields: await fieldValues(app, c, t),
         checklist: t.checklist,
         blockers: t.blockers,
         history: (t.events ?? []).map((e: Json) => ({
@@ -364,7 +374,7 @@ function buildServer(app: FastifyInstance, c: Caller) {
       "create_task",
       {
         title: "Create a task",
-        description: "Create a task in a pipe. stage: a column id of the pipe (see get_pipe); startDate, dueDate: YYYY-MM-DD; priority: 1 urgent … 4 low; points: complexity, one of 0 1 2 3 5 8 13 21 40 100; sprintId: an open sprint of the pipe (see get_sprints); estimateMinutes: estimated time; taskType: one the pipe offers (see get_pipe, \"task\" by default); fields: values of that type's fields by field id (select: one of its options; multiselect: a list of them; files cannot be set here).",
+        description: "Create a task in a pipe. stage: a column id of the pipe (see get_pipe); startDate, dueDate: YYYY-MM-DD; priority: 1 urgent … 4 low; points: complexity, one of 0 1 2 3 5 8 13 21 40 100; sprintId: an open sprint of the pipe (see get_sprints); estimateMinutes: estimated time; taskType: one the pipe offers (see get_pipe, \"task\" by default); fields: values of that type's fields by field id (select: one of its options; multiselect: a list of them; user: a person's id; files cannot be set here).",
         inputSchema: z.object({
           pipeId: id, title: z.string().min(1).max(300), description: z.string().max(20000).optional(), stage: z.string().max(100).optional(),
           startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
