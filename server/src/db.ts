@@ -978,6 +978,25 @@ CREATE UNLOGGED TABLE IF NOT EXISTS live_presence (
   seen_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, instance_id)
 );
+
+-- AI agents (MCP). A task handed to its owner's agent ("Toto (MCP)"): only that person sets it (routes.ts), and it
+-- goes when the task changes owner or space.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_agent boolean NOT NULL DEFAULT false;
+-- The access token (an agent, over MCP) a task was created through, shown next to its author.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_via_token_id uuid REFERENCES api_tokens(id) ON DELETE SET NULL;
+ALTER TABLE task_events ADD COLUMN IF NOT EXISTS from_assignee_agent boolean;
+ALTER TABLE task_events ADD COLUMN IF NOT EXISTS to_assignee_agent boolean;
+CREATE OR REPLACE FUNCTION tasks_assignee_agent_reset() RETURNS trigger AS $f$
+BEGIN
+  IF OLD.assignee_agent AND NEW.assignee_agent
+     AND (NEW.space_id <> OLD.space_id OR NEW.assignee_id IS DISTINCT FROM OLD.assignee_id) THEN
+    NEW.assignee_agent := false;
+  END IF;
+  RETURN NEW;
+END $f$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS tasks_assignee_agent_reset ON tasks;
+CREATE TRIGGER tasks_assignee_agent_reset BEFORE UPDATE OF space_id, assignee_id ON tasks
+  FOR EACH ROW EXECUTE FUNCTION tasks_assignee_agent_reset();
 `;
 
 /**

@@ -272,3 +272,127 @@ describe("an agent limited to a team space, allowed to write", () => {
     expect((await rpc(token, "tools/list")).status).toBe(401);
   });
 });
+
+describe("an agent with full access to tasks", () => {
+  let token: string, bobId: string, aliceId: string, pipe: string;
+  beforeAll(async () => {
+    token = (await agentToken(["tasks:write", "comments:write", "time:write", "tasks:delete"])).body.token;
+    bobId = (await bob.get("/api/me")).body.user.id;
+    aliceId = (await alice.get("/api/me")).body.user.id;
+    pipe = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Full access" })).body.id;
+  });
+
+  it("changes everything a person can: owner, labels, sub-tasks, dependencies, time", async () => {
+    const label = (await alice.post(`/api/spaces/${team}/labels`, { name: "Urgent", color: "#ed2651" })).body.id;
+    const space = await tool(token, "get_space", { spaceId: team });
+    expect(space.members.map((m: { id: string }) => m.id)).toEqual(expect.arrayContaining([aliceId, bobId]));
+    expect(space.labels).toEqual(expect.arrayContaining([{ id: label, name: "Urgent" }]));
+
+    const created = await tool(token, "create_task", {
+      pipeId: pipe, title: "Ship it", assigneeId: bobId, labelIds: [label], subtasks: ["Build", "Test"],
+    });
+    let task = await tool(token, "get_task", { taskId: created.id });
+    expect(task.owner).toEqual({ id: bobId, name: "Bob Durand" });
+    expect(task.labels).toEqual([{ id: label, name: "Urgent" }]);
+    expect(task.subtasks.map((s: { text: string; done: boolean }) => [s.text, s.done])).toEqual([["Build", false], ["Test", false]]);
+    expect(task.author).toEqual({ name: "Alice Martin", viaAgent: "Claude" });
+
+    const [build, test] = task.subtasks.map((s: { id: string }) => s.id);
+    expect(await tool(token, "update_subtask", { taskId: created.id, subtaskId: build, done: true })).toEqual({ ok: true });
+    expect((await tool(token, "add_subtasks", { taskId: created.id, texts: ["Release"] })).added).toHaveLength(1);
+    await tool(token, "update_subtask", { taskId: created.id, subtaskId: test, text: "Test it", position: 0 });
+    task = await tool(token, "get_task", { taskId: created.id });
+    expect(task.subtasks.map((s: { text: string }) => s.text)).toEqual(["Test it", "Build", "Release"]);
+    expect(task.subtasks[1]).toMatchObject({ done: true, doneBy: "Alice Martin" });
+    // A sub-task of another task is not this one's.
+    expect((await tool(token, "update_subtask", { taskId: personalTask, subtaskId: build, done: false })).error).toBe("Sub-task not found");
+
+    const other = await tool(token, "create_task", { pipeId: pipe, title: "First this" });
+    expect((await tool(token, "add_dependency", { taskId: created.id, waitsForTaskId: other.id })).waitsFor).toEqual([
+      { id: other.id, number: other.number, status: "backlog", done: false },
+    ]);
+    expect((await tool(token, "remove_dependency", { taskId: created.id, waitsForTaskId: other.id })).waitsFor).toEqual([]);
+
+    await tool(token, "update_task", { taskId: created.id, assigneeId: null, labelIds: [] });
+    task = await tool(token, "get_task", { taskId: created.id });
+    expect(task).toMatchObject({ owner: null, labels: [] });
+
+    await tool(token, "log_time", { taskId: created.id, minutes: 30 });
+    const logged = await tool(token, "list_time_entries", { taskId: created.id });
+    expect(logged).toMatchObject({ totalMinutes: 30, entries: [{ minutes: 30, yours: true }] });
+    const changed = await tool(token, "update_time_entry", { taskId: created.id, entryId: logged.entries[0].id, minutes: 45 });
+    expect(changed.totalMinutes).toBe(45);
+
+    // Deleting, as the person could.
+    expect(await tool(token, "delete_subtask", { taskId: created.id, subtaskId: build })).toEqual({ ok: true });
+    expect(await tool(token, "delete_time_entry", { taskId: created.id, entryId: logged.entries[0].id })).toEqual({ ok: true });
+    task = await tool(token, "get_task", { taskId: created.id });
+    expect(task.subtasks).toHaveLength(2);
+    expect(task.loggedMinutes).toBe(0);
+  });
+
+  it("deletes nothing without the Delete permission", async () => {
+    const writer = (await agentToken(["tasks:write"])).body.token;
+    const names = (await rpc(writer, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
+    expect(names).toEqual(expect.arrayContaining(["add_subtasks", "update_subtask", "add_dependency"]));
+    expect(names.filter((n: string) => n.startsWith("delete_"))).toEqual([]);
+  });
+
+  it("marks what it does as done over MCP", async () => {
+    const created = await tool(token, "create_task", { pipeId: pipe, title: "By the agent" });
+    const seen = (await alice.get(`/api/tasks/${created.id}`)).body;
+    expect(seen.createdVia).toEqual({ name: "Claude", kind: "agent" });
+    expect(seen.events[0].via).toEqual({ name: "Claude", kind: "agent" });
+    const byHand = (await alice.post("/api/tasks", { title: "By hand", pipeId: pipe })).body.id;
+    expect((await alice.get(`/api/tasks/${byHand}`)).body.createdVia).toBeNull();
+  });
+});
+
+describe("tasks handed to one's AI agent", () => {
+  let token: string, aliceId: string, bobId: string, pipe: string;
+  beforeAll(async () => {
+    token = (await agentToken(["tasks:write"])).body.token;
+    aliceId = (await alice.get("/api/me")).body.user.id;
+    bobId = (await bob.get("/api/me")).body.user.id;
+    pipe = (await alice.post(`/api/spaces/${team}/pipes`, { name: "Handed" })).body.id;
+  });
+
+  it("can be handed by its owner only, with an agent of theirs", async () => {
+    expect((await alice.get("/api/me")).body.hasAgent).toBe(true);
+    expect((await bob.get("/api/me")).body.hasAgent).toBe(false);
+    const task = (await alice.post("/api/tasks", { title: "For my agent", pipeId: pipe, assigneeId: aliceId })).body.id;
+    // Someone else cannot hand it to Alice's agent; Bob has no agent to hand his own tasks to.
+    expect((await bob.patch(`/api/tasks/${task}`, { assigneeAgent: true })).body.error).toBe("Only its owner can hand a task to their AI agent");
+    const bobs = (await bob.post("/api/tasks", { title: "Bob's", pipeId: pipe, assigneeId: bobId })).body.id;
+    expect((await bob.patch(`/api/tasks/${bobs}`, { assigneeAgent: true })).body.error).toBe("Make an AI agent first (Settings › AI agents)");
+
+    expect((await alice.patch(`/api/tasks/${task}`, { assigneeAgent: true })).status).toBe(200);
+    const handed = (await alice.get(`/api/tasks/${task}`)).body;
+    expect(handed.assignee).toMatchObject({ id: aliceId, agent: true });
+    expect(handed.events.at(-1)).toMatchObject({ from: { assignee: { id: aliceId } }, to: { assignee: { id: aliceId, agent: true } } });
+    expect(handed.events.at(-1).from.assignee.agent).toBeUndefined();
+
+    // The agent finds it among the tasks assigned to it.
+    const mine = await tool(token, "agent_tasks");
+    expect(mine.tasks.map((t: { id: string }) => t.id)).toEqual([task]);
+    expect(mine.tasks[0]).toMatchObject({ assignedToAgent: true, assignedToYou: true });
+
+    // Given to someone else, it is no longer the agent's.
+    await alice.patch(`/api/tasks/${task}`, { assigneeId: bobId });
+    expect((await alice.get(`/api/tasks/${task}`)).body.assignee).toMatchObject({ id: bobId, agent: false });
+    expect((await tool(token, "agent_tasks")).tasks).toEqual([]);
+  });
+
+  it("can be handed by the agent itself, for its person's own tasks", async () => {
+    const created = await tool(token, "create_task", { pipeId: pipe, title: "I take it", assigneeId: aliceId, assignToAgent: true });
+    expect(created).toMatchObject({ assignedToYou: true });
+    const back = await tool(token, "update_task", { taskId: created.id, assignToAgent: false });
+    expect(back).toMatchObject({ assignedToAgent: false, assignee: "Alice Martin" });
+    // In a personal space, the task is its holder's: the agent can take it too.
+    const personal = await tool(token, "update_task", { taskId: personalTask, assignToAgent: true });
+    expect(personal).toMatchObject({ assignedToYou: true });
+    expect((await tool(token, "update_task", { taskId: created.id, assigneeId: bobId, assignToAgent: true })).error).toBe(
+      "Only its owner can hand a task to their AI agent"
+    );
+  });
+});

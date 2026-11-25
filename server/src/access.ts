@@ -27,6 +27,7 @@ export const TASK_SELECT = `
          au.name AS author_name, au.avatar_url AS author_avatar,
          asg.name AS assignee_name, asg.avatar_url AS assignee_avatar,
          se.name AS sender_name, se.avatar_url AS sender_avatar,
+         cvt.name AS created_via_name, cvt.kind AS created_via_kind,
          (SELECT count(*) FROM task_events e WHERE e.task_id = t.id AND e.type = 'comment') AS comment_count,
          (SELECT l.state FROM task_links l WHERE l.task_id = t.id AND l.kind <> 'commit' ORDER BY l.updated_at DESC LIMIT 1) AS git_state,
          (SELECT json_build_object('total', count(*), 'done', count(*) FILTER (WHERE i.done),
@@ -42,7 +43,8 @@ export const TASK_SELECT = `
   LEFT JOIN pipes p ON p.id = t.pipe_id
   JOIN users au ON au.id = t.author_id
   LEFT JOIN users asg ON asg.id = t.assignee_id
-  LEFT JOIN users se ON se.id = t.sender_id`;
+  LEFT JOIN users se ON se.id = t.sender_id
+  LEFT JOIN api_tokens cvt ON cvt.id = t.created_via_token_id`;
 
 export const getTaskRow = (id: string, db?: Queryable) => one(`${TASK_SELECT} WHERE t.id = $1`, [id], db);
 

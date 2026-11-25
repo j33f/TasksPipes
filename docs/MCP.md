@@ -10,12 +10,19 @@ the server's environment; see [HOSTING.md](HOSTING.md#configuration)).
 
 - **It acts as you, never more.** Every tool goes through the same routes and checks as the app, with your rights.
 - **It reads; the rest is up to you.** When you connect an agent you choose what it may do besides reading: create
-  and change tasks, comment, log your time, send tasks to other people. Nothing it can do deletes anything.
+  and change tasks (everything you could change: owner, labels, sub-tasks, dependencies…), comment, log your time,
+  send tasks to other people, and delete as you could (sub-tasks, time entries, files — never a task). Deleting is
+  off unless you tick it.
 - **Only where you allow it.** All your spaces, or only the ones you pick: the others do not exist for it.
 - **Confidential content stays in the app.** Tasks of confidential and team-only pipes are never shown to an agent,
   even yours: what it is given goes to the company running the AI model. Lists say how many tasks were left out.
-- **What it does is visible.** It appears in the task's history as done by you, *via* the agent's name — a name
-  everyone who can open the task sees, so choose it accordingly — and the notifications others get are the usual ones.
+- **What it does is visible.** It appears in the task's history and comments as done by you, with an **MCP** tag
+  (hover it for the agent's name — a name everyone who can open the task sees, so choose it accordingly); a task it
+  created shows the tag next to its author. The notifications others get are the usual ones.
+- **Give it tasks of yours.** Once you have an agent, the owner list of your tasks offers **"<your name> (MCP)"**:
+  your agent. Only you can hand a task to your own agent; the task stays yours (rights, lists, notifications), and
+  goes back to you when its owner or space changes. Tell your agent to "work only on the tasks assigned to you": it
+  finds them with `agent_tasks`.
 - **Sending tasks reaches beyond its spaces.** *Send tasks to other people* lets the agent send a task of its spaces
   to anyone you could send it to yourself, and *Comment* lets it @mention people: grant them only when you need them.
 - **You can disconnect it at any time** (*Settings › AI agents › Disconnect*). An agent token lasts 7, 30 or 90 days,
@@ -62,16 +69,21 @@ sends you back to is what tells it apart (applications that registered on the fl
 | --- | --- | --- |
 | `whoami` | Who the agent acts for, and what it may do | — |
 | `docs_contents`, `read_docs` | The documentation of the version running (how TasksPipes works), by section or by a few words | — |
-| `list_spaces`, `get_space` | Your spaces and their pipes | — |
+| `list_spaces`, `get_space` | Your spaces, their pipes, members and labels | — |
 | `get_pipe` | A pipe: its columns (with their status), the task types it offers and their fields, its tasks | — |
 | `get_sprints` | The sprints of a pipe in sprints, its velocity, the points left and the end they point to | — |
 | `my_tasks` | Your tasks still to do | — |
+| `agent_tasks` | The tasks you handed to the agent ("<your name> (MCP)"), still to do | — |
 | `search_tasks` | Search the tasks you can see | — |
-| `get_task` | A task with its column, description, field values, sub-tasks and history | — |
-| `create_task`, `update_task`, `move_task` | Create a task in a pipe, change it (also its points, start date, sprint, estimate, task type and fields — files excepted), move it to another pipe | *Create and change tasks* |
+| `get_task` | A task with its column, owner, description, labels, field values, sub-tasks, dependencies, files and history | — |
+| `list_time_entries` | The time logged on a task | — |
+| `create_task`, `update_task`, `move_task` | Create a task in a pipe (with its sub-tasks), change anything of it (dates, priority, points, sprint, estimate, type, fields — files excepted, owner, its handing to the agent, labels), move it to another pipe | *Create and change tasks* |
+| `add_subtasks`, `update_subtask` | Add sub-tasks; check, uncheck, rename or reorder one | *Create and change tasks* |
+| `add_dependency`, `remove_dependency` | Make a task wait for another one, or stop it | *Create and change tasks* |
 | `add_comment` | Comment on a task | *Comment* |
-| `log_time` | Log your time on a task | *Log my time* |
+| `log_time`, `update_time_entry` | Log your time on a task, change one of your entries | *Log my time* |
 | `send_task` | Send a task to someone's incoming | *Send tasks to other people* |
+| `delete_subtask`, `delete_time_entry`, `delete_file` | Delete a sub-task, a time entry (yours, or any as an admin of the team) or a file | *Delete* |
 
 ## For administrators
 

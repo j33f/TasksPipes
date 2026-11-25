@@ -204,11 +204,14 @@ export function presentTask(t: Row) {
     pipe: t.pipe_id ? { id: t.pipe_id, name: t.pipe_name, visibility: t.pipe_visibility, kind: t.pipe_kind } : null,
     inIncoming: !t.pipe_id,
     author: { id: t.author_id, name: t.author_name, avatarUrl: t.author_avatar },
+    // Created through an access token or an AI agent (MCP): its name and kind.
+    createdVia: t.created_via_token_id ? { name: t.created_via_name, kind: t.created_via_kind } : null,
     // In a personal space the task belongs to that person; elsewhere to its (optional) assignee.
+    // agent: handed to that person's AI agent ("Toto (MCP)").
     assignee: t.space_user_id
-      ? { id: t.space_user_id, name: t.space_name, avatarUrl: t.space_user_avatar }
+      ? { id: t.space_user_id, name: t.space_name, avatarUrl: t.space_user_avatar, agent: Boolean(t.assignee_agent) }
       : t.assignee_id
-        ? { id: t.assignee_id, name: t.assignee_name, avatarUrl: t.assignee_avatar }
+        ? { id: t.assignee_id, name: t.assignee_name, avatarUrl: t.assignee_avatar, agent: Boolean(t.assignee_agent) }
         : null,
     sender: t.sender_id ? { id: t.sender_id, name: t.sender_name, avatarUrl: t.sender_avatar } : null,
     outlineDoc: t.outline_doc_id ? { id: t.outline_doc_id, title: t.outline_doc_title, url: t.outline_doc_url } : null,
@@ -342,6 +345,8 @@ interface Snapshot {
   /** Label of the board column, as shown at the time. */
   stage: string | null;
   assignee_id: string | null;
+  /** Handed to its owner's AI agent ("Toto (MCP)"). */
+  assignee_agent: boolean;
   due_date: string | null;
   doc: DocRef | null;
 }
@@ -352,6 +357,7 @@ const snapshot = (t: Row): Snapshot => ({
   status: t.status,
   stage: stageLabel(t.pipe_kind, t.stage),
   assignee_id: t.space_user_id ?? t.assignee_id,
+  assignee_agent: Boolean(t.assignee_agent),
   due_date: t.due_date,
   doc: t.outline_doc_id ? { id: t.outline_doc_id, title: t.outline_doc_title, url: t.outline_doc_url } : null,
 });
@@ -379,8 +385,8 @@ async function recordEvent(
     `INSERT INTO task_events (task_id, actor_id, type, comment,
        from_space_id, to_space_id, from_pipe_id, to_pipe_id, from_status, to_status,
        from_assignee_id, to_assignee_id, from_due_date, to_due_date, from_doc, to_doc,
-       from_stage, to_stage, details, via_token_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
+       from_stage, to_stage, details, via_token_id, from_assignee_agent, to_assignee_agent)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING id`,
     [
       taskId, actorId, type, comment || null,
       before?.space_id ?? null, after.space_id,
@@ -393,6 +399,7 @@ async function recordEvent(
       before?.stage ?? null, after.stage,
       details ? JSON.stringify(details) : null,
       viaToken(),
+      before ? Boolean(before.assignee_agent) : null, Boolean(after.assignee_agent),
     ]
   );
   // E-mail notifications it causes, in the same transaction.
@@ -471,7 +478,9 @@ export async function getEvents(taskId: string, lang: Locale) {
       : null,
     status: e[`${p}_status`],
     stage: e[`${p}_stage`] && localize(lang, e[`${p}_stage`]),
-    assignee: e[`${p}_assignee_id`] ? { id: e[`${p}_assignee_id`], name: e[`${p}_assignee_name`] } : null,
+    assignee: e[`${p}_assignee_id`]
+      ? { id: e[`${p}_assignee_id`], name: e[`${p}_assignee_name`], ...(e[`${p}_assignee_agent`] ? { agent: true } : {}) }
+      : null,
     dueDate: e[`${p}_due_date`],
     doc: e[`${p}_doc`],
   });
@@ -524,6 +533,27 @@ async function checkAssignee(spaceId: string, assigneeId: string | null, db?: Qu
       ? "The owner must be a member of the team"
       : "A task in a personal space belongs to its holder: send it to someone instead."
   );
+}
+
+/** Whether someone has an AI agent (MCP) that works: a token or OAuth grant neither revoked nor expired. */
+export async function hasAgent(userId: string, db?: Queryable): Promise<boolean> {
+  if (!config.mcpEnabled) return false;
+  return Boolean(await one(
+    `SELECT 1 FROM api_tokens WHERE user_id = $1 AND kind = 'agent' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now()) LIMIT 1`,
+    [userId], db
+  ));
+}
+
+/**
+ * Whether a task goes to its owner's AI agent ("Toto (MCP)"): only that person hands a task to their own agent
+ * (`owner`: who the task will belong to), and only with an agent that works.
+ */
+async function cleanAssigneeAgent(v: unknown, owner: string | null, uid: string): Promise<boolean> {
+  if (v === undefined || v === null || v === false) return false;
+  if (v !== true) throw bad("Invalid owner");
+  if (owner !== uid) throw bad("Only its owner can hand a task to their AI agent");
+  if (!(await hasAgent(uid))) throw bad("Make an AI agent first (Settings › AI agents)");
+  return true;
 }
 
 /**
@@ -643,6 +673,9 @@ export async function createTask(uid: string, byName: string, b: Record<string, 
     senderId = uid;
   }
   const assigneeId = await checkAssignee(spaceId, await ensureUser(optUuid(b.assigneeId, "Owner")));
+  // Handed at once to its owner's AI agent: the person of a personal space, or the chosen owner of a team's task.
+  const assigneeAgent = b.assigneeAgent === undefined ? false
+    : await cleanAssigneeAgent(b.assigneeAgent, (await one(`SELECT user_id FROM spaces WHERE id = $1`, [spaceId]))?.user_id ?? assigneeId, uid);
   // Straight into a sprint of the pipe (the board shows one).
   const sprint = b.sprintId ? await cleanSprintId(b.sprintId, pipeId, pipeId ? (await one(`SELECT kind FROM pipes WHERE id = $1`, [pipeId]))!.kind : null) : null;
   // Labels of the space, put by those who edit its tasks: in a pipe one adds to, or in an incoming of one's own.
@@ -654,11 +687,11 @@ export async function createTask(uid: string, byName: string, b: Record<string, 
     const row = await one(
       `INSERT INTO tasks (title, description, space_id, pipe_id, status, stage, position, assignee_id, due_date,
                           outline_doc_id, outline_doc_title, outline_doc_url, author_id, sender_id, task_type, fields, priority,
-                          estimate_minutes, points, sprint_id, start_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18,$19,$20,$21) RETURNING id`,
+                          estimate_minutes, points, sprint_id, start_date, assignee_agent, created_via_token_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_strip_nulls($16::jsonb),$17,$18,$19,$20,$21,$22,$23) RETURNING id`,
       [title, description, spaceId, pipeId, st, stage, position, assigneeId, dueDate,
        doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, uid, senderId, type.id, JSON.stringify(values), priority, estimate, points,
-       sprint?.id ?? null, startDate],
+       sprint?.id ?? null, startDate, assigneeAgent, viaToken()],
       client
     ).then((r) => getTaskRow(r!.id, client));
     if (labelIds.length) await setTaskLabels(client, row!.id, labelIds);
@@ -730,6 +763,8 @@ export async function apiRoutes(app: FastifyInstance) {
       // AI agents over MCP (mcp.ts): agent tokens can be made.
       mcp: config.mcpEnabled,
     },
+    // An AI agent that works: tasks can be handed to it ("me (MCP)").
+    hasAgent: await hasAgent(me(req)),
     // Choices of notifications: by e-mail when it is set up, and for push notifications.
     notificationPrefs: prefsOf((await one(`SELECT notification_prefs FROM users WHERE id = $1`, [me(req)]))?.notification_prefs),
   }));
@@ -1806,12 +1841,16 @@ export async function apiRoutes(app: FastifyInstance) {
     const uid = me(req);
     const { t, perms } = await loadTaskFor(req.params.id, uid, "editContent");
     const b = req.body || {};
-    if (["assigneeId", "dueDate", "startDate", "outlineDoc", "status", "stage", "sprintId"].some((k) => k in b) && !perms.manage) throw forbidden();
+    if (["assigneeId", "assigneeAgent", "dueDate", "startDate", "outlineDoc", "status", "stage", "sprintId"].some((k) => k in b) && !perms.manage) throw forbidden();
 
     const title = "title" in b ? text(b.title, "Title", { required: true, max: 300 }) : t.title;
     const description = "description" in b ? text(b.description, "Description") : t.description;
     const assigneeId =
       "assigneeId" in b ? await checkAssignee(t.space_id, await ensureUser(optUuid(b.assigneeId, "Owner"))) : t.assignee_id;
+    // To its owner's AI agent: as asked, else kept while the owner stays.
+    const assigneeAgent = "assigneeAgent" in b
+      ? await cleanAssigneeAgent(b.assigneeAgent, t.space_user_id ?? assigneeId, uid)
+      : Boolean(t.assignee_agent) && assigneeId === t.assignee_id;
     const dueDate = "dueDate" in b ? dateOrNull(b.dueDate) : t.due_date;
     const startDate = "startDate" in b ? startDateOrNull(b.startDate) : (t.start_date ?? null);
     if ("startDate" in b || "dueDate" in b) checkDates(startDate, dueDate);
@@ -1850,10 +1889,11 @@ export async function apiRoutes(app: FastifyInstance) {
       const row = await one(
         `UPDATE tasks SET title = $2, description = $3, assignee_id = $4, due_date = $5, status = $6, stage = $10,
            outline_doc_id = $7, outline_doc_title = $8, outline_doc_url = $9,
-           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, estimate_minutes = $14, points = $15, sprint_id = $16, start_date = $17, updated_at = now()
+           task_type = $11, fields = jsonb_strip_nulls(fields || $12::jsonb), priority = $13, estimate_minutes = $14, points = $15, sprint_id = $16, start_date = $17,
+           assignee_agent = $18, updated_at = now()
          WHERE id = $1 RETURNING id`,
         [t.id, title, description, assigneeId, dueDate, st, doc?.id ?? null, doc?.title ?? null, doc?.url ?? null, stage,
-         type.id, JSON.stringify(values), priority, estimate, points, sprintId, startDate],
+         type.id, JSON.stringify(values), priority, estimate, points, sprintId, startDate, assigneeAgent],
         client
       ).then(() => getTaskRow(t.id, client));
       if (labelIds) {

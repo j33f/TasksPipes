@@ -5,7 +5,7 @@
   import { t } from "../lib/i18n.svelte";
   import { awaitingSignIn } from "../lib/people";
 
-  let { value = $bindable(null), placeholder = t("Person"), exclude = [], users, onchange, anyone = false }: {
+  let { value = $bindable(null), placeholder = t("Person"), exclude = [], users, onchange, anyone = false, agents = [] }: {
     value?: string | null;
     placeholder?: string;
     exclude?: string[];
@@ -14,6 +14,8 @@
     onchange?: (v: string | null) => void;
     /** Also offer Outline colleagues who never signed in (a field naming someone, not a task or team for them). */
     anyone?: boolean;
+    /** People's AI agents to offer too ("Toto (MCP)"), as the value `agent:<their id>` (see agentValue). */
+    agents?: { id: string; name: string; disabled?: boolean }[];
   } = $props();
 
   const waiting = (id: string) => {
@@ -30,5 +32,8 @@
     {:else}
       <option value={u.id}>{u.name}</option>
     {/if}
+  {/each}
+  {#each agents as a (a.id)}
+    <option value={`agent:${a.id}`} disabled={a.disabled}>{t("{name} (MCP)", { name: a.name })}</option>
   {/each}
 </select>

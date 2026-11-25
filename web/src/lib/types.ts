@@ -4,6 +4,8 @@ export interface UserRef {
   id: string;
   name: string;
   avatarUrl?: string | null;
+  /** A task's owner: handed to that person's AI agent ("Toto (MCP)"). */
+  agent?: boolean;
 }
 
 /** An in-app notification (the bell): what happened on a task, until marked as read. */
@@ -46,6 +48,8 @@ export interface Me {
   features: { invitations: boolean; notifications: boolean; outline?: boolean; mcp?: boolean; outlineConnect?: boolean };
   /** E-mail notification choices, when e-mail is set up on the instance. */
   notificationPrefs?: NotificationPrefs;
+  /** One has an AI agent that works: tasks can be handed to it. */
+  hasAgent?: boolean;
 }
 
 export type NotificationMode = "immediate" | "digest" | "off";
@@ -230,6 +234,8 @@ export interface Task {
   pipe: { id: string; name: string; visibility: "private" | "open"; kind: string } | null;
   inIncoming: boolean;
   author: UserRef;
+  /** Created through an access token or an AI agent (MCP). */
+  createdVia?: { name: string; kind: "personal" | "agent" } | null;
   assignee: UserRef | null;
   sender: UserRef | null;
   outlineDoc: DocRef | null;
@@ -696,7 +702,7 @@ export interface ImportPreview {
 
 /** A personal access token of the public API (its value is only shown at creation). */
 /** What an agent token may do over MCP (server: api.ts MCP_SCOPES); reading always. */
-export type McpScope = "tasks:read" | "tasks:write" | "comments:write" | "time:write" | "tasks:send";
+export type McpScope = "tasks:read" | "tasks:write" | "comments:write" | "time:write" | "tasks:send" | "tasks:delete";
 
 export interface AccessToken {
   id: string;

@@ -183,7 +183,7 @@
     "It will be sent back to:": "Você será redirecionado para:",
     "Application described at:": "Aplicativo descrito em:",
     "Only allow it if you started this connection yourself, from an application you trust.": "Só autorize se você mesmo iniciou esta conexão, a partir de um aplicativo confiável.",
-    "It never sees confidential pipes and deletes nothing. You can disconnect it at any time in Settings › AI agents.": "Ele nunca vê os pipes confidenciais e não exclui nada. Você pode desconectá-lo a qualquer momento em Configurações › Agentes de IA.",
+    "It never sees confidential pipes, and deletes nothing unless you allow it above. You can disconnect it at any time in Settings › AI agents.": "Ele nunca vê os pipes confidenciais, e não exclui nada a menos que você permita acima. Você pode desconectá-lo a qualquer momento em Configurações › Agentes de IA.",
     "Allow": "Permitir",
     "Never expires": "Nunca expira",
     "never expires": "nunca expira",
@@ -210,7 +210,6 @@
     "Only these:": "Só estes:",
     "7 days": "7 dias",
     "Connect an agent": "Conectar um agente",
-    "Done by an AI agent acting for this person": "Feito por um agente de IA em nome desta pessoa",
     "Done through an access token": "Feito por meio de um token de acesso",
     "via {name}": "via {name}",
     "Allow AI agents": "Permitir agentes de IA",
@@ -1289,7 +1288,12 @@
     "Or an Outline API key": "Ou uma chave de API do Outline",
     "account connected": "conta conectada",
     "Outline account connected": "Conta do Outline conectada",
-    "Outline ended the connection: {error}. Connect the account again to start again.": "O Outline encerrou a conexão: {error}. Conecte a conta novamente para retomar."
+    "Outline ended the connection: {error}. Connect the account again to start again.": "O Outline encerrou a conexão: {error}. Conecte a conta novamente para retomar.",
+    "Done by the AI agent “{name}”, for this person": "Feito pelo agente de IA “{name}”, em nome desta pessoa",
+    "This person's AI agent (MCP)": "O agente de IA desta pessoa (MCP)",
+    "{name} (MCP)": "{name} (MCP)",
+    "Deletes": "Exclui",
+    "Delete, as I could: sub-tasks, time entries, files": "Excluir, como eu poderia: subtarefas, tempos registrados, arquivos"
   },
   "server": {
     "{label} is required": "{label}: obrigatório",
@@ -1757,7 +1761,10 @@
     "Connect the Outline account again in the pipe's reports (Outline section) to start again.": "Conecte a conta do Outline novamente nos relatórios do pipe (seção Outline) para retomar.",
     "Your Outline account is on another server: give an API key": "Sua conta do Outline está em outro servidor: informe uma chave de API",
     "Connecting to Outline failed": "A conexão com o Outline falhou",
-    "The Outline connection cannot be renewed": "A conexão com o Outline não pode ser renovada"
+    "The Outline connection cannot be renewed": "A conexão com o Outline não pode ser renovada",
+    "Invalid owner": "Responsável inválido",
+    "Only its owner can hand a task to their AI agent": "Só a pessoa responsável por uma tarefa pode confiá-la ao seu agente de IA",
+    "Make an AI agent first (Settings › AI agents)": "Crie primeiro um agente de IA (Configurações › Agentes de IA)"
   },
   "catalog": {
     "Prêt à démarrer": "Pronta para começar",

@@ -83,8 +83,10 @@ export function eventChanges(e: TaskEvent): string[] {
     const label = (side: typeof e.to) => side.stage ?? statusLabel(side.status);
     out.push(initial ? t("Column: {to}", { to: label(e.to) }) : t("Column: {from} → {to}", { from: label(e.from), to: label(e.to) }));
   }
-  if (initial ? e.to.assignee : !same(e.from.assignee?.id, e.to.assignee?.id)) {
-    const who = (a: { name: string } | null) => a?.name ?? t("nobody");
+  const owner = (a: { id: string; agent?: boolean } | null) => (a ? [a.id, Boolean(a.agent)] : null);
+  if (initial ? e.to.assignee : !same(owner(e.from.assignee), owner(e.to.assignee))) {
+    // Handed to the person's AI agent: "Toto (MCP)".
+    const who = (a: { name: string; agent?: boolean } | null) => (a ? (a.agent ? t("{name} (MCP)", { name: a.name }) : a.name) : t("nobody"));
     out.push(initial ? t("Owner: {to}", { to: who(e.to.assignee) }) : t("Owner: {from} → {to}", { from: who(e.from.assignee), to: who(e.to.assignee) }));
   }
   if (initial ? e.to.dueDate : e.from.dueDate !== e.to.dueDate) {

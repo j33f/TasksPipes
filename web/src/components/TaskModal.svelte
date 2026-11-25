@@ -12,6 +12,8 @@
   import Avatar from "./Avatar.svelte";
   import Icon, { iconOf } from "./Icon.svelte";
   import UserSelect from "./UserSelect.svelte";
+  import McpTag from "./McpTag.svelte";
+  import { agentChoices, ownerBody, ownerValue } from "../lib/agents";
   import DocPicker from "./DocPicker.svelte";
   import SendDialog from "./SendDialog.svelte";
   import RefuseDialog from "./RefuseDialog.svelte";
@@ -283,7 +285,7 @@
               <span class="event-icon"><Icon name={eventIcon(e.type)} size={14} /></span>
               <div class="e-body">
                 <div class="e-head">
-                  <strong>{e.actor.name}</strong>{#if e.via}<span class="e-via" title={e.via.kind === "agent" ? t("Done by an AI agent acting for this person") : t("Done through an access token")}> {t("via {name}", { name: e.via.name })}</span>{/if} {eventSummary(e)}
+                  <strong>{e.actor.name}</strong>{#if e.via?.kind === "agent"}<McpTag agent={e.via.name} />{:else if e.via}<span class="e-via" title={t("Done through an access token")}> {t("via {name}", { name: e.via.name })}</span>{/if} {eventSummary(e)}
                   <span class="e-time" title={formatDateTime(e.createdAt)}>{relativeTime(e.createdAt)}</span>
                 </div>
                 {#if eventChanges(e).length}
@@ -422,10 +424,20 @@
         <div class="prop">
           <span class="label-text">{t("Owner")}</span>
           {#if perms?.manage && task.space.kind === "team"}
-            <UserSelect value={task.assignee?.id ?? null} users={members} placeholder={t("Unassigned")}
-              onchange={(v) => patch({ assigneeId: v })} />
+            <UserSelect value={ownerValue(task.assignee)} users={members} placeholder={t("Unassigned")}
+              agents={agentChoices(members.some((m) => m.id === app.me?.user.id) ? app.me?.user : null, Boolean(app.me?.hasAgent), task.assignee)}
+              onchange={(v) => patch(ownerBody(v))} />
+          {:else if perms?.manage && task.space.kind === "user" && task.assignee?.id === app.me?.user.id && (app.me?.hasAgent || task.assignee?.agent)}
+            <!-- One's own task: kept, or handed to one's AI agent. -->
+            <select class="input" value={ownerValue(task.assignee)} onchange={(ev) => patch(ownerBody(ev.currentTarget.value))}>
+              <option value={task.assignee!.id}>{task.assignee!.name}</option>
+              {#each agentChoices(app.me?.user, Boolean(app.me?.hasAgent), task.assignee) as a (a.id)}
+                <option value={`agent:${a.id}`} disabled={a.disabled}>{t("{name} (MCP)", { name: a.name })}</option>
+              {/each}
+            </select>
+            <div class="hint">{t("Personal task. To hand it to someone, use “Send to…”.")}</div>
           {:else}
-            <div class="value">{#if task.assignee}<Avatar user={task.assignee} size={20} />{task.assignee.name}{:else}<span class="muted">{t("Unassigned")}</span>{/if}</div>
+            <div class="value">{#if task.assignee}<Avatar user={task.assignee} size={20} />{task.assignee.name}{#if task.assignee.agent}<McpTag />{/if}{:else}<span class="muted">{t("Unassigned")}</span>{/if}</div>
             {#if task.space.kind === "user" && perms?.manage}
               <div class="hint">{t("Personal task. To hand it to someone, use “Send to…”.")}</div>
             {/if}
@@ -498,7 +510,7 @@
 
         <div class="prop">
           <span class="label-text">{t("Author")}</span>
-          <div class="value"><Avatar user={task.author} size={20} />{task.author.name}</div>
+          <div class="value"><Avatar user={task.author} size={20} />{task.author.name}{#if task.createdVia?.kind === "agent"}<McpTag agent={task.createdVia.name} />{/if}</div>
         </div>
         <div class="prop">
           <span class="label-text">{t("Created")}</span>

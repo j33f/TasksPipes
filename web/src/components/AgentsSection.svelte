@@ -16,6 +16,7 @@
   let comment = $state(false);
   let time = $state(false);
   let send = $state(false);
+  let remove = $state(false);
   let everywhere = $state(true);
   let chosen = $state<string[]>([]);
   /** null: never expires. */
@@ -41,12 +42,15 @@
       ...(comment ? (["comments:write"] as const) : []),
       ...(time ? (["time:write"] as const) : []),
       ...(send ? (["tasks:send"] as const) : []),
+      ...(remove ? (["tasks:delete"] as const) : []),
     ];
     try {
       const r = await api.post<{ token: string }>("/me/tokens", {
         name, kind: "agent", scopes, days, ...(everywhere ? {} : { spaceIds: chosen }),
       });
       created = r.token;
+      // Tasks can now be handed to it ("me (MCP)").
+      app.refreshMe().catch(() => {});
       name = "";
       await load();
     } catch (err) {
@@ -56,7 +60,7 @@
 
   async function revoke(tk: AccessToken) {
     if (!confirm(t("Disconnect the agent “{name}”? It can no longer reach your tasks.", { name: tk.name }))) return;
-    await api.del(`/me/tokens/${tk.id}`).then(load).catch((err) => app.toast(errorMessage(err), "error"));
+    await api.del(`/me/tokens/${tk.id}`).then(() => { load(); app.refreshMe().catch(() => {}); }).catch((err) => app.toast(errorMessage(err), "error"));
   }
 
   const copy = (text: string) => navigator.clipboard.writeText(text).then(() => app.toast(t("Copied"))).catch(() => {});
@@ -94,6 +98,7 @@
         {#if tk.scopes.includes("comments:write")}<span class="badge">{t("Comments")}</span>{/if}
         {#if tk.scopes.includes("time:write")}<span class="badge">{t("Logs time")}</span>{/if}
         {#if tk.scopes.includes("tasks:send")}<span class="badge warn">{t("Sends tasks to others")}</span>{/if}
+        {#if tk.scopes.includes("tasks:delete")}<span class="badge warn">{t("Deletes")}</span>{/if}
         <span class="small muted">
           {tk.spaceIds ? tk.spaceIds.map(spaceName).join(", ") : t("All my spaces")}
           · {tk.expired ? t("expired") : tk.expiresAt ? t("expires on {date}", { date: formatDate(tk.expiresAt) }) : t("never expires")}
@@ -112,6 +117,7 @@
       <label><input type="checkbox" bind:checked={comment} /> {t("Comment")}</label>
       <label><input type="checkbox" bind:checked={time} /> {t("Log my time")}</label>
       <label><input type="checkbox" bind:checked={send} /> {t("Send tasks to other people")}</label>
+      <label><input type="checkbox" bind:checked={remove} /> {t("Delete, as I could: sub-tasks, time entries, files")}</label>
     </fieldset>
     <fieldset>
       <legend class="small">{t("Spaces it may reach:")}</legend>
