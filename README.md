@@ -60,12 +60,14 @@ follows Outline's look and feel.
 - **API and webhooks** — personal access tokens for a documented API (`/api/v1`, OpenAPI and Swagger UI), and
   signed webhooks sending a pipe's task events to your tools.
 - **AI agents (MCP)** — let an AI assistant (Claude, Cursor…) work on your tasks over MCP, with your rights and only
-  what you allow: reading, and if you wish creating and changing tasks, commenting, logging time, sending tasks, in
-  all your spaces or chosen ones. It never sees confidential pipes and deletes nothing; what it does shows in the
-  history *via* it. Off until an administrator turns it on; see [docs/MCP.md](docs/MCP.md).
+  what you allow: reading, and if you wish changing everything you could on tasks (sub-tasks, owner, labels,
+  dependencies…), commenting, logging time, sending tasks, deleting sub-tasks, time entries and files, in all your
+  spaces or chosen ones. It never sees confidential pipes and never deletes a task; what it does shows in the history
+  with an **MCP** tag, and you can hand tasks to your own agent ("<your name> (MCP)"). Off until an administrator
+  turns it on; see [docs/MCP.md](docs/MCP.md).
 - **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
   keeps a “Deleted account”), and administrators of the instance can disable accounts.
-- **Sub-tasks, history, live updates**, English, French, Spanish and Portuguese (Brazil and Portugal; a language is one file), light and dark themes.
+- **Sub-tasks, history, live updates, a right-click menu on tasks**, English, French, Spanish and Portuguese (Brazil and Portugal; a language is one file), light and dark themes.
 
 TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:
 course design, admissions, exams, Qualiopi quality, funding… But nothing ties it to training: the general,

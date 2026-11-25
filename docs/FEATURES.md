@@ -129,13 +129,14 @@ those types keep working. This is a personal choice: others still see every type
   Members of its space see all of it; others only *Open the task*.
 - **Deleting a task** (members of its space; from its right-click menu, or `DELETE /api/v1/tasks/:id`): for good,
   after a confirmation, with its history, comments, sub-tasks, files, logged time and dependencies. To keep a trace,
-  move it to *Abandoned* instead. AI agents never delete a task.
+  move it to *Dropped* instead. AI agents never delete a task.
 - **Owner**: a task in a personal space belongs to its holder; to hand it to someone, send it to their incoming. In a
   team space, the owner is chosen among the team's members.
 - **Sub-tasks**: a checklist inside the task. Paste several lines to add several items, rename, reorder by drag and
   drop; progress shows on cards.
 - **History**: every change is recorded with the state before and after — place, column, owner, due date, linked
-  document, fields, files, checked items — and its comment. Tasks are never deleted, they are moved to *Dropped*.
+  document, fields, files, checked items — and its comment. What an AI agent did shows an **MCP** tag next to the
+  person's name. A deleted task takes its history with it (see *Deleting a task*): move it to *Dropped* to keep one.
 - **GitHub / GitLab**: a pipe connected to repositories links the pull/merge requests and commits naming a task (its key,
   `TP-123`) and moves the task along: in progress for a draft, in review for an open request, done when merged. See
   [the integration guide](GIT-INTEGRATION.md).
