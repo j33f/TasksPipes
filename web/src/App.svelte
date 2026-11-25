@@ -7,6 +7,7 @@
   import { interceptLinks, navigate, router, setParams } from "./lib/router.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import TaskModal from "./components/TaskModal.svelte";
+  import TaskContextMenu from "./components/TaskContextMenu.svelte";
   import Icon from "./components/Icon.svelte";
   import Login from "./pages/Login.svelte";
   import MagicLogin from "./pages/MagicLogin.svelte";
@@ -230,6 +231,9 @@
   {:else if app.dialog === "inbox"}<InboxModal onclose={() => (app.dialog = null)} />{/if}
   {#if taskId}
     {#key taskId}<TaskModal id={taskId} onclose={() => app.openTask(null)} />{/key}
+  {/if}
+  {#if app.taskMenu}
+    {#key app.taskMenu}<TaskContextMenu {...app.taskMenu} onclose={() => (app.taskMenu = null)} />{/key}
   {/if}
 {/if}
 

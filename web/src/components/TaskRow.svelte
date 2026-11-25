@@ -13,7 +13,7 @@
   const due = $derived(dueState(task.dueDate, task.status));
 </script>
 
-<button class="list-item" data-task-id={task.id} onclick={() => app.openTask(task.id)}>
+<button class="list-item" data-task-id={task.id} onclick={() => app.openTask(task.id)} oncontextmenu={(e) => app.openTaskMenu(e, task)}>
   {#if task.inIncoming}<span class="badge">{t("Incoming")}</span>{:else}<StatusBadge {task} />{/if}
   <span class="title">{task.title}</span>
   <TaskBadges priority={task.priority} labels={task.labels} />

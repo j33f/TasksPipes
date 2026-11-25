@@ -172,6 +172,7 @@ export const V1_ROUTES: Record<string, Doc> = {
     tag: "Tasks", summary: "Change a task", params: idParams,
     body: { type: "object", properties: taskBody }, response: task,
   },
+  "DELETE /tasks/:id": { tag: "Tasks", summary: "Delete a task for good, with its history, sub-tasks, files and time (members of its space)", params: idParams, response: ok },
   "POST /tasks/:id/move": {
     tag: "Tasks", summary: "Move a task to a pipe of its space", params: idParams,
     body: { type: "object", required: ["pipeId"], properties: {

@@ -24,7 +24,7 @@
 </script>
 
 <div class="task-card" class:dragging data-task-card={task.id} {draggable} {ondragstart} {ondragend}
-  role="button" tabindex="0" onclick={() => app.openTask(task.id)}
+  role="button" tabindex="0" onclick={() => app.openTask(task.id)} oncontextmenu={(e) => app.openTaskMenu(e, task)}
   onkeydown={(e) => e.key === "Enter" && app.openTask(task.id)}>
   {#if type}<div class="t-type"><Icon name={iconOf(type.icon)} size={13} />{type.label}</div>{/if}
   <div class="t-title">{task.title}</div>

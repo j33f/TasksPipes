@@ -124,6 +124,12 @@ those types keep working. This is a personal choice: others still see every type
 
 ## Tasks
 
+- **Right-click menu**: a right click on a task's card or row (or the keyboard's menu key) opens its menu: open it,
+  change its column, priority or owner (one's own AI agent too), move it to another pipe of its space, or delete it.
+  Members of its space see all of it; others only *Open the task*.
+- **Deleting a task** (members of its space; from its right-click menu, or `DELETE /api/v1/tasks/:id`): for good,
+  after a confirmation, with its history, comments, sub-tasks, files, logged time and dependencies. To keep a trace,
+  move it to *Abandoned* instead. AI agents never delete a task.
 - **Owner**: a task in a personal space belongs to its holder; to hand it to someone, send it to their incoming. In a
   team space, the owner is chosen among the team's members.
 - **Sub-tasks**: a checklist inside the task. Paste several lines to add several items, rename, reorder by drag and

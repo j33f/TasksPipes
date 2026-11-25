@@ -25,6 +25,25 @@ describe("tasks", () => {
     expect(task.assignee.name).toBe("Alice Martin");
   });
 
+  it("can be deleted for good by the members of their space, with all of it", async () => {
+    const id = (await alice.post("/api/tasks", { title: "Throw away", pipeId: alicePipe, items: ["One", "Two"] })).body.id;
+    await alice.post(`/api/tasks/${id}/comments`, { body: "Soon gone" });
+    // Someone who cannot even see it, and someone outside its space, cannot delete it.
+    expect((await carol.del(`/api/tasks/${id}`)).status).toBe(404);
+    expect((await alice.del(`/api/tasks/${id}`)).body).toEqual({ ok: true });
+    expect((await alice.get(`/api/tasks/${id}`)).status).toBe(404);
+    expect((await alice.del(`/api/tasks/${id}`)).status).toBe(404);
+  });
+
+  it("can be deleted only by members, not by the author of a task in someone's open pipe", async () => {
+    const team = (await bob.post("/api/spaces", { name: "Delete rights" })).body.id;
+    const open = (await bob.post(`/api/spaces/${team}/pipes`, { name: "Open board", visibility: "open" })).body.id;
+    const id = (await alice.post("/api/tasks", { title: "Alice's in Bob's team", pipeId: open })).body.id;
+    expect((await alice.get(`/api/tasks/${id}`)).status).toBe(200);
+    expect((await alice.del(`/api/tasks/${id}`)).status).toBe(403);
+    expect((await bob.del(`/api/tasks/${id}`)).status).toBe(200);
+  });
+
   it("need a title and a valid due date", async () => {
     expect((await alice.post("/api/tasks", { title: " ", pipeId: alicePipe })).body.error).toBe("Title is required");
     expect((await alice.post("/api/tasks", { title: "x", pipeId: alicePipe, dueDate: "tomorrow" })).body.error).toBe("Invalid due date");
