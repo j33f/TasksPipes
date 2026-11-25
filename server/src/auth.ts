@@ -126,16 +126,20 @@ export const outlineGrant = (code: string) =>
 /** Back on the sign-in page with a message (a provider's sign-in that went wrong). */
 export const loginError = (reply: FastifyReply, message: string) => reply.redirect(`/login?error=${encodeURIComponent(message)}`);
 
-/** Inserts or updates a user coming from Outline and makes sure they have a personal space. */
 /**
  * Inserts or updates a user coming from an Outline server and makes sure they have a personal space.
  * Returns their internal id: the Outline id on the configured server, a new id on another one.
+ * `db` must be a transaction (tx): the account's lock lasts until it ends.
  */
 export async function upsertOutlineUser(
   db: Queryable,
   u: OutlineUser,
   { login = false, instance = config.outlineUrl, lang = config.defaultLocale as Locale } = {}
 ): Promise<string> {
+  // One transaction at a time per account: a sign-in during the import of its workspace (syncWorkspaceUsers), or two
+  // sign-ins. Otherwise both may insert it, and the second fails on users_outline_idx, which ON CONFLICT (id) does
+  // not cover; with the lock, the second waits for the first, then finds its row.
+  await db.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [`outline-user:${instance}:${u.id}`]);
   const { rows } = await db.query(
     `INSERT INTO users (id, name, email, avatar_url, last_login_at, outline_url, outline_id)
      VALUES (
@@ -218,10 +222,10 @@ async function syncWorkspaceUsers(token: string, instance: string) {
   for (let offset = 0; offset < 10000; offset += limit) {
     const { data } = await outlineApi<OutlineUser[]>(token, "users.list", { limit, offset }, instance);
     if (!data?.length) break;
+    // In the same order every time, so that two imports at once never wait for each other's locks.
+    const people = data.filter((u) => !u.isSuspended).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     await tx(async (client) => {
-      for (const u of data) {
-        if (!u.isSuspended) await upsertOutlineUser(client, u, { instance });
-      }
+      for (const u of people) await upsertOutlineUser(client, u, { instance });
     });
     if (data.length < limit) break;
   }
