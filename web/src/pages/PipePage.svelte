@@ -469,7 +469,8 @@
   /* The icon and the name on one line (the name wraps); the badges below when they do not fit. */
   .page-header h1 { gap: 6px; flex-wrap: wrap; align-items: flex-start; }
   .title-row { display: flex; align-items: flex-start; gap: 6px; flex: 1 1 100%; min-width: 0; }
-  .title-row > :global(:first-child) { flex-shrink: 0; margin-top: 4px; }
+  /* The icon (28px and the picker's 4px padding: 36px) centred on the title's first line (line-height 1.2em). */
+  .title-row > :global(:first-child) { flex-shrink: 0; margin-top: calc(0.6em - 18px); }
   .page-header h1 :global(.badge) { margin-left: 4px; }
   .title-input {
     font: inherit; color: inherit; border: 0; outline: none; background: none; padding: 0 2px; margin: 0;
