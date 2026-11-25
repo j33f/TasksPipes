@@ -12,8 +12,11 @@ const task = (over: Partial<Task> = {}) => ({
 }) as unknown as Task;
 
 let calls: { method: string; url: string; body: any }[];
+let refresh: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   calls = [];
+  // After an action the app reads its shared data again: not here, where every answer is made up.
+  refresh = vi.spyOn(app, "refresh").mockImplementation(() => {});
   app.me = { user: { id: "u1", name: "Toto" }, personalSpaceId: "s1", features: { invitations: true, notifications: false }, hasAgent: true } as never;
   app.spaces = [{ id: "team1", kind: "team", name: "Team", myRole: "member" }] as never;
   app.pipeTypes = [{ id: "general", columns: [
@@ -33,6 +36,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   app.spaces = [];
   app.me = undefined;
 });
@@ -52,6 +56,7 @@ describe("the menu of a task", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: /Column/ }));
     await userEvent.click(screen.getByRole("menuitem", { name: "Done" }));
     expect(change()).toMatchObject({ method: "PATCH", url: "/api/tasks/t1", body: { stage: "done" } });
+    expect(refresh).toHaveBeenCalled();
     expect(onclose).toHaveBeenCalled();
   });
 
