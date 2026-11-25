@@ -48,12 +48,12 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: taskspipes
 resources:
-  - github.com/j33f/TasksPipes//deploy/kubernetes/base?ref=v0.31.2
-  - github.com/j33f/TasksPipes//deploy/kubernetes/backup?ref=v0.31.2   # optional
+  - github.com/j33f/TasksPipes//deploy/kubernetes/base?ref=v0.32.0
+  - github.com/j33f/TasksPipes//deploy/kubernetes/backup?ref=v0.32.0   # optional
   - ingress.yaml                                                        # yours
 images:
   - name: ghcr.io/j33f/taskspipes
-    newTag: "0.31.2"
+    newTag: "0.32.0"
 ```
 
 ### The Secret
