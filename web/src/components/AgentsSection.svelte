@@ -24,7 +24,7 @@
     { scope: "comments:write", label: () => t("Comment") },
     { scope: "time:write", label: () => t("Log my time") },
     { scope: "tasks:send", label: () => t("Send tasks to other people") },
-    { scope: "pipes:write", label: () => t("Create pipes in my spaces") },
+    { scope: "pipes:write", label: () => t("Create and move pipes in my spaces") },
     { scope: "models:write", label: () => t("Create and change my models (pipe and task types)") },
     { scope: "tasks:delete", label: () => t("Delete, as I could: sub-tasks, time entries, files, my models") },
   ];

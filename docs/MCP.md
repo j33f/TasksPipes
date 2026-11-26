@@ -11,7 +11,7 @@ the server's environment; see [HOSTING.md](HOSTING.md#configuration)).
 - **It acts as you, never more.** Every tool goes through the same routes and checks as the app, with your rights.
 - **It reads; the rest is up to you.** When you connect an agent you choose what it may do besides reading: create
   and change tasks (everything you could change: owner, labels, sub-tasks, dependencies…), comment, log your time,
-  send tasks to other people, create pipes in your spaces, create and change your models (pipe and task types), and delete as you could
+  send tasks to other people, create pipes in your spaces and move them to your teams, create and change your models (pipe and task types), and delete as you could
   (sub-tasks, time entries, files, and your models when it may make them — never a task). Deleting is off unless you
   tick it.
 - **Only where you allow it.** All your spaces, or only the ones you pick: the others do not exist for it.
@@ -94,7 +94,8 @@ agent is told to ask you for it rather than claim it was done.
 | `add_comment` | Comment on a task | *Comment* |
 | `log_time`, `update_time_entry` | Log your time on a task, change one of your entries | *Log my time* |
 | `send_task` | Send a task to someone's incoming | *Send tasks to other people* |
-| `create_pipe` | Create a pipe in one of your spaces, from a pipe type, with its starter tasks if you wish | *Create pipes in my spaces* |
+| `create_pipe` | Create a pipe in one of your spaces, from a pipe type, with its starter tasks if you wish | *Create and move pipes in my spaces* |
+| `move_pipe` | Move a pipe and all its tasks to one of your teams: your own personal pipe (not *Personal*), or a pipe of a team you are an admin of | *Create and move pipes in my spaces* |
 | `list_models`, `get_model` | The models pipes and tasks are made from: pipe types (columns, task types offered, starter tasks) and task types (fields) | — |
 | `create_pipe_type`, `update_pipe_type`, `create_task_type`, `update_task_type` | Make models of your own, change those you made (only what is given changes) | *Create and change my models* |
 | `delete_subtask`, `delete_time_entry`, `delete_file` | Delete a sub-task, a time entry (yours, or any as an admin of the team) or a file | *Delete* |
