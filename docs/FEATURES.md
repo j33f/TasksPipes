@@ -317,7 +317,8 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   **read and write**. It acts with exactly your rights, through the same checks as the app, and can be revoked at
   any time; a disabled account's tokens stop working.
 - **API `/api/v1`** — the documented, versioned part of the API: your account, people, spaces, pipes and their tasks,
-  your tasks, the calendar, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, logged time, sub-tasks, and the
+  your tasks, the calendar, search, creating, changing, moving, sending and commenting tasks, dependencies, labels, logged time, sub-tasks, models
+  (pipe and task types: listing, making, changing and deleting one's own), and the
   sprints of a pipe with its velocity, progress and their burndowns. Send the token as
   `Authorization: Bearer tp_…`. Its OpenAPI description is at `/api/v1/openapi.json`, browsable at **`/api/v1/docs`**
   (Swagger UI). Tokens are accepted on `/api/v1` only, and never manage tokens, account settings, data export,
@@ -325,7 +326,8 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
 - **AI agents (MCP)** (*Settings › AI agents*, once an administrator turned them on) — let an AI assistant (Claude,
   Cursor…) work on your tasks over MCP, at `/mcp`. It acts with your rights, reads, and does only what you allow
   besides (create and change tasks — everything you could change, sub-tasks and dependencies included —, comment, log
-  time, send tasks to others, delete sub-tasks, time entries and files as you could), in all your spaces or only those
+  time, send tasks to others, make and change your models, delete sub-tasks, time entries, files and your models as
+  you could), in all your spaces or only those
   you pick; it never sees confidential or team-only pipes and never deletes a task. What it does shows in the history
   and comments with an **MCP** tag, and a task it created shows the tag next to its author; tasks changed through an
   access token show *via* the token. You can hand a task of yours to your agent: the owner list offers

@@ -407,3 +407,77 @@ describe("tasks handed to one's AI agent", () => {
     );
   });
 });
+
+describe("models over MCP", () => {
+  let reader: string, maker: string, deleter: string;
+  beforeAll(async () => {
+    reader = (await agentToken([])).body.token;
+    maker = (await agentToken(["models:write"])).body.token;
+    deleter = (await agentToken(["models:write", "tasks:delete"])).body.token;
+  });
+
+  it("are read by any agent, never a confidential one", async () => {
+    const names = (await rpc(reader, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
+    expect(names).toEqual(expect.arrayContaining(["list_models", "get_model"]));
+    expect(names).not.toContain("create_pipe_type");
+    const models = await tool(reader, "list_models");
+    expect(models.pipeTypes.map((t: { id: string }) => t.id)).toContain("general");
+    expect(models.pipeTypes.map((t: { id: string }) => t.id)).not.toContain("garde_alternee");
+    expect(models.taskTypes.map((t: { id: string }) => t.id)).not.toContain("echange_garde");
+    const general = await tool(reader, "get_model", { kind: "pipe", id: "general" });
+    expect(general).toMatchObject({ kind: "pipe", id: "general", custom: false, yours: false });
+    expect(general.columns.some((c: { status: string }) => c.status === "done")).toBe(true);
+    expect((await tool(reader, "get_model", { kind: "pipe", id: "garde_alternee" })).error).toMatch(/not found/);
+  });
+
+  it("are made and changed by an agent allowed to, as its person", async () => {
+    const names = (await rpc(maker, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
+    expect(names).toEqual(expect.arrayContaining(["create_pipe_type", "update_pipe_type", "create_task_type", "update_task_type"]));
+    expect(names).not.toContain("delete_model");
+
+    const lead = await tool(maker, "create_task_type", { label: "Prospect", fields: [{ label: "Budget", type: "money" }, { label: "Source", type: "select", options: ["Web", "Fair"] }] });
+    expect(lead).toMatchObject({ kind: "task", label: "Prospect", custom: true, yours: true, visibility: "private" });
+    expect(lead.fields.map((f: { type: string }) => f.type)).toEqual(["money", "select"]);
+    const pipe = await tool(maker, "create_pipe_type", {
+      label: "Prospects", taskTypes: [lead.id], templates: ["Call the first lead"],
+      columns: [{ label: "To call", status: "backlog" }, { label: "Calling", status: "started" }, { label: "Signed", status: "done" }],
+    });
+    expect(pipe).toMatchObject({ kind: "pipe", label: "Prospects", yours: true, templates: ["Call the first lead"] });
+    expect(pipe.taskTypes.map((t: { id: string }) => t.id)).toEqual(["task", lead.id]);
+
+    // Only what is given changes; columns keep their ids.
+    const kept = pipe.columns.slice(0, 2).concat([{ ...pipe.columns[2], label: "Won" }]);
+    const changed = await tool(maker, "update_pipe_type", { id: pipe.id, label: "Sales prospects", columns: kept });
+    expect(changed).toMatchObject({ label: "Sales prospects", templates: ["Call the first lead"] });
+    expect(changed.columns.map((c: { id: string }) => c.id)).toEqual(pipe.columns.map((c: { id: string }) => c.id));
+    expect(changed.columns[2].label).toBe("Won");
+    const typed = await tool(maker, "update_task_type", { id: lead.id, description: "Someone who may buy" });
+    expect(typed).toMatchObject({ description: "Someone who may buy" });
+    expect(typed.fields).toHaveLength(2);
+    // The person can use it at once.
+    const space = (await alice.get("/api/me")).body.personalSpaceId;
+    expect((await alice.post(`/api/spaces/${space}/pipes`, { name: "Prospecting", kind: pipe.id })).status).toBe(200);
+
+    // Built-in models, others' models and confidential task types stay as they are.
+    expect((await tool(maker, "update_pipe_type", { id: "general", label: "Mine" })).error).toMatch(/built-in types can be duplicated/);
+    const bobs = (await bob.post("/api/catalog/task-types", { label: "Bob's", visibility: "public" })).body.id;
+    expect((await tool(maker, "update_task_type", { id: bobs, label: "Taken" })).error).toMatch(/Only the author/);
+    expect((await tool(maker, "create_pipe_type", {
+      label: "Sneaky", taskTypes: ["echange_garde"], columns: [{ label: "A", status: "backlog" }, { label: "B", status: "done" }],
+    })).error).toMatch(/not found/);
+
+    // Recorded as the person's.
+    expect((await alice.get("/api/catalog")).body.pipeTypes.find((t: { id: string }) => t.id === pipe.id).createdBy.name).toBe("Alice Martin");
+  });
+
+  it("are deleted only with the Delete permission too, once unused", async () => {
+    const names = (await rpc(deleter, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
+    expect(names).toContain("delete_model");
+    const t = await tool(deleter, "create_task_type", { label: "Short-lived", fields: [] });
+    expect(await tool(deleter, "delete_model", { kind: "task", id: t.id })).toEqual({ ok: true });
+    expect((await tool(deleter, "get_model", { kind: "task", id: t.id })).error).toMatch(/not found/);
+    const used = (await tool(deleter, "list_models")).pipeTypes.find((p: { label: string }) => p.label === "Sales prospects");
+    expect((await tool(deleter, "delete_model", { kind: "pipe", id: used.id })).error).toMatch(/use this type/);
+  });
+});
+

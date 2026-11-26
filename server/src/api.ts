@@ -11,6 +11,7 @@ import { config } from "./config.js";
 import { one, query } from "./db.js";
 import { HttpError, bad, forbidden, notFound } from "./errors.js";
 import { LIMITS, enforceLimit, rateLimited } from "./rate-limit.js";
+import { FIELD_TYPES, STATUSES } from "./pipeTypes.js";
 
 export const V1 = "/api/v1";
 const TOKEN = /^tp_[A-Za-z0-9_-]{43}$/;
@@ -18,7 +19,7 @@ export const MAX_TOKEN_DAYS = 366;
 /** Agent tokens (MCP) live 90 days at most when they expire; any token may also never expire (days: null). */
 export const MAX_AGENT_TOKEN_DAYS = 90;
 /** What an agent token may do over MCP (mcp.ts); reading is always among them. */
-export const MCP_SCOPES = ["tasks:read", "tasks:write", "comments:write", "time:write", "tasks:send", "tasks:delete"] as const;
+export const MCP_SCOPES = ["tasks:read", "tasks:write", "comments:write", "time:write", "tasks:send", "models:write", "tasks:delete"] as const;
 export type McpScope = (typeof MCP_SCOPES)[number];
 /**
  * The MCP endpoint calls /api/v1 itself (app.inject) with the agent's token and this header: agent tokens are refused
@@ -108,6 +109,42 @@ const taskBody = {
   points: { type: "integer", enum: [0, 1, 2, 3, 5, 8, 13, 21, 40, 100], nullable: true, description: "Complexity points; null for none" },
   labelIds: { type: "array", items: uuid, description: "Labels of the task's space (all of them: the others are taken off)" },
   estimateMinutes: { type: "integer", minimum: 1, maximum: 60000, nullable: true, description: "Estimate, in minutes; null for none" },
+} as const;
+
+const catalogKindParams = {
+  type: "object", required: ["kind"],
+  properties: { kind: { type: "string", enum: ["pipe-types", "task-types"], description: "pipe-types or task-types" } },
+} as const;
+/** A model's definition (see docs/MODELS.md): the pipe type's properties, or the task type's. */
+const modelBody = {
+  type: "object", required: ["label"],
+  properties: {
+    label: { type: "string", maxLength: 60 },
+    group: { type: "string", maxLength: 40, description: "Category (\"Custom models\" by default)" },
+    visibility: { type: "string", enum: ["private", "public"], description: "private (default): only its author may use it" },
+    description: { type: "string", maxLength: 500 },
+    icon: { type: "string", maxLength: 40, description: "An icon name or an emoji" },
+    color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$", description: "Pipe types: the colour" },
+    columns: {
+      type: "array", maxItems: 15, description: "Pipe types: 2 to 15 columns, one at least in the done state",
+      items: { type: "object", required: ["label", "status"], properties: {
+        id: { type: "string", description: "Keep it to keep a column's tasks" }, label: { type: "string" },
+        status: { type: "string", enum: STATUSES }, color: { type: "string" }, wipLimit: { type: "integer", minimum: 1, maximum: 999 },
+      } },
+    },
+    taskTypes: { type: "array", maxItems: 40, items: { type: "string" }, description: "Pipe types: the ids of the task types its pipes offer" },
+    templates: { type: "array", maxItems: 50, items: { type: "string" }, description: "Pipe types: starter tasks, offered when a pipe is made" },
+    confidential: { type: "boolean", description: "Pipe types: its tasks never reach AI agents, webhooks or e-mails" },
+    teamOnly: { type: "boolean", description: "Pipe types: only in team spaces (and confidential)" },
+    timeReport: { type: "boolean" }, sprints: { type: "boolean" }, planningPoker: { type: "boolean" },
+    fields: {
+      type: "array", maxItems: 40, description: "Task types: its fields (an existing field keeps its id and type)",
+      items: { type: "object", required: ["label", "type"], properties: {
+        id: { type: "string" }, label: { type: "string" }, type: { type: "string", enum: FIELD_TYPES },
+        options: { type: "array", items: { type: "string" }, description: "select and multiselect fields" }, hint: { type: "string" },
+      } },
+    },
+  },
 } as const;
 
 interface Doc {
@@ -223,6 +260,24 @@ export const V1_ROUTES: Record<string, Doc> = {
   },
   "DELETE /items/:id": { tag: "Sub-tasks", summary: "Delete a sub-task", params: idParams, response: ok },
   "DELETE /files/:id": { tag: "Tasks", summary: "Delete a file of a task's files field", params: idParams, response: ok },
+  "GET /catalog": {
+    tag: "Models", summary: "The pipe types and task types (built-in and made with the designer), in the language of the request",
+    response: object("Pipe types and task types", { pipeTypes: list("Pipe types"), taskTypes: list("Task types") }),
+  },
+  "POST /catalog/:kind": {
+    tag: "Models", summary: "Create a model: a pipe type (pipe-types) or a task type (task-types), private unless made public",
+    params: catalogKindParams, body: modelBody, response: object("The new model", { id: { type: "string" } }),
+  },
+  "PUT /catalog/:kind/:id": {
+    tag: "Models", summary: "Replace a model one made (the whole definition; columns and fields keep their ids)",
+    params: { type: "object", required: ["kind", "id"], properties: { ...catalogKindParams.properties, id: { type: "string" } } },
+    body: modelBody, response: ok,
+  },
+  "DELETE /catalog/:kind/:id": {
+    tag: "Models", summary: "Delete a model one made, once no pipe or task uses it",
+    params: { type: "object", required: ["kind", "id"], properties: { ...catalogKindParams.properties, id: { type: "string" } } },
+    response: ok,
+  },
 };
 
 /**
