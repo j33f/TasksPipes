@@ -391,6 +391,17 @@ describe("tasks handed to one's AI agent", () => {
     // In a personal space, the task is its holder's: the agent can take it too.
     const personal = await tool(token, "update_task", { taskId: personalTask, assignToAgent: true });
     expect(personal).toMatchObject({ assignedToYou: true });
+    // As the web sends it: its holder named as the owner, with or without the agent.
+    expect((await alice.patch(`/api/tasks/${personalTask}`, { assigneeId: aliceId, assigneeAgent: false })).status).toBe(200);
+    expect((await alice.get(`/api/tasks/${personalTask}`)).body.assignee).toMatchObject({ id: aliceId, agent: false });
+    expect((await alice.patch(`/api/tasks/${personalTask}`, { assigneeId: aliceId, assigneeAgent: true })).status).toBe(200);
+    expect((await alice.get(`/api/tasks/${personalTask}`)).body.assignee).toMatchObject({ id: aliceId, agent: true });
+    const fresh = (await alice.post("/api/tasks", { title: "Mine, for the agent", pipeId: personalPipe, assigneeId: aliceId, assigneeAgent: true })).body.id;
+    expect((await alice.get(`/api/tasks/${fresh}`)).body.assignee).toMatchObject({ id: aliceId, agent: true });
+    // Someone else still cannot own it.
+    expect((await alice.patch(`/api/tasks/${personalTask}`, { assigneeId: bobId })).body.error).toBe(
+      "A task in a personal space belongs to its holder: send it to someone instead."
+    );
     expect((await tool(token, "update_task", { taskId: created.id, assigneeId: bobId, assignToAgent: true })).error).toBe(
       "Only its owner can hand a task to their AI agent"
     );

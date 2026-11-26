@@ -522,8 +522,15 @@ async function keptAssignee(spaceId: string, assigneeId: string | null, db?: Que
   return s?.kind === "team" && (await memberRole(spaceId, assigneeId, db)) ? assigneeId : null;
 }
 
-/** Like keptAssignee, but rejects an assignee that was explicitly asked for and cannot be kept. */
+/**
+ * Like keptAssignee, but rejects an assignee that was explicitly asked for and cannot be kept. In a personal space, its
+ * holder is the owner already: naming them is naming no one (the web's owner choice sends them, with or without their
+ * AI agent).
+ */
 async function checkAssignee(spaceId: string, assigneeId: string | null, db?: Queryable): Promise<string | null> {
+  if (assigneeId && (await one(`SELECT 1 FROM spaces WHERE id = $1 AND kind = 'user' AND user_id = $2`, [spaceId, assigneeId], db))) {
+    return null;
+  }
   const disabled = assigneeId && (await one(`SELECT 1 FROM users WHERE id = $1 AND disabled_at IS NOT NULL`, [assigneeId], db));
   if (assigneeId) await assertSignedInOnce(assigneeId, db);
   if (!assigneeId || (!disabled && (await keptAssignee(spaceId, assigneeId, db)))) return assigneeId;
