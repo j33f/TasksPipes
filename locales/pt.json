@@ -1321,7 +1321,10 @@
     "Claim editing": "Pedir a edição",
     "{name} asks to edit this task.": "{name} pede para editar esta tarefa.",
     "Without an answer, it goes to them in {n} s.": "Sem resposta, passa para essa pessoa dentro de {n} s.",
-    "{name} just changed this task through an access token.": "{name} acabou de alterar esta tarefa através de um token de acesso."
+    "{name} just changed this task through an access token.": "{name} acabou de alterar esta tarefa através de um token de acesso.",
+    "With its whole pipe": "Com todo o seu pipe",
+    "Move the pipe “{pipe}” and all its tasks to the team {team}? Its members will see and change them; owners who are not members are unassigned.": "Mover o pipe «{pipe}» e todas as suas tarefas para a equipa {team}? Os seus membros poderão vê-las e alterá-las; os responsáveis que não são membros ficam sem atribuição.",
+    "“{pipe}” moved to {team}": "«{pipe}» movido para {team}"
   },
   "server": {
     "{label} is required": "{label}: obrigatório",
@@ -1797,7 +1800,11 @@
     "{name} already asked for it": "{name} já a pediu",
     "Invalid page": "Página inválida",
     "Invalid answer": "Resposta inválida",
-    "Only the pages of the app lock tasks": "Só as páginas da aplicação bloqueiam tarefas"
+    "Only the pages of the app lock tasks": "Só as páginas da aplicação bloqueiam tarefas",
+    "Only an admin of the team can move its pipes elsewhere": "Só um administrador da equipa pode mover os seus pipes para outro lado",
+    "The default pipe of a personal space cannot be moved": "O pipe predefinido de um espaço pessoal não pode ser movido",
+    "This pipe is already in this space": "Este pipe já está neste espaço",
+    "A pipe can only be moved to a team": "Um pipe só pode ser movido para uma equipa"
   },
   "catalog": {
     "Prêt à démarrer": "Pronta para começar",

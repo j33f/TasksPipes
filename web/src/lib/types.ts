@@ -315,6 +315,8 @@ export interface TaskEvent {
     dependency?: "added" | "removed";
     /** Moved forward while it still waited for other tasks. */
     whileBlocked?: boolean;
+    /** Moved to another space along with its whole pipe (event "moved"). */
+    withPipe?: boolean;
     priority?: { from: Priority | null; to: Priority | null };
     points?: { from: number | null; to: number | null };
     /** The points were set at Planning Poker. */

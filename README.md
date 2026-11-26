@@ -23,7 +23,7 @@ This is the source code of **TasksPipes**, a multi-user task manager built aroun
 people sign in with their Outline account, link Outline documents to their tasks, and work in an interface that
 follows Outline's look and feel.
 
-- **Pipes** — kanban boards with their own columns, personal or shared with a team, private or open to everyone.
+- **Pipes** — kanban boards with their own columns, personal or shared with a team, private or open to everyone; drag a personal pipe onto a team to share it, tasks included.
 - **Incoming buckets** — send a task to someone or to a team; they accept it into a pipe or refuse it with a reason.
 - **My tasks** and **Next action** — everything assigned to you across pipes, and a GTD view suggesting what to start next.
 - **Task types and fields** — course design, sales opportunity, user story, bug… with dates, amounts, files and Outline documents.

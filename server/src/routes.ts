@@ -1756,6 +1756,81 @@ export async function apiRoutes(app: FastifyInstance) {
     return { created };
   });
 
+  // Moving a pipe to a team, with all its tasks: from one's personal space (its owner), or from a team (one of its
+  // admins, as it leaves that team). Tasks follow, each noted in its history; labels go to the team's labels of the
+  // same name (made when missing); personal tasks go to the space's owner, and owners who are not members of the team
+  // are unassigned.
+  app.post("/pipes/:id/move", async (req: Req) => {
+    const uid = me(req);
+    const { p, role } = await loadPipeFor(req.params.id, uid);
+    if (!role) throw forbidden();
+    const from = (await one(`SELECT id, kind, name, user_id FROM spaces WHERE id = $1`, [p.space_id]))!;
+    if (from.kind === "team" && role !== "admin") throw forbidden("Only an admin of the team can move its pipes elsewhere");
+    if (p.is_default) throw bad("The default pipe of a personal space cannot be moved");
+    const target = uuid(req.body?.spaceId, "Space");
+    if (target === p.space_id) throw bad("This pipe is already in this space");
+    const to = await one(
+      `SELECT s.id, s.kind, s.name FROM spaces s JOIN space_members m ON m.space_id = s.id AND m.user_id = $2 WHERE s.id = $1`,
+      [target, uid]
+    );
+    if (!to) throw notFound("Space not found");
+    if (to.kind !== "team") throw bad("A pipe can only be moved to a team");
+
+    const moved = await tx(async (client) => {
+      await client.query(
+        `UPDATE pipes SET space_id = $2, position = (SELECT COALESCE(max(position), 0) + 1 FROM pipes WHERE space_id = $2), updated_at = now()
+         WHERE id = $1`,
+        [p.id, to.id]
+      );
+      // Labels: the team's own of the same name, made with the same colour when it has none.
+      const used = await client.query(
+        `SELECT DISTINCT l.id, l.name, l.color FROM task_labels tl JOIN space_labels l ON l.id = tl.label_id
+         JOIN tasks t ON t.id = tl.task_id WHERE t.pipe_id = $1`,
+        [p.id]
+      );
+      for (const l of used.rows) {
+        const same = await one(
+          `INSERT INTO space_labels (space_id, name, color, created_by, position)
+           VALUES ($1, $2, $3, $4, (SELECT COALESCE(max(position), 0) + 1 FROM space_labels WHERE space_id = $1))
+           ON CONFLICT (space_id, lower(name)) DO UPDATE SET name = space_labels.name RETURNING id`,
+          [to.id, l.name, l.color, uid],
+          client
+        );
+        await client.query(
+          `INSERT INTO task_labels (task_id, label_id)
+           SELECT tl.task_id, $2 FROM task_labels tl JOIN tasks t ON t.id = tl.task_id WHERE t.pipe_id = $3 AND tl.label_id = $1
+           ON CONFLICT DO NOTHING`,
+          [l.id, same!.id, p.id]
+        );
+        await client.query(
+          `DELETE FROM task_labels tl USING tasks t WHERE t.id = tl.task_id AND t.pipe_id = $2 AND tl.label_id = $1`,
+          [l.id, p.id]
+        );
+      }
+      const tasks = await client.query(`SELECT id FROM tasks WHERE pipe_id = $1 ORDER BY number`, [p.id]);
+      for (const { id } of tasks.rows) {
+        const before = (await getTaskRow(id, client))!;
+        // A personal task belongs to the space's owner without naming them: in the team, they become its owner.
+        await client.query(
+          `UPDATE tasks SET space_id = $2,
+             assignee_id = CASE WHEN EXISTS (SELECT 1 FROM space_members m WHERE m.space_id = $2 AND m.user_id = COALESCE(assignee_id, $3::uuid))
+                           THEN COALESCE(assignee_id, $3::uuid) END,
+             updated_at = now()
+           WHERE id = $1`,
+          [id, to.id, from.user_id ?? null]
+        );
+        const after = (await getTaskRow(id, client))!;
+        await recordEvent(client, id, uid, "moved", snapshot(before), snapshot(after), null, { withPipe: true }, false);
+      }
+      return tasks.rows.length;
+    });
+    req.log.info({ pipeId: p.id, from: from.id, to: to.id, tasks: moved, userId: uid }, "Pipe moved");
+    // Both spaces' pages reload (the person who moved it included: their sidebar changes too).
+    notifySpace(from.id, { type: "task.updated" });
+    notifySpace(to.id, { type: "task.updated" });
+    return { ok: true, tasks: moved };
+  });
+
   app.patch("/pipes/:id", async (req: Req) => {
     const { p, role } = await loadPipeFor(req.params.id, me(req));
     if (!role) throw forbidden();
