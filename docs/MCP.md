@@ -19,7 +19,10 @@ the server's environment; see [HOSTING.md](HOSTING.md#configuration)).
   even yours: what it is given goes to the company running the AI model. Lists say how many tasks were left out.
 - **What it does is visible.** It appears in the task's history and comments as done by you, with an **MCP** tag
   (hover it for the agent's name — a name everyone who can open the task sees, so choose it accordingly); a task it
-  created shows the tag next to its author. The notifications others get are the usual ones.
+  created shows the tag next to its author. The notifications others get are the usual ones. Its changes show at
+  once on the open pages, yours included.
+- **It is not stopped by a task open in the app.** Someone editing a task in the app holds it, but an agent may still
+  change it: the change shows at once in their window, with a notice saying who made it.
 - **Give it tasks of yours.** Once you have an agent, the owner list of your tasks offers **"<your name> (MCP)"**:
   your agent. Only you can hand a task to your own agent; the task stays yours (rights, lists, notifications), and
   goes back to you when its owner or space changes. Tell your agent to "work only on the tasks assigned to you": it

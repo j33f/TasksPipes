@@ -395,9 +395,23 @@ A search only finds what you could open in the app, checked in the database quer
 ## Live updates
 
 A task sent or refused shows up at once for its recipients, with a notification. In a team pipe, what a member
-does (a task created, moved, given to someone, commented…) shows at once on the other members' open pages. The
-connection closes after five minutes of inactivity or one minute in the background, and reopens when the page is
-used again. The number of waiting tasks shows in the tab title and, on mobile, as a badge on the menu button.
+does (a task created, moved, given to someone, commented, a sub-task or time entry added…) shows at once on the other
+members' open pages. What your AI agent (MCP) or an access token does in your name shows on your own open pages too.
+The connection closes after five minutes of inactivity or one minute in the background, and reopens when the page is
+used again; it stays open while a pipe or a task is shown, even left untouched. The number of waiting tasks shows in
+the tab title and, on mobile, as a badge on the menu button.
+
+### One person edits a task at a time
+
+- Opening a task you may change **takes it**: the others who open it see **"Opened by <name>"** and read it (they can
+  still comment) until you close it. Another tab of yours shows "Opened in another tab of yours".
+- **Claim editing** asks the one who holds it to hand it over. They see who asks, with **OK** and **Refuse**; OK saves
+  what they were typing first. Without an answer within **30 seconds**, the task goes to the one who asked (what the
+  holder had not saved is not kept, and they are told). One claim at a time.
+- A task is released when its window closes, or 90 seconds after its page stopped answering (tab closed, computer
+  asleep). Once free, the next page showing it takes it.
+- AI agents (MCP) and access tokens are not stopped: their change shows at once in the open task, with a notice
+  saying who made it.
 
 ## Notifications in the app
 

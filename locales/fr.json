@@ -1307,7 +1307,21 @@
     "No other pipe in this space": "Aucun autre pipe dans cet espace",
     "Moved to {name}": "Déplacée dans {name}",
     "Saved: the agent has these permissions from its next request": "Enregistré : l’agent a ces permissions dès sa prochaine requête",
-    "No need to connect it again: it has these permissions from its next request.": "Inutile de le reconnecter : il a ces permissions dès sa prochaine requête."
+    "No need to connect it again: it has these permissions from its next request.": "Inutile de le reconnecter : il a ces permissions dès sa prochaine requête.",
+    "{name} now edits this task. Your unsaved description was not kept.": "{name} modifie maintenant cette tâche. Votre description non enregistrée n’a pas été conservée.",
+    "{name} now edits this task.": "{name} modifie maintenant cette tâche.",
+    "You can now edit this task.": "Vous pouvez maintenant modifier cette tâche.",
+    "{name} keeps editing this task.": "{name} garde la modification de cette tâche.",
+    "{name} just changed this task.": "{name} vient de modifier cette tâche.",
+    "Opened in another tab of yours": "Ouverte dans un autre de vos onglets",
+    "Opened by {name}": "Ouverte par {name}",
+    "Read-only while it is being edited.": "En lecture seule pendant sa modification.",
+    "Request sent. Without an answer, it is yours in {n} s.": "Demande envoyée. Sans réponse, la modification vous revient dans {n} s.",
+    "{name} already asked to edit it.": "{name} a déjà demandé à la modifier.",
+    "Claim editing": "Réclamer la modification",
+    "{name} asks to edit this task.": "{name} demande à modifier cette tâche.",
+    "Without an answer, it goes to them in {n} s.": "Sans réponse, la modification lui est transférée dans {n} s.",
+    "{name} just changed this task through an access token.": "{name} vient de modifier cette tâche via un jeton d’accès."
   },
   "server": {
     "{label} is required": "{label} requis",
@@ -1778,7 +1792,12 @@
     "The Outline connection cannot be renewed": "La connexion Outline ne peut pas être renouvelée",
     "Invalid owner": "Responsable invalide",
     "Only its owner can hand a task to their AI agent": "Seul·e le ou la responsable d'une tâche peut la confier à son agent IA",
-    "Make an AI agent first (Settings › AI agents)": "Créez d'abord un agent IA (Réglages › Agents IA)"
+    "Make an AI agent first (Settings › AI agents)": "Créez d'abord un agent IA (Réglages › Agents IA)",
+    "{name} is editing this task": "{name} est en train de modifier cette tâche",
+    "{name} already asked for it": "{name} l’a déjà demandée",
+    "Invalid page": "Page invalide",
+    "Invalid answer": "Réponse invalide",
+    "Only the pages of the app lock tasks": "Seules les pages de l’application verrouillent les tâches"
   },
   "catalog": {}
 }

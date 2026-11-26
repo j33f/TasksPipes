@@ -979,6 +979,19 @@ CREATE UNLOGGED TABLE IF NOT EXISTS live_presence (
   PRIMARY KEY (user_id, instance_id)
 );
 
+-- Who is editing a task in the web app (locks.ts): one page at a time, the others read. Kept while the page says so
+-- (every 20 s), forgotten 90 s after it stopped. claim_*: someone asked for it, handed over after 30 s without an
+-- answer. Nothing worth keeping across a crash, hence unlogged.
+CREATE UNLOGGED TABLE IF NOT EXISTS task_locks (
+  task_id uuid PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_id text NOT NULL,
+  seen_at timestamptz NOT NULL DEFAULT now(),
+  claim_user_id uuid REFERENCES users(id) ON DELETE CASCADE,
+  claim_client_id text,
+  claimed_at timestamptz
+);
+
 -- AI agents (MCP). A task handed to its owner's agent ("Toto (MCP)"): only that person sets it (routes.ts), and it
 -- goes when the task changes owner or space.
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_agent boolean NOT NULL DEFAULT false;

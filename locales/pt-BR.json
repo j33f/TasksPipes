@@ -1307,7 +1307,21 @@
     "No other pipe in this space": "Nenhum outro pipe neste espaço",
     "Moved to {name}": "Movida para {name}",
     "Saved: the agent has these permissions from its next request": "Salvo: o agente tem essas permissões a partir da próxima solicitação",
-    "No need to connect it again: it has these permissions from its next request.": "Não é preciso conectá-lo de novo: ele tem essas permissões a partir da próxima solicitação."
+    "No need to connect it again: it has these permissions from its next request.": "Não é preciso conectá-lo de novo: ele tem essas permissões a partir da próxima solicitação.",
+    "{name} now edits this task. Your unsaved description was not kept.": "{name} agora edita esta tarefa. Sua descrição não salva não foi mantida.",
+    "{name} now edits this task.": "{name} agora edita esta tarefa.",
+    "You can now edit this task.": "Agora você pode editar esta tarefa.",
+    "{name} keeps editing this task.": "{name} continua editando esta tarefa.",
+    "{name} just changed this task.": "{name} acabou de alterar esta tarefa.",
+    "Opened in another tab of yours": "Aberta em outra aba sua",
+    "Opened by {name}": "Aberta por {name}",
+    "Read-only while it is being edited.": "Somente leitura enquanto está sendo editada.",
+    "Request sent. Without an answer, it is yours in {n} s.": "Pedido enviado. Sem resposta, ela passa para você em {n} s.",
+    "{name} already asked to edit it.": "{name} já pediu para editá-la.",
+    "Claim editing": "Pedir a edição",
+    "{name} asks to edit this task.": "{name} pede para editar esta tarefa.",
+    "Without an answer, it goes to them in {n} s.": "Sem resposta, ela passa para essa pessoa em {n} s.",
+    "{name} just changed this task through an access token.": "{name} acabou de alterar esta tarefa por meio de um token de acesso."
   },
   "server": {
     "{label} is required": "{label}: obrigatório",
@@ -1778,7 +1792,12 @@
     "The Outline connection cannot be renewed": "A conexão com o Outline não pode ser renovada",
     "Invalid owner": "Responsável inválido",
     "Only its owner can hand a task to their AI agent": "Só a pessoa responsável por uma tarefa pode confiá-la ao seu agente de IA",
-    "Make an AI agent first (Settings › AI agents)": "Crie primeiro um agente de IA (Configurações › Agentes de IA)"
+    "Make an AI agent first (Settings › AI agents)": "Crie primeiro um agente de IA (Configurações › Agentes de IA)",
+    "{name} is editing this task": "{name} está editando esta tarefa",
+    "{name} already asked for it": "{name} já a pediu",
+    "Invalid page": "Página inválida",
+    "Invalid answer": "Resposta inválida",
+    "Only the pages of the app lock tasks": "Só as páginas do aplicativo bloqueiam tarefas"
   },
   "catalog": {
     "Prêt à démarrer": "Pronta para começar",
