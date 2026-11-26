@@ -31,9 +31,16 @@ const RETRY_MS = 5_000;
 export interface LiveEvent {
   /**
    * task.sent: a task arrived in an incoming bucket; task.refused: one came back; incoming.changed: one left;
-   * task.updated: a task of the space changed; inbox: one's in-app notifications changed.
+   * task.updated: a task of the space changed; inbox: one's in-app notifications changed; lock: who edits a task
+   * changed (locks.ts).
    */
-  type: "inbox" | "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello" | "poker";
+  type: "inbox" | "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello" | "poker" | "lock";
+  /** task.updated: the task that changed, who changed it, and whether through their AI agent or an access token. */
+  taskId?: string;
+  actorId?: string;
+  via?: "agent" | "token";
+  /** lock: what happened (locks.ts LockChange). */
+  change?: string;
   /** poker: the pipe whose session changed; whether it opened or closed (the pipe's page shows it). */
   pipeId?: string;
   opened?: boolean;

@@ -62,6 +62,7 @@ Outline through its RPC-style API.
 | `reports.ts`, `time.ts` | Time per step, daily and weekly reports (computed from the history), their e-mails and scheduled sending; local times and periods. |
 | `git.ts` | GitHub / GitLab webhooks: task keys, signatures, what events mean (the routes are in `routes.ts`). |
 | `fields.ts` | Validation of task field values. |
+| `locks.ts` | Editing locks of tasks for the web app: one page edits a task, the others read it; claims handed over after 30 s without an answer; access tokens and agents are not stopped. Live "lock" events. |
 | `realtime.ts` | WebSocket at `/api/events`: live updates to the pages open, and who has one open. With several instances, events and presence are shared through PostgreSQL (`NOTIFY` on `taskspipes_live`, table `live_presence`); each instance delivers to its own pages first. |
 | `mcp.ts` | MCP endpoint (`/mcp`, stateless) for AI agents with an agent token: its tools call `/api/v1` with that token, limited to the token's scopes and spaces; confidential content is never returned. |
 | `via.ts` | The access token of the request being handled (AsyncLocalStorage), recorded in the history as "via" it. |
@@ -82,7 +83,8 @@ follow Outline's design tokens (`web/src/app.css`).
 | `lib/app.svelte.ts` | Shared state: the signed-in person, spaces, people, catalog, sidebar. |
 | `lib/api.ts` | API client (sends the page's language). |
 | `lib/i18n.svelte.ts`, `lib/locales/` | Translations, language and theme preferences. |
-| `lib/realtime.svelte.ts` | WebSocket connection, closed when the page is idle. |
+| `lib/realtime.svelte.ts` | WebSocket connection, closed when the page is idle (unless a pipe or a task is shown). |
+| `lib/locks.svelte.ts` | Editing lock of the task shown: taken, kept every 20 s, claimed, answered, released on closing. |
 | `lib/sprints.ts`, `lib/timeline.ts` | Sprints (working days, points, order) and the timeline (a task's span from its dates or its sprint, range, moves). |
 
 ## Data model
@@ -95,6 +97,7 @@ follow Outline's design tokens (`web/src/app.css`).
 | `tasks` | Tasks: place (space, pipe or incoming), column and generic status, owner, due date, type and field values. |
 | `task_items`, `task_files` | Sub-tasks and files of tasks. |
 | `task_events` | History of every task, with the state before and after each change. |
+| `task_locks` | Who edits a task in the web app, and who claimed it (unlogged: nothing to keep across a crash). |
 | `custom_types` | Pipe and task types made with the designer. |
 | `report_runs` | Scheduled report and digest sendings already done (one per period). |
 | `task_search` | The search index: one `tsvector` per task, kept up to date by triggers on tasks, sub-tasks and history. |

@@ -30,6 +30,9 @@
   import { confirmWhileBlocked } from "../lib/dependencies";
   import { mentionableOn } from "../lib/mentions";
   import { t, tn } from "../lib/i18n.svelte";
+  import { onMount, untrack } from "svelte";
+  import { live } from "../lib/realtime.svelte";
+  import { TaskLock, type LockState } from "../lib/locks.svelte";
 
   let { id, onclose }: { id: string; onclose: () => void } = $props();
 
@@ -41,6 +44,8 @@
   let busy = $state(false);
 
   let title = $state("");
+  // Reloads (a change elsewhere) leave the title being typed alone.
+  let titleFocused = false;
   let editingDescription = $state(false);
   let descriptionDraft = $state("");
   let pickingDoc = $state(false);
@@ -65,7 +70,12 @@
     try {
       const detail = await api.get<TaskDetail>(`/tasks/${id}`);
       task = detail;
-      title = detail.title;
+      if (!titleFocused) title = detail.title;
+      // Editing lock: taken if nobody holds it and this page may change the task, else who holds it is shown.
+      if (!lockStarted) {
+        lockStarted = true;
+        lock.start(Boolean(detail.permissions.editContent || detail.permissions.manage));
+      }
       if (detail.permissions.manage) {
         const space = await api.get<{ pipes: Pipe[]; members: UserRef[] }>(`/spaces/${detail.space.id}`);
         pipes = space.pipes;
@@ -82,6 +92,85 @@
     app.version;
     load();
   });
+
+  // ---- Who edits the task: one page at a time, the others read it (server/src/locks.ts) ----
+  // The window is made anew for another task (App.svelte {#key}).
+  const lock = new TaskLock(untrack(() => id));
+  let lockStarted = false;
+  onMount(() => {
+    const release = live.hold();
+    return () => {
+      release();
+      lock.stop();
+    };
+  });
+  lock.onchange = (before: LockState | null, after: LockState) => {
+    if (!before) return;
+    if (before.mine && !after.mine) {
+      // Handed over (asked, or no answer in time): what was being typed is not kept.
+      const lost = editingDescription && descriptionDraft !== task?.description;
+      editingDescription = false;
+      app.toast(
+        lost
+          ? t("{name} now edits this task. Your unsaved description was not kept.", { name: after.holder?.name ?? "" })
+          : t("{name} now edits this task.", { name: after.holder?.name ?? "" }),
+        "info"
+      );
+      load();
+    } else if (!before.mine && after.mine) {
+      if (before.claim?.mine) app.toast(t("You can now edit this task."));
+      // Changed by the one who held it: shown fresh before editing.
+      load();
+    } else if (before.claim?.mine && !after.claim && !after.mine) {
+      app.toast(t("{name} keeps editing this task.", { name: after.holder?.name ?? "" }), "info");
+    }
+  };
+  // Someone took, released, claimed or handed over the task: its state is fetched again.
+  $effect(() => {
+    const c = live.lockChange;
+    if (c?.taskId === id) untrack(() => lock.refresh());
+  });
+  // Changed while this page edits it (an agent over MCP, an application, a move on the board): said, and reloaded.
+  $effect(() => {
+    const c = live.taskChange;
+    if (!c || c.taskId !== id) return;
+    untrack(() => {
+      if (!lock.state?.mine || (c.actorId === app.me?.user.id && !c.via)) return;
+      const name = app.users.find((u) => u.id === c.actorId)?.name ?? (c.actorId === app.me?.user.id ? app.me?.user.name : "") ?? "";
+      app.toast(
+        c.via === "agent"
+          ? t("{name} just changed this task.", { name: t("{name} (MCP)", { name }) })
+          : c.via === "token"
+            ? t("{name} just changed this task through an access token.", { name })
+            : t("{name} just changed this task.", { name }),
+        "info"
+      );
+    });
+  });
+  const lockedByOther = $derived(lock.lockedByOther);
+  /** Whether this page could edit the task, were nobody else editing it. */
+  const mayEdit = $derived(Boolean(task?.permissions.editContent || task?.permissions.manage));
+  let claiming = $state(false);
+  async function claim() {
+    claiming = true;
+    error = "";
+    try {
+      await lock.claim();
+    } catch (err) {
+      error = errorMessage(err);
+    } finally {
+      claiming = false;
+    }
+  }
+  /** Hands the task over to the one who asked, after saving what was being typed. */
+  async function answerClaim(accept: boolean) {
+    if (accept) {
+      if (task && title.trim() && title !== task.title) await patch({ title });
+      if (editingDescription && descriptionDraft !== task?.description) await saveDescription();
+      editingDescription = false;
+    }
+    await lock.answer(accept).catch((err) => (error = errorMessage(err)));
+  }
 
   async function run(fn: () => Promise<unknown>, success?: string) {
     busy = true;
@@ -184,7 +273,9 @@
     commentKey++;
   }
 
-  const perms = $derived(task?.permissions);
+  // Read-only while someone else edits it; commenting stays open.
+  const perms = $derived(task && lockedByOther ? { ...task.permissions, manage: false, editContent: false, refuse: false } : task?.permissions);
+  const shown = $derived(task && perms ? { ...task, permissions: perms } : task);
   const due = $derived(task ? dueState(task.dueDate, task.status) : "");
 </script>
 
@@ -208,6 +299,42 @@
           <span class="muted" style="white-space:nowrap">· #{task.number}</span>
         </div>
 
+        {#if lockedByOther && lock.state?.holder}
+          {@const holder = lock.state.holder}
+          <div class="callout info" role="status">
+            <Avatar user={holder} size={20} />
+            <div class="grow">
+              <strong>{holder.id === app.me?.user.id ? t("Opened in another tab of yours") : t("Opened by {name}", { name: holder.name })}</strong>
+              <div class="small muted">{t("Read-only while it is being edited.")}</div>
+              {#if mayEdit}
+                {#if lock.state.claim?.mine}
+                  <div class="small" style="margin-top:6px">
+                    {t("Request sent. Without an answer, it is yours in {n} s.", { n: lock.secondsLeft })}
+                  </div>
+                {:else if lock.state.claim}
+                  <div class="small muted" style="margin-top:6px">{t("{name} already asked to edit it.", { name: lock.state.claim.by.name })}</div>
+                {:else}
+                  <div class="row" style="margin-top:8px">
+                    <button class="btn small" disabled={claiming} onclick={claim}><Icon name="edit" size={16} />{t("Claim editing")}</button>
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          </div>
+        {:else if lock.state?.mine && lock.state.claim}
+          <div class="callout warning" role="alertdialog" aria-live="assertive">
+            <Icon name="edit" />
+            <div class="grow">
+              <strong>{t("{name} asks to edit this task.", { name: lock.state.claim.by.name })}</strong>
+              <div class="small muted">{t("Without an answer, it goes to them in {n} s.", { n: lock.secondsLeft })}</div>
+              <div class="row" style="margin-top:8px">
+                <button class="btn small" onclick={() => answerClaim(true)}><Icon name="check" size={16} />{t("OK")}</button>
+                <button class="btn small neutral" onclick={() => answerClaim(false)}>{t("Refuse")}</button>
+              </div>
+            </div>
+          </div>
+        {/if}
+
         {#if task.inIncoming && task.sender}
           <div class="callout info">
             <Icon name="inbox" />
@@ -225,7 +352,7 @@
           </div>
         {/if}
 
-        <textarea class="task-title-input" rows="1" bind:value={title} use:autosize={title} onblur={saveTitle} readonly={!perms?.editContent}
+        <textarea class="task-title-input" rows="1" bind:value={title} use:autosize={title} onfocus={() => (titleFocused = true)} onblur={() => { titleFocused = false; saveTitle(); }} readonly={!perms?.editContent}
           onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.currentTarget as HTMLTextAreaElement).blur(); } }}
           aria-label={t("Title")}></textarea>
 
@@ -260,8 +387,8 @@
           </div>
         {/if}
 
-        <DependenciesSection {task} onchange={load} />
-        <TimeSection {task} onchange={load} />
+        <DependenciesSection task={shown!} onchange={load} />
+        <TimeSection task={shown!} onchange={load} />
 
         {#if task.gitConnected || task.links.length}
           <div class="infos">
@@ -501,7 +628,7 @@
           {/if}
         </div>
 
-        {#if task.pipe}<RepeatSection {task} onchange={load} />{/if}
+        {#if task.pipe}<RepeatSection task={shown!} onchange={load} />{/if}
 
         <div class="prop">
           <span class="label-text">{t("Time per step")}</span>
