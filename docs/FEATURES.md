@@ -72,7 +72,8 @@ and accept or refuse it. A confidential task cannot leave its space.
   tasks — one's own personal pipes (not the *Personal* one), or a team's pipes for an admin of that team. Its tasks
   keep their history (the move is noted in each), sub-tasks, files, time and sprints; personal tasks get their holder
   as owner, owners who are not members of the team are unassigned, and labels become the team's labels of the same
-  name (created when missing). A pipe goes to teams only, never to a personal space.
+  name (created when missing). A pipe goes to teams only, never to a personal space. Also over the API
+  (`POST /api/v1/pipes/{id}/move`) and for AI agents (`move_pipe`).
 - **Linked documents**: a pipe holds links to its documents (specification, brief, mock-ups, repository…), shown
   under its description. Its members add them by choosing where the document lives, among the sources fitting the
   pipe type — GitHub, GitLab and Figma first for development, Figma, Miro and Canva for design, Outline, Google Docs,
@@ -331,7 +332,7 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
 - **AI agents (MCP)** (*Settings › AI agents*, once an administrator turned them on) — let an AI assistant (Claude,
   Cursor…) work on your tasks over MCP, at `/mcp`. It acts with your rights, reads, and does only what you allow
   besides (create and change tasks — everything you could change, sub-tasks and dependencies included —, comment, log
-  time, send tasks to others, create pipes, make and change your models, delete sub-tasks, time entries, files and
+  time, send tasks to others, create pipes and move them to a team, make and change your models, delete sub-tasks, time entries, files and
   your models as you could), in all your spaces or only those
   you pick — and you can change both later (*Change*) without connecting it again: every tool is offered, and one it
   lacks the permission for tells it which one to ask you for; it never sees confidential or team-only pipes and never deletes a task. What it does shows in the history
@@ -403,7 +404,8 @@ A task sent or refused shows up at once for its recipients, with a notification.
 does (a task created, moved, given to someone, commented, a sub-task or time entry added…) shows at once on the other
 members' open pages. What your AI agent (MCP) or an access token does in your name shows on your own open pages too.
 The connection closes after five minutes of inactivity or one minute in the background, and reopens when the page is
-used again; it stays open while a pipe or a task is shown, even left untouched. The number of waiting tasks shows in
+used again; it stays open while a pipe or a task is shown, even left untouched. On a board, a card moved by someone
+else glides to its new place, and a new card fades in (not with reduced motion). The number of waiting tasks shows in
 the tab title and, on mobile, as a badge on the menu button.
 
 ### One person edits a task at a time
