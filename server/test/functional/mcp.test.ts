@@ -144,12 +144,13 @@ describe("a read-only agent", () => {
     expect(init.body.result.instructions).toMatch(/docs_contents/);
   });
 
-  it("is offered the reading tools only", async () => {
+  it("is offered every tool, but may only read: the others say which permission they need", async () => {
     const names = (await rpc(token, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
-    expect(names).toEqual(expect.arrayContaining(["whoami", "search_tasks", "get_task", "get_pipe"]));
-    expect(names).not.toContain("create_task");
-    expect(names).not.toContain("add_comment");
-    expect((await tool(token, "create_task", { pipeId: personalPipe, title: "No" })).error).toBeTruthy();
+    expect(names).toEqual(expect.arrayContaining(["whoami", "search_tasks", "get_task", "get_pipe", "create_task", "add_comment", "delete_model"]));
+    const refused = await tool(token, "create_task", { pipeId: personalPipe, title: "No" });
+    expect(refused.error).toMatch(/not given you the permission "Create and change tasks".*Settings › AI agents \(MCP\)/);
+    expect(refused.error).toMatch(/Never say it was done/);
+    expect((await tool(token, "whoami")).missingPermissions).toEqual(expect.arrayContaining(["Create and change tasks", "Comment"]));
   });
 
   it("sees every column of a pipe, which tells where each task stands", async () => {
@@ -261,9 +262,8 @@ describe("an agent limited to a team space, allowed to write", () => {
   });
 
   it("cannot send tasks to others or log time without those scopes", async () => {
-    const names = (await rpc(token, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
-    expect(names).not.toContain("send_task");
-    expect(names).not.toContain("log_time");
+    expect((await tool(token, "log_time", { taskId: "00000000-0000-4000-8000-000000000001", minutes: 5 })).error).toMatch(/"Log my time"/);
+    expect((await tool(token, "send_task", { taskId: "00000000-0000-4000-8000-000000000001", spaceId: team })).error).toMatch(/"Send tasks to other people"/);
   });
 
   it("stops working once revoked", async () => {
@@ -333,9 +333,10 @@ describe("an agent with full access to tasks", () => {
 
   it("deletes nothing without the Delete permission", async () => {
     const writer = (await agentToken(["tasks:write"])).body.token;
-    const names = (await rpc(writer, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
-    expect(names).toEqual(expect.arrayContaining(["add_subtasks", "update_subtask", "add_dependency"]));
-    expect(names.filter((n: string) => n.startsWith("delete_"))).toEqual([]);
+    const t = await tool(writer, "create_task", { pipeId: pipe, title: "Kept" });
+    const [sub] = (await tool(writer, "add_subtasks", { taskId: t.id, texts: ["Step"] })).added;
+    expect((await tool(writer, "delete_subtask", { taskId: t.id, subtaskId: sub })).error).toMatch(/"Delete"/);
+    expect((await tool(writer, "get_task", { taskId: t.id })).subtasks).toHaveLength(1);
   });
 
   it("marks what it does as done over MCP", async () => {
@@ -419,7 +420,7 @@ describe("models over MCP", () => {
   it("are read by any agent, never a confidential one", async () => {
     const names = (await rpc(reader, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
     expect(names).toEqual(expect.arrayContaining(["list_models", "get_model"]));
-    expect(names).not.toContain("create_pipe_type");
+    expect((await tool(reader, "create_pipe_type", { label: "No", columns: [{ label: "To do", status: "backlog" }, { label: "Done", status: "done" }] })).error).toMatch(/"Create and change my models"/);
     const models = await tool(reader, "list_models");
     expect(models.pipeTypes.map((t: { id: string }) => t.id)).toContain("general");
     expect(models.pipeTypes.map((t: { id: string }) => t.id)).not.toContain("garde_alternee");
@@ -433,7 +434,7 @@ describe("models over MCP", () => {
   it("are made and changed by an agent allowed to, as its person", async () => {
     const names = (await rpc(maker, "tools/list")).body.result.tools.map((t: { name: string }) => t.name);
     expect(names).toEqual(expect.arrayContaining(["create_pipe_type", "update_pipe_type", "create_task_type", "update_task_type"]));
-    expect(names).not.toContain("delete_model");
+    expect((await tool(maker, "delete_model", { kind: "task", id: "x" })).error).toMatch(/"Delete"/);
 
     const lead = await tool(maker, "create_task_type", { label: "Prospect", fields: [{ label: "Budget", type: "money" }, { label: "Source", type: "select", options: ["Web", "Fair"] }] });
     expect(lead).toMatchObject({ kind: "task", label: "Prospect", custom: true, yours: true, visibility: "private" });
@@ -481,10 +482,35 @@ describe("models over MCP", () => {
   });
 });
 
+describe("an agent's permissions changed on the fly", () => {
+  it("apply at its next call, without connecting it again; only to one's own agents", async () => {
+    const created = (await agentToken([])).body;
+    const pipeId = personalPipe;
+    expect((await tool(created.token, "create_task", { pipeId, title: "Later" })).error).toMatch(/"Create and change tasks"/);
+
+    expect((await alice.patch(`/api/me/tokens/${created.id}`, { scopes: ["tasks:write", "pipes:write"] })).body).toMatchObject({ ok: true, scopes: ["tasks:read", "tasks:write", "pipes:write"], spaceIds: null });
+    expect((await tool(created.token, "create_task", { pipeId, title: "Now" })).title).toBe("Now");
+    expect((await tool(created.token, "whoami")).scopes).toEqual(["tasks:read", "tasks:write", "pipes:write"]);
+    const listed = (await alice.get("/api/me/tokens")).body.find((t: { id: string }) => t.id === created.id);
+    expect(listed).toMatchObject({ scope: "write", scopes: ["tasks:read", "tasks:write", "pipes:write"] });
+
+    // Narrowed: to reading, and to one space.
+    expect((await alice.patch(`/api/me/tokens/${created.id}`, { scopes: [], spaceIds: [team] })).status).toBe(200);
+    expect((await tool(created.token, "create_task", { pipeId, title: "No" })).error).toMatch(/"Create and change tasks"/);
+    expect((await tool(created.token, "list_spaces")).map((s: { id: string }) => s.id)).toEqual([team]);
+
+    // Someone else's agent, a personal token, a space one cannot see.
+    expect((await bob.patch(`/api/me/tokens/${created.id}`, { scopes: ["tasks:write"] })).status).toBe(404);
+    const personal = (await alice.post("/api/me/tokens", { name: "Script", scope: "read", days: 30 })).body;
+    expect((await alice.patch(`/api/me/tokens/${personal.id}`, { scopes: ["tasks:write"] })).status).toBe(404);
+    expect((await alice.patch(`/api/me/tokens/${created.id}`, { scopes: [], spaceIds: ["00000000-0000-4000-8000-000000000009"] })).status).toBe(400);
+  });
+});
+
 describe("pipes made over MCP", () => {
   it("are created by an agent allowed to, in its spaces, never of a confidential type", async () => {
     const reader = (await agentToken([])).body.token;
-    expect((await rpc(reader, "tools/list")).body.result.tools.map((t: { name: string }) => t.name)).not.toContain("create_pipe");
+    expect((await tool(reader, "create_pipe", { spaceId: team, name: "No" })).error).toMatch(/"Create pipes in my spaces"/);
     const token = (await agentToken(["pipes:write"], [team])).body.token;
     const made = await tool(token, "create_pipe", { spaceId: team, name: "Hiring", kind: "rentree", withTemplates: true });
     expect(made).toMatchObject({ name: "Hiring", kind: "rentree", space: { id: team } });

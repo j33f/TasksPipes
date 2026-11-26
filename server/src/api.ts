@@ -431,6 +431,24 @@ export async function tokenRoutes(app: FastifyInstance) {
     return { id: row!.id, token, expiresAt: row!.expires_at };
   });
 
+  /**
+   * Change what an agent may do and where, without connecting it again: its token (or OAuth grant) stays, and its next
+   * request has the new permissions (mcp.ts offers every tool and checks them at each call).
+   */
+  app.patch<{ Params: { id: string }; Body: { scopes?: unknown; spaceIds?: unknown } }>("/me/tokens/:id", async (req) => {
+    if (!config.mcpEnabled) throw forbidden("AI agents are not enabled on this instance");
+    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) throw notFound("Not found");
+    const { scopes, scope, spaceIds } = await agentChoice(req.user!.id, req.body?.scopes, req.body?.spaceIds);
+    const row = await one(
+      `UPDATE api_tokens SET scopes = $3, scope = $4, space_ids = $5
+       WHERE id = $1 AND user_id = $2 AND kind = 'agent' AND revoked_at IS NULL RETURNING id`,
+      [req.params.id, req.user!.id, scopes, scope, spaceIds]
+    );
+    if (!row) throw notFound("Not found");
+    req.log.info({ tokenId: row.id, scopes, spaces: spaceIds?.length ?? "all" }, "Agent permissions changed");
+    return { ok: true, scopes, spaceIds };
+  });
+
   app.delete<{ Params: { id: string } }>("/me/tokens/:id", async (req) => {
     const r = await query(`UPDATE api_tokens SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`, [
       /^[0-9a-f-]{36}$/i.test(req.params.id) ? req.params.id : "00000000-0000-0000-0000-000000000000",

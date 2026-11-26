@@ -62,7 +62,8 @@ follows Outline's look and feel.
 - **AI agents (MCP)** — let an AI assistant (Claude, Cursor…) work on your tasks over MCP, with your rights and only
   what you allow: reading, and if you wish changing everything you could on tasks (sub-tasks, owner, labels,
   dependencies…), commenting, logging time, sending tasks, creating pipes, making models (pipe and task types),
-  deleting sub-tasks, time entries, files and your models, in all your spaces or chosen ones. It never sees confidential pipes and never deletes a task; what it does shows in the history
+  deleting sub-tasks, time entries, files and your models, in all your spaces or chosen ones — changeable later
+  without connecting it again. It never sees confidential pipes and never deletes a task; what it does shows in the history
   with an **MCP** tag, and you can hand tasks to your own agent ("<your name> (MCP)"). Off until an administrator
   turns it on; see [docs/MCP.md](docs/MCP.md).
 - **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
