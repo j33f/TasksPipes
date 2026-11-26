@@ -1,6 +1,7 @@
 <script lang="ts">
   import { TASK_DRAG } from "../lib/drag";
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
+  import { notePlaces, playMoves } from "../lib/flip";
   import { live } from "../lib/realtime.svelte";
   import { t } from "../lib/i18n.svelte";
   import { api, errorMessage } from "../lib/api";
@@ -128,7 +129,18 @@
 
   $effect(() => {
     app.version;
-    api.get<PipeDetail>(`/pipes/${id}`).then((p) => (pipe = p)).catch((err) => (error = errorMessage(err)));
+    api.get<PipeDetail>(`/pipes/${id}`)
+      .then(async (p) => {
+        // Changed by someone else meanwhile: the cards glide to their new place (one's own moves are already shown).
+        const same = pipe?.id === p.id;
+        const before = same ? notePlaces() : new Map();
+        pipe = p;
+        if (same) {
+          await tick();
+          playMoves(before);
+        }
+      })
+      .catch((err) => (error = errorMessage(err)));
   });
 
   const visible = $derived(
