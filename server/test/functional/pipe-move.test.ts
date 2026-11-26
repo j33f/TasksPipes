@@ -1,5 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { FastifyInstance } from "fastify";
 import { signIn, startApp, stopApp, type Agent } from "./helpers.js";
+import { overrideSetting } from "../../src/settings-store.js";
+
+let fastify: FastifyInstance;
+const app = () => fastify;
 
 let alice: Agent, bob: Agent, carol: Agent;
 let aliceId: string, bobId: string, mySpace: string, team: string, other: string;
@@ -8,7 +13,7 @@ const newPipe = async (who: Agent, space: string, name: string) => (await who.po
 const move = (who: Agent, pipe: string, spaceId: string) => who.post(`/api/pipes/${pipe}/move`, { spaceId });
 
 beforeAll(async () => {
-  await startApp();
+  fastify = await startApp();
   alice = await signIn("alice-token");
   bob = await signIn("bob-token");
   carol = await signIn("carol-token");
@@ -95,5 +100,63 @@ describe("moving a pipe to a team", () => {
     expect((await move(alice, pipe, carolTeam)).status).toBe(404);
     // Someone else's personal pipe.
     expect((await move(bob, pipe, team)).status).toBe(404);
+  });
+});
+
+describe("moving a pipe through the API and MCP", () => {
+  const bearer = async (token: string, method: string, url: string, body?: unknown) => {
+    const res = await app().inject({
+      method: method as "POST", url,
+      headers: { authorization: `Bearer ${token}`, ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+      ...(body !== undefined ? { payload: JSON.stringify(body) } : {}),
+    });
+    return { status: res.statusCode, body: res.json() as any };
+  };
+  async function tool(token: string, name: string, args: object) {
+    const res = await app().inject({
+      method: "POST", url: "/mcp",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" },
+      payload: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+    });
+    const text = String(res.headers["content-type"]).startsWith("text/event-stream")
+      ? (res.body.split("\n").filter((l) => l.startsWith("data:")).at(-1) ?? "").slice(5)
+      : res.body;
+    const r = JSON.parse(text).result;
+    return r.isError ? { error: r.content[0].text as string } : JSON.parse(r.content[0].text);
+  }
+  const agentToken = async (scopes: string[], spaceIds?: string[]) =>
+    (await alice.post("/api/me/tokens", { name: "Claude", kind: "agent", scopes, ...(spaceIds ? { spaceIds } : {}), days: 30 })).body.token as string;
+
+  afterAll(() => overrideSetting("mcp.enabled", undefined));
+
+  it("moves a pipe with a write token, not with a read one", async () => {
+    const write = (await alice.post("/api/me/tokens", { name: "w", scope: "write", days: 30 })).body.token;
+    const read = (await alice.post("/api/me/tokens", { name: "r", scope: "read", days: 30 })).body.token;
+    const pipe = await newPipe(alice, mySpace, "Over the API");
+    await alice.post("/api/tasks", { title: "API task", pipeId: pipe });
+    expect((await bearer(read, "POST", `/api/v1/pipes/${pipe}/move`, { spaceId: team })).status).toBe(403);
+    const res = await bearer(write, "POST", `/api/v1/pipes/${pipe}/move`, { spaceId: team });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true, tasks: 1 });
+    expect((await bob.get(`/api/pipes/${pipe}`)).body.space.id).toBe(team);
+  });
+
+  it("moves a pipe with an agent allowed to, within its spaces", async () => {
+    overrideSetting("mcp.enabled", true);
+    const pipe = await newPipe(alice, mySpace, "Over MCP");
+    await alice.post("/api/tasks", { title: "MCP task", pipeId: pipe });
+
+    const reader = await agentToken([]);
+    expect((await tool(reader, "move_pipe", { pipeId: pipe, spaceId: team })).error).toMatch(/"Create and move pipes in my spaces"/);
+    // Only the spaces it was given: here not the team.
+    const narrow = await agentToken(["pipes:write"], [mySpace]);
+    expect((await tool(narrow, "move_pipe", { pipeId: pipe, spaceId: team })).error).toMatch(/Space not found/);
+
+    const agent = await agentToken(["pipes:write"]);
+    const moved = await tool(agent, "move_pipe", { pipeId: pipe, spaceId: team });
+    expect(moved).toMatchObject({ id: pipe, space: { id: team, name: "Movers" }, tasks: 1 });
+    // Its rules are the app's: not someone else's team pipe it does not administer.
+    const theirs = await newPipe(bob, other, "Not hers to move");
+    expect((await tool(agent, "move_pipe", { pipeId: theirs, spaceId: team })).error).toMatch(/Only an admin of the team/);
   });
 });

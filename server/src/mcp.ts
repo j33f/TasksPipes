@@ -321,7 +321,7 @@ const PERMISSIONS: Record<Exclude<McpScope, "tasks:read">, string> = {
   "comments:write": "Comment",
   "time:write": "Log my time",
   "tasks:send": "Send tasks to other people",
-  "pipes:write": "Create pipes in my spaces",
+  "pipes:write": "Create and move pipes in my spaces",
   "models:write": "Create and change my models",
   "tasks:delete": "Delete",
 };
@@ -845,6 +845,27 @@ function buildServer(app: FastifyInstance, c: Caller) {
           taskTypes: taskTypesOf(p.kind).map((t) => ({ id: t.id, label: localizeTaskType(c.locale, t).label })),
           tasks: (p.tasks ?? []).length,
         };
+      })
+    );
+  }
+
+  {
+    const run = needs("pipes:write");
+    server.registerTool(
+      "move_pipe",
+      {
+        title: "Move a pipe to a team",
+        description:
+          "Move a pipe and all its tasks to a team the person is a member of: their own personal pipe (not the default one), or a pipe of a team they are an admin of. The team's members will see and change its tasks; owners who are not members are unassigned, labels become the team's. Ask the person first.",
+        inputSchema: z.object({ pipeId: id, spaceId: id.describe("The team to move it to") }),
+        annotations: { destructiveHint: true, openWorldHint: true },
+      },
+      run(async ({ pipeId, spaceId }) => {
+        if (!allowedSpace(c, spaceId)) throw new ToolError("Space not found");
+        await ownPipe(app, c, pipeId);
+        const { tasks } = await call(app, c, "POST", `/pipes/${pipeId}/move`, { spaceId });
+        const p = await ownPipe(app, c, pipeId);
+        return { id: p.id, name: p.name, space: { id: p.space.id, name: p.space.name }, tasks };
       })
     );
   }
