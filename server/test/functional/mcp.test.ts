@@ -510,7 +510,7 @@ describe("an agent's permissions changed on the fly", () => {
 describe("pipes made over MCP", () => {
   it("are created by an agent allowed to, in its spaces, never of a confidential type", async () => {
     const reader = (await agentToken([])).body.token;
-    expect((await tool(reader, "create_pipe", { spaceId: team, name: "No" })).error).toMatch(/"Create pipes in my spaces"/);
+    expect((await tool(reader, "create_pipe", { spaceId: team, name: "No" })).error).toMatch(/"Create and move pipes in my spaces"/);
     const token = (await agentToken(["pipes:write"], [team])).body.token;
     const made = await tool(token, "create_pipe", { spaceId: team, name: "Hiring", kind: "rentree", withTemplates: true });
     expect(made).toMatchObject({ name: "Hiring", kind: "rentree", space: { id: team } });

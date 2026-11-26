@@ -175,6 +175,13 @@ export const V1_ROUTES: Record<string, Doc> = {
     } },
     response: object("The new pipe", { id: uuid }),
   },
+  "POST /pipes/:id/move": {
+    tag: "Pipes",
+    summary: "Move a pipe and all its tasks to a team one is a member of: one's own personal pipe (not the default one), or a pipe of a team one is an admin of",
+    params: idParams,
+    body: { type: "object", required: ["spaceId"], properties: { spaceId: { type: "string", format: "uuid", description: "The team to move it to" } } },
+    response: object("Done, with how many tasks moved", { ok: { type: "boolean" }, tasks: { type: "integer" } }),
+  },
   "GET /pipes/:id": { tag: "Pipes", summary: "A pipe and its tasks", params: idParams, response: object("Pipe with its tasks") },
   "GET /pipes/:id/sprints": { tag: "Sprints", summary: "The sprints of a pipe in sprints, latest first", params: idParams, response: list("Sprints") },
   "GET /pipes/:id/sprint-progress": {

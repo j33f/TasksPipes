@@ -630,6 +630,7 @@ sending nothing but the server's version in its User-Agent, and, when there is a
 | See a linked task one cannot open | its title and owner only; nothing of a confidential or team-only one |
 | Use the API with a token | the token's owner, with their own rights (read only for a read token) |
 | Act through an AI agent (MCP) | the token's owner, with their own rights, limited to its scopes and spaces; never confidential or team-only pipes |
+| Move a pipe to a team, with its tasks | its holder for a personal pipe (not the default one), an admin of its team for a team pipe; only to a team they belong to |
 | Manage a pipe's webhooks | members of its space (not on confidential pipes) |
 | Add or remove a pipe's linked documents | members of its space (Outline documents: Outline accounts) |
 | Move, change the column, assign, due date, document, send | members of the space holding the task |
