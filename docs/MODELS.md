@@ -11,6 +11,9 @@ YAML files.
 - **Import**: *Import…* in **Models** reads a file and creates its types as **new private models** of yours, whatever
   their visibility was; make them public from the editor when you are ready. A file is imported all or nothing: if
   one type is not valid, nothing is created and the error says why.
+- **API and AI agents**: models are also listed, made, changed and deleted over the API (`GET /api/v1/catalog`, then
+  `POST`, `PUT` and `DELETE` on `/api/v1/catalog/pipe-types` and `/api/v1/catalog/task-types`), and by an AI agent
+  allowed to *Create and change my models* ([MCP.md](MCP.md)).
 
 ## Format
 

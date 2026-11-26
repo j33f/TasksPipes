@@ -1551,9 +1551,9 @@ export async function apiRoutes(app: FastifyInstance) {
         const first = pipeTypeById(kind)!.columns[0];
         for (const [i, title] of pipeTypeById(kind)!.templates.entries()) {
           const { rows } = await client.query(
-            `INSERT INTO tasks (title, space_id, pipe_id, status, stage, position, author_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-            [localize(localeOf(req), title), spaceId, row!.id, first.status, first.id, i + 1, uid]
+            `INSERT INTO tasks (title, space_id, pipe_id, status, stage, position, author_id, created_via_token_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+            [localize(localeOf(req), title), spaceId, row!.id, first.status, first.id, i + 1, uid, viaToken()]
           );
           const t = await getTaskRow(rows[0].id, client);
           await recordEvent(client, t!.id, uid, "created", null, snapshot(t!));
