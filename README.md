@@ -68,7 +68,7 @@ follows Outline's look and feel.
   turns it on; see [docs/MCP.md](docs/MCP.md).
 - **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
   keeps a “Deleted account”), and administrators of the instance can disable accounts.
-- **Sub-tasks, history, live updates, a right-click menu on tasks**, English, French, Spanish and Portuguese (Brazil and Portugal; a language is one file), light and dark themes.
+- **Sub-tasks, history, live updates (one person edits a task at a time, others can claim it), a right-click menu on tasks**, English, French, Spanish and Portuguese (Brazil and Portugal; a language is one file), light and dark themes.
 
 TasksPipes was designed for an adult training centre, and its built-in pipe and task types follow that world:
 course design, admissions, exams, Qualiopi quality, funding… But nothing ties it to training: the general,
