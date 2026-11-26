@@ -328,7 +328,8 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   besides (create and change tasks — everything you could change, sub-tasks and dependencies included —, comment, log
   time, send tasks to others, create pipes, make and change your models, delete sub-tasks, time entries, files and
   your models as you could), in all your spaces or only those
-  you pick; it never sees confidential or team-only pipes and never deletes a task. What it does shows in the history
+  you pick — and you can change both later (*Change*) without connecting it again: every tool is offered, and one it
+  lacks the permission for tells it which one to ask you for; it never sees confidential or team-only pipes and never deletes a task. What it does shows in the history
   and comments with an **MCP** tag, and a task it created shows the tag next to its author; tasks changed through an
   access token show *via* the token. You can hand a task of yours to your agent: the owner list offers
   "<your name> (MCP)" (only to you), and the agent finds these tasks with `agent_tasks`. Connect it with an agent token, or let a connector

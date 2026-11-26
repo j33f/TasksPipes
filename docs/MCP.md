@@ -26,6 +26,9 @@ the server's environment; see [HOSTING.md](HOSTING.md#configuration)).
   finds them with `agent_tasks`.
 - **Sending tasks reaches beyond its spaces.** *Send tasks to other people* lets the agent send a task of its spaces
   to anyone you could send it to yourself, and *Comment* lets it @mention people: grant them only when you need them.
+- **You can change what it may do at any time** (*Settings › AI agents › Change*): permissions and spaces, without
+  connecting it again — its next request has them. Every tool is offered to every agent (clients keep the list they
+  got when connected); one it lacks the permission for does nothing and tells it which permission to ask you for.
 - **You can disconnect it at any time** (*Settings › AI agents › Disconnect*). An agent token lasts 7, 30 or 90 days,
   or never expires if you choose so; it stops working when you disconnect it, when your account is disabled, or when
   the administrator turns AI agents off.
@@ -59,16 +62,20 @@ other MCP clients supporting OAuth — need no token to copy: give them the addr
 2. TasksPipes opens: sign in if needed, then the consent page shows **which application asks** and **where it will
    send you back** (for claude.ai, `claude.ai`). Choose what it may do besides reading, and where, as for an agent
    token, then **Allow**.
-3. The connection shows in *Settings › AI agents*, marked *Connected with OAuth*; *Disconnect* ends it.
+3. The connection shows in *Settings › AI agents*, marked *Connected with OAuth*; *Change* changes what it may do
+   and where, *Disconnect* ends it.
 
 Only allow a connection you started yourself: a name such as "Claude" is chosen by the application, the address it
 sends you back to is what tells it apart (applications that registered on the fly are marked *unverified name*).
 
 ## Tools
 
+Every agent is offered every tool. Without the permission a tool needs, it does nothing and says which one: the
+agent is told to ask you for it rather than claim it was done.
+
 | Tool | What it does | Needs |
 | --- | --- | --- |
-| `whoami` | Who the agent acts for, and what it may do | — |
+| `whoami` | Who the agent acts for, what it may do, and the permissions you did not give it | — |
 | `docs_contents`, `read_docs` | The documentation of the version running (how TasksPipes works), by section or by a few words | — |
 | `list_spaces`, `get_space` | Your spaces, their pipes, members and labels | — |
 | `get_pipe` | A pipe: its columns (with their status), the task types it offers and their fields, its tasks | — |

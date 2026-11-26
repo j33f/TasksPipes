@@ -1305,7 +1305,9 @@
     "Task deleted": "Tâche supprimée",
     "Back": "Retour",
     "No other pipe in this space": "Aucun autre pipe dans cet espace",
-    "Moved to {name}": "Déplacée dans {name}"
+    "Moved to {name}": "Déplacée dans {name}",
+    "Saved: the agent has these permissions from its next request": "Enregistré : l’agent a ces permissions dès sa prochaine requête",
+    "No need to connect it again: it has these permissions from its next request.": "Inutile de le reconnecter : il a ces permissions dès sa prochaine requête."
   },
   "server": {
     "{label} is required": "{label} requis",

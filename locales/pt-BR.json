@@ -1305,7 +1305,9 @@
     "Task deleted": "Tarefa excluída",
     "Back": "Voltar",
     "No other pipe in this space": "Nenhum outro pipe neste espaço",
-    "Moved to {name}": "Movida para {name}"
+    "Moved to {name}": "Movida para {name}",
+    "Saved: the agent has these permissions from its next request": "Salvo: o agente tem essas permissões a partir da próxima solicitação",
+    "No need to connect it again: it has these permissions from its next request.": "Não é preciso conectá-lo de novo: ele tem essas permissões a partir da próxima solicitação."
   },
   "server": {
     "{label} is required": "{label}: obrigatório",

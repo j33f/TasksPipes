@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * Agent tokens: for an AI assistant (Claude, Cursor…) acting for oneself over MCP (server: mcp.ts). Shown when an
-   * administrator turned AI agents on. An agent always reads; the rest is chosen here, as are the spaces it reaches.
+   * administrator turned AI agents on. An agent always reads; the rest is chosen here, as are the spaces it reaches, and
+   * can be changed later without connecting it again (its next request has the new permissions).
    */
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
@@ -12,15 +13,28 @@
 
   let agents = $state<AccessToken[]>([]);
   let name = $state("");
-  let write = $state(false);
-  let comment = $state(false);
-  let time = $state(false);
-  let send = $state(false);
-  let pipes = $state(false);
-  let models = $state(false);
-  let remove = $state(false);
-  let everywhere = $state(true);
-  let chosen = $state<string[]>([]);
+  /** What an agent may do besides reading, and where: a new one's, or the one being changed. */
+  type Choice = { scopes: McpScope[]; everywhere: boolean; chosen: string[] };
+  const choice = $state<Choice>({ scopes: [], everywhere: true, chosen: [] });
+  /** The agent whose permissions are being changed, and its new choice. */
+  let editing = $state<{ id: string; choice: Choice } | null>(null);
+  /** The permissions, in the order they are shown. */
+  const PERMISSIONS: { scope: McpScope; label: () => string }[] = [
+    { scope: "tasks:write", label: () => t("Create and change tasks") },
+    { scope: "comments:write", label: () => t("Comment") },
+    { scope: "time:write", label: () => t("Log my time") },
+    { scope: "tasks:send", label: () => t("Send tasks to other people") },
+    { scope: "pipes:write", label: () => t("Create pipes in my spaces") },
+    { scope: "models:write", label: () => t("Create and change my models (pipe and task types)") },
+    { scope: "tasks:delete", label: () => t("Delete, as I could: sub-tasks, time entries, files, my models") },
+  ];
+  /** Adds or removes a value of a choice's list (a snippet's parameter cannot be bound). */
+  const toggle = <T,>(list: T[], value: T, on: boolean) => {
+    const i = list.indexOf(value);
+    if (on && i < 0) list.push(value);
+    if (!on && i >= 0) list.splice(i, 1);
+  };
+  const asked = (c: Choice) => ({ scopes: PERMISSIONS.map((p) => p.scope).filter((s) => c.scopes.includes(s)), ...(c.everywhere ? { spaceIds: null } : { spaceIds: c.chosen }) });
   /** null: never expires. */
   let days = $state<number | null>(30);
   let created = $state<string | null>(null);
@@ -39,19 +53,9 @@
   async function create(e: SubmitEvent) {
     e.preventDefault();
     error = "";
-    const scopes: McpScope[] = [
-      ...(write ? (["tasks:write"] as const) : []),
-      ...(comment ? (["comments:write"] as const) : []),
-      ...(time ? (["time:write"] as const) : []),
-      ...(send ? (["tasks:send"] as const) : []),
-      ...(pipes ? (["pipes:write"] as const) : []),
-      ...(models ? (["models:write"] as const) : []),
-      ...(remove ? (["tasks:delete"] as const) : []),
-    ];
+    const { scopes, spaceIds } = asked(choice);
     try {
-      const r = await api.post<{ token: string }>("/me/tokens", {
-        name, kind: "agent", scopes, days, ...(everywhere ? {} : { spaceIds: chosen }),
-      });
+      const r = await api.post<{ token: string }>("/me/tokens", { name, kind: "agent", scopes, days, ...(spaceIds ? { spaceIds } : {}) });
       created = r.token;
       // Tasks can now be handed to it ("me (MCP)").
       app.refreshMe().catch(() => {});
@@ -62,6 +66,22 @@
     }
   }
 
+  const edit = (tk: AccessToken) =>
+    (editing = { id: tk.id, choice: { scopes: tk.scopes.filter((s) => s !== "tasks:read"), everywhere: !tk.spaceIds, chosen: [...(tk.spaceIds ?? [])] } });
+
+  async function save(e: SubmitEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    try {
+      await api.patch(`/me/tokens/${editing.id}`, asked(editing.choice));
+      editing = null;
+      app.toast(t("Saved: the agent has these permissions from its next request"));
+      await load();
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    }
+  }
+
   async function revoke(tk: AccessToken) {
     if (!confirm(t("Disconnect the agent “{name}”? It can no longer reach your tasks.", { name: tk.name }))) return;
     await api.del(`/me/tokens/${tk.id}`).then(() => { load(); app.refreshMe().catch(() => {}); }).catch((err) => app.toast(errorMessage(err), "error"));
@@ -69,6 +89,27 @@
 
   const copy = (text: string) => navigator.clipboard.writeText(text).then(() => app.toast(t("Copied"))).catch(() => {});
 </script>
+
+{#snippet permissions(c: Choice)}
+  <fieldset>
+    <legend class="small">{t("Besides reading, it may:")}</legend>
+    {#each PERMISSIONS as p (p.scope)}
+      <label><input type="checkbox" checked={c.scopes.includes(p.scope)} onchange={(e) => toggle(c.scopes, p.scope, e.currentTarget.checked)} /> {p.label()}</label>
+    {/each}
+  </fieldset>
+  <fieldset>
+    <legend class="small">{t("Spaces it may reach:")}</legend>
+    <label><input type="radio" checked={c.everywhere} onchange={() => (c.everywhere = true)} /> {t("All my spaces")}</label>
+    <label><input type="radio" checked={!c.everywhere} onchange={() => (c.everywhere = false)} /> {t("Only these:")}</label>
+    {#if !c.everywhere}
+      <div class="spaces">
+        {#each spaces as s (s.id)}
+          <label><input type="checkbox" checked={c.chosen.includes(s.id)} onchange={(e) => toggle(c.chosen, s.id, e.currentTarget.checked)} /> {spaceName(s.id)}</label>
+        {/each}
+      </div>
+    {/if}
+  </fieldset>
+{/snippet}
 
 <div class="section">
   <div class="section-title"><Icon name="lock" />{t("AI agents (MCP)")}</div>
@@ -111,34 +152,24 @@
           · {tk.lastUsedAt ? t("used {when}", { when: relativeTime(tk.lastUsedAt) }) : t("never used")}
         </span>
       </span>
+      {#if !tk.expired}<button class="btn ghost small" onclick={() => (editing?.id === tk.id ? (editing = null) : edit(tk))}>{t("Change")}</button>{/if}
       <button class="btn ghost small" onclick={() => revoke(tk)}>{t("Disconnect")}</button>
     </div>
+    {#if editing?.id === tk.id}
+      <form class="create edit" onsubmit={save}>
+        {@render permissions(editing.choice)}
+        <p class="small muted">{t("No need to connect it again: it has these permissions from its next request.")}</p>
+        <div class="row">
+          <button class="btn small" disabled={!editing.choice.everywhere && !editing.choice.chosen.length}>{t("Save")}</button>
+          <button type="button" class="btn ghost small" onclick={() => (editing = null)}>{t("Cancel")}</button>
+        </div>
+      </form>
+    {/if}
   {/each}
 
   <form class="create" onsubmit={create}>
     <input class="input" placeholder={t("Agent name (e.g. Claude)")} aria-label={t("Agent name")} bind:value={name} maxlength="100" />
-    <fieldset>
-      <legend class="small">{t("Besides reading, it may:")}</legend>
-      <label><input type="checkbox" bind:checked={write} /> {t("Create and change tasks")}</label>
-      <label><input type="checkbox" bind:checked={comment} /> {t("Comment")}</label>
-      <label><input type="checkbox" bind:checked={time} /> {t("Log my time")}</label>
-      <label><input type="checkbox" bind:checked={send} /> {t("Send tasks to other people")}</label>
-      <label><input type="checkbox" bind:checked={pipes} /> {t("Create pipes in my spaces")}</label>
-      <label><input type="checkbox" bind:checked={models} /> {t("Create and change my models (pipe and task types)")}</label>
-      <label><input type="checkbox" bind:checked={remove} /> {t("Delete, as I could: sub-tasks, time entries, files, my models")}</label>
-    </fieldset>
-    <fieldset>
-      <legend class="small">{t("Spaces it may reach:")}</legend>
-      <label><input type="radio" bind:group={everywhere} value={true} /> {t("All my spaces")}</label>
-      <label><input type="radio" bind:group={everywhere} value={false} /> {t("Only these:")}</label>
-      {#if !everywhere}
-        <div class="spaces">
-          {#each spaces as s (s.id)}
-            <label><input type="checkbox" bind:group={chosen} value={s.id} /> {spaceName(s.id)}</label>
-          {/each}
-        </div>
-      {/if}
-    </fieldset>
+    {@render permissions(choice)}
     <div class="row">
       <select class="input" bind:value={days} aria-label={t("Valid for")}>
         <option value={7}>{t("7 days")}</option>
@@ -146,7 +177,7 @@
         <option value={90}>{t("90 days")}</option>
         <option value={null}>{t("Never expires")}</option>
       </select>
-      <button class="btn small" disabled={!name.trim() || (!everywhere && !chosen.length)}>{t("Connect an agent")}</button>
+      <button class="btn small" disabled={!name.trim() || (!choice.everywhere && !choice.chosen.length)}>{t("Connect an agent")}</button>
     </div>
   </form>
   {#if error}<p class="error-text">{error}</p>{/if}
@@ -158,6 +189,7 @@
   .grow { flex: 1; min-width: 0; }
   .col { display: flex; flex-direction: column; gap: 6px; }
   .token-row { padding: 6px 0; border-top: 1px solid var(--divider); }
+  .create.edit { margin: 0 0 8px; padding: 8px 10px; border-radius: 6px; background: var(--background-secondary); }
   .create { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
   .create .input { width: auto; min-height: 30px; padding: 2px 8px; font-size: 14px; }
   fieldset { border: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; }
