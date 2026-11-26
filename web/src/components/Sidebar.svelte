@@ -16,7 +16,7 @@
   import { openTaskCount } from "../lib/constants";
   import { awaitingSignIn, inviteColleague } from "../lib/people";
   import type { SidebarPipe } from "../lib/types";
-  import { draggedTask, isTaskDrag } from "../lib/drag";
+  import { PIPE_DRAG, draggedPipe, draggedTask, isPipeDrag, isTaskDrag } from "../lib/drag";
   import { t, tn } from "../lib/i18n.svelte";
 
   let { open, onclose }: { open: boolean; onclose: () => void } = $props();
@@ -120,6 +120,32 @@
     run(() => api.post(`/tasks/${task.id}/send`, { spaceId: p.spaceId }), t("Sent to the incoming of {space}", { space: where }));
   }
 
+  // A pipe dragged onto a team: moved there with all its tasks, after confirming. One's own personal pipes (not the
+  // default one), and those of the teams one is an admin of.
+  const movable = (p: SidebarPipe) =>
+    !p.isDefault && (app.spaces.find((s) => s.id === p.spaceId)?.kind === "user" || app.spaces.find((s) => s.id === p.spaceId)?.myRole === "admin");
+  function dragPipe(e: DragEvent, p: SidebarPipe) {
+    if (!movable(p) || !e.dataTransfer) return;
+    e.dataTransfer.setData(PIPE_DRAG, JSON.stringify({ id: p.id, name: p.name, spaceId: p.spaceId }));
+    e.dataTransfer.effectAllowed = "move";
+  }
+  let dropTeam = $state<string | null>(null);
+  function dragOverTeam(e: DragEvent, teamId: string) {
+    if (!isPipeDrag(e)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    dropTeam = teamId;
+  }
+  function dropOnTeam(e: DragEvent, team: { id: string; name: string }) {
+    dropTeam = null;
+    const pipe = draggedPipe(e);
+    if (!pipe) return;
+    e.preventDefault();
+    if (pipe.spaceId === team.id) return;
+    if (!confirm(t("Move the pipe “{pipe}” and all its tasks to the team {team}? Its members will see and change them; owners who are not members are unassigned.", { pipe: pipe.name, team: team.name }))) return;
+    run(() => api.post(`/pipes/${pipe.id}/move`, { spaceId: team.id }), t("“{pipe}” moved to {team}", { pipe: pipe.name, team: team.name }));
+  }
+
   function rename(pipe: SidebarPipe, e: FocusEvent) {
     const name = (e.currentTarget as HTMLInputElement).value.trim();
     renamingId = null;
@@ -213,7 +239,10 @@
       </div>
       {#each app.myTeams.filter((s) => matches(s.name)) as s (s.id)}
         {@const pipes = teamPipes(s.id)}
-        <div class="sidebar-link has-disclosure hover-actions" class:active={router.path === `/spaces/${s.id}`}>
+        <div class="sidebar-link has-disclosure hover-actions" class:active={router.path === `/spaces/${s.id}`}
+          class:drop-target={dropTeam === s.id} role="listitem"
+          ondragover={(e) => dragOverTeam(e, s.id)} ondragleave={() => { if (dropTeam === s.id) dropTeam = null; }}
+          ondrop={(e) => dropOnTeam(e, s)}>
           {#if pipes.length}{@render disclosure(`team:${s.id}`)}{:else}<span class="disclosure-space"></span>{/if}
           <a class="row-link" href={`/spaces/${s.id}`}>
             <SpaceIcon space={s} size={20} /><span class="label">{s.name}</span>
@@ -344,6 +373,7 @@
   {:else}
     <div class="sidebar-link pipe-link hover-actions" class:nested class:active={router.path === `/pipes/${p.id}`}
       class:menu-open={menu?.pipe.id === p.id} class:drop-target={dropPipe === p.id} role="listitem"
+      draggable={movable(p)} ondragstart={(e) => dragPipe(e, p)}
       ondragover={(e) => dragOverPipe(e, p)} ondragleave={() => { if (dropPipe === p.id) dropPipe = null; }}
       ondrop={(e) => dropOnPipe(e, p, spaceName)}>
       <a class="row-link" href={`/pipes/${p.id}`} title={spaceName ? `${spaceName} › ${p.name}` : p.name}>
