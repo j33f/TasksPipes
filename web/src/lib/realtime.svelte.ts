@@ -8,7 +8,13 @@ const IDLE_MS = 5 * 60_000;
 const HIDDEN_MS = 60_000;
 
 interface LiveEvent {
-  type: "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "inbox" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello" | "poker";
+  type: "task.sent" | "task.refused" | "incoming.changed" | "task.updated" | "inbox" | "connection.request" | "connection.accepted" | "mention" | "unblocked" | "hello" | "poker" | "lock";
+  /** task.updated: the task, who changed it, and whether through their AI agent or an access token. */
+  taskId?: string;
+  actorId?: string;
+  via?: "agent" | "token";
+  /** lock: what happened to who edits the task (server/src/locks.ts). */
+  change?: "taken" | "released" | "claimed" | "granted" | "refused" | "handedOver";
   /** poker: the pipe whose session changed; whether it opened or closed. */
   pipeId?: string;
   opened?: boolean;
@@ -32,6 +38,12 @@ class Live {
   arrivals = $state(0);
   /** Bumped when a Planning Poker session changes (a vote, the cards shown…): its window fetches the state. */
   poker = $state(0);
+  /** The last change of a task, for the window showing it (who made it). */
+  taskChange = $state<{ taskId: string; actorId?: string; via?: "agent" | "token"; n: number } | null>(null);
+  /** The last change of who edits a task, for the window showing it. */
+  lockChange = $state<{ taskId: string; change: NonNullable<LiveEvent["change"]>; by: string; n: number } | null>(null);
+  /** Pages that show live data (a pipe, a task): the connection stays open while one is shown, even without activity. */
+  #holds = 0;
 
   #ws: WebSocket | null = null;
   #retry = 0;
@@ -51,9 +63,20 @@ class Live {
     }
     document.addEventListener("visibilitychange", this.#onVisibility);
     this.#idleTimer = setInterval(() => {
-      if (this.#ws && Date.now() - this.#lastActivity > IDLE_MS) this.#sleep();
+      if (this.#ws && !this.#holds && Date.now() - this.#lastActivity > IDLE_MS) this.#sleep();
     }, 30_000);
     this.#connect();
+  }
+
+  /** Keeps the connection open while something live is shown; returns the function to call when it goes. */
+  hold() {
+    this.#holds++;
+    if (this.idle && this.#started && !document.hidden) this.#wake();
+    let held = true;
+    return () => {
+      if (held) this.#holds--;
+      held = false;
+    };
   }
 
   stop() {
@@ -129,6 +152,13 @@ class Live {
   #handle(e: LiveEvent) {
     if (e.type === "hello") return checkServerVersion(e.version);
     if (e.type === "inbox") return void inbox.load();
+    if (e.type === "lock") {
+      if (e.task && e.change) this.lockChange = { taskId: e.task.id, change: e.change, by: e.by ?? "", n: (this.lockChange?.n ?? 0) + 1 };
+      return;
+    }
+    if (e.type === "task.updated" && e.taskId) {
+      this.taskChange = { taskId: e.taskId, actorId: e.actorId, via: e.via, n: (this.taskChange?.n ?? 0) + 1 };
+    }
     if (e.type === "poker") {
       this.poker++;
       // Opened or closed: the pipe's page shows it; a vote alone reloads nothing else.

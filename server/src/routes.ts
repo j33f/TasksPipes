@@ -20,8 +20,9 @@ import { INVITE_LINK_HOURS, createLoginLink, decrypt, encrypt, ensurePersonalSpa
 import { newSecret, otpauthUrl, verifyTotp } from "./totp.js";
 import { isEmail, sendLinkMail, sendOutlineInvite } from "./mail.js";
 import { notifySpace, notifyUser } from "./realtime.js";
+import { assertEditable, lockRoutes } from "./locks.js";
 import { inboxRoutes } from "./inbox.js";
-import { viaToken } from "./via.js";
+import { viaKind, viaToken } from "./via.js";
 import { cleanTemplates, receive } from "./incoming.js";
 import { calendarUrl } from "./calendar.js";
 import { adminRoutes, requestIsAdmin } from "./admin.js";
@@ -410,11 +411,25 @@ async function recordEvent(
   await queueWebhooks(db, Number(rows[0].id));
   // The other members' open pages reload, once it is committed (imports tell them once, at the end).
   if (notify) {
+    const via = viaKind() ?? undefined;
     afterCommit(db, () => {
-      notifySpace(after.space_id, { type: "task.updated" }, actorId);
-      if (before && before.space_id !== after.space_id) notifySpace(before.space_id, { type: "task.updated" }, actorId);
+      const event = { type: "task.updated" as const, taskId, actorId, via };
+      notifySpace(after.space_id, event, skipActor(actorId, via));
+      if (before && before.space_id !== after.space_id) notifySpace(before.space_id, event, skipActor(actorId, via));
     });
   }
+}
+
+/**
+ * Whose pages need not be told of a change: the one who made it from a page (it reloads by itself), but not someone
+ * whose agent or access token made it: their open pages must show it.
+ */
+const skipActor = (actorId: string, via: unknown = viaKind()) => (via ? undefined : actorId);
+
+/** Tells the space's pages that a task changed, for changes that leave nothing in its history (sub-task edits...). */
+function taskTouched(t: Row, actorId: string) {
+  const via = viaKind() ?? undefined;
+  notifySpace(t.space_id, { type: "task.updated", taskId: t.id, actorId, via }, skipActor(actorId, via));
 }
 
 /** A task that left its pipe left its sprint too (tasks_sprint_on_move): noted in its history, for the burndown. */
@@ -746,6 +761,7 @@ export async function apiRoutes(app: FastifyInstance) {
     exportReport: (p, sprint) => exportSprintToOutline(p, sprint),
   });
   await app.register(outlineReportRoutes, { loadPipeFor, latestReportDay, reportDay });
+  await app.register(lockRoutes, { loadTaskFor });
   await app.register(pokerRoutes, {
     loadPipeFor,
     setPoints: async (db, taskId, actorId, points) => {
@@ -1736,7 +1752,7 @@ export async function apiRoutes(app: FastifyInstance) {
       return plan.tasks.length;
     });
     req.log.info({ pipeId: p.id, created, source }, "Tasks imported");
-    notifySpace(p.space_id, { type: "task.updated" }, uid);
+    notifySpace(p.space_id, { type: "task.updated" }, skipActor(uid));
     return { created };
   });
 
@@ -1847,6 +1863,7 @@ export async function apiRoutes(app: FastifyInstance) {
   app.patch("/tasks/:id", async (req: Req) => {
     const uid = me(req);
     const { t, perms } = await loadTaskFor(req.params.id, uid, "editContent");
+    await assertEditable(t.id, uid);
     const b = req.body || {};
     if (["assigneeId", "assigneeAgent", "dueDate", "startDate", "outlineDoc", "status", "stage", "sprintId"].some((k) => k in b) && !perms.manage) throw forbidden();
 
@@ -2039,7 +2056,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const { t } = await loadTaskFor(req.params.id, uid, "manage");
     await query(`DELETE FROM tasks WHERE id = $1`, [t.id]);
     req.log.info({ taskId: t.id, number: t.number, spaceId: t.space_id, userId: uid }, "Task deleted");
-    notifySpace(t.space_id, { type: "task.updated" }, uid);
+    notifySpace(t.space_id, { type: "task.updated", taskId: t.id, actorId: uid }, skipActor(uid));
     return { ok: true };
   });
 
@@ -2102,6 +2119,7 @@ export async function apiRoutes(app: FastifyInstance) {
       `INSERT INTO task_time_entries (task_id, user_id, spent_on, minutes, note) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [t.id, uid, cleanDay(b.spentOn), cleanMinutes(b.minutes), cleanNote(b.note)]
     );
+    taskTouched(t, uid);
     return presentEntry({ ...row, name: req.user!.name, avatar_url: req.user!.avatarUrl ?? null }, uid, false);
   });
 
@@ -2118,13 +2136,14 @@ export async function apiRoutes(app: FastifyInstance) {
   // Only its author changes an entry.
   app.patch("/time/:id", rateLimited(LIMITS.timeEntries), async (req: Req) => {
     const uid = me(req);
-    const { e } = await entryFor(req.params.id, uid);
+    const { e, t } = await entryFor(req.params.id, uid);
     if (e.user_id !== uid) throw forbidden();
     const b = req.body || {};
     const row = await one(
       `UPDATE task_time_entries SET spent_on = $2, minutes = $3, note = $4 WHERE id = $1 RETURNING *`,
       [e.id, "spentOn" in b ? cleanDay(b.spentOn) : e.spent_on, "minutes" in b ? cleanMinutes(b.minutes) : e.minutes, "note" in b ? cleanNote(b.note) : e.note]
     );
+    taskTouched(t, uid);
     return presentEntry({ ...row, name: req.user!.name, avatar_url: req.user!.avatarUrl ?? null }, uid, false);
   });
 
@@ -2141,6 +2160,7 @@ export async function apiRoutes(app: FastifyInstance) {
         await recordEvent(client, t.id, uid, "time", s, s, null, { timeRemoved: { minutes: e.minutes, spentOn: e.spent_on, of: person?.name ?? null } });
       }
     });
+    if (e.user_id === uid) taskTouched(t, uid);
     return { ok: true };
   });
 
@@ -2222,6 +2242,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.post("/tasks/:id/items", async (req: Req) => {
     const { t } = await loadTaskFor(req.params.id, me(req), "editContent");
+    await assertEditable(t.id, me(req));
     const label = text(req.body?.text, "Sub-task", { required: true, max: 500 });
     const count = await one(`SELECT count(*)::int AS n FROM task_items WHERE task_id = $1`, [t.id]);
     if (count!.n >= MAX_ITEMS) throw bad("{n} sub-tasks at most", { n: MAX_ITEMS });
@@ -2235,6 +2256,7 @@ export async function apiRoutes(app: FastifyInstance) {
       await client.query(`UPDATE tasks SET updated_at = now() WHERE id = $1`, [t.id]);
       return r!;
     });
+    taskTouched(t, me(req));
     return { id: row.id };
   });
 
@@ -2243,6 +2265,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const item = await one(`SELECT * FROM task_items WHERE id = $1`, [uuid(req.params.id, "Sub-task")]);
     if (!item) throw notFound("Sub-task not found");
     const { t } = await loadTaskFor(item.task_id, uid, "editContent");
+    await assertEditable(t.id, uid);
     const b = req.body || {};
     const label = "text" in b ? text(b.text, "Sub-task", { required: true, max: 500 }) : item.text;
     if ("done" in b && typeof b.done !== "boolean") throw bad("Sub-task: invalid state");
@@ -2264,14 +2287,17 @@ export async function apiRoutes(app: FastifyInstance) {
         await recordEvent(client, t.id, uid, "checklist", s, s, null, { item: label, done });
       }
     });
+    if (done === item.done) taskTouched(t, uid);
     return { ok: true };
   });
 
   app.delete("/items/:id", async (req: Req) => {
     const item = await one(`SELECT id, task_id FROM task_items WHERE id = $1`, [uuid(req.params.id, "Sub-task")]);
     if (!item) throw notFound("Sub-task not found");
-    await loadTaskFor(item.task_id, me(req), "editContent");
+    const { t } = await loadTaskFor(item.task_id, me(req), "editContent");
+    await assertEditable(t.id, me(req));
     await query(`DELETE FROM task_items WHERE id = $1`, [item.id]);
+    taskTouched(t, me(req));
     return { ok: true };
   });
 
@@ -2284,6 +2310,7 @@ export async function apiRoutes(app: FastifyInstance) {
   app.post("/tasks/:id/files", { bodyLimit: MAX_FILE_SIZE }, async (req: Req) => {
     const uid = me(req);
     const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    await assertEditable(t.id, uid);
     const field = taskType(t.task_type).fields.find((f) => f.id === req.query.field && f.type === "files");
     if (!field) throw bad("This field does not take files");
     const content = req.body as unknown as Buffer;
@@ -2325,6 +2352,7 @@ export async function apiRoutes(app: FastifyInstance) {
     const f = await one(`SELECT id, task_id, name, field FROM task_files WHERE id = $1`, [uuid(req.params.id, "File")]);
     if (!f) throw notFound("File not found");
     const { t } = await loadTaskFor(f.task_id, uid, "editContent");
+    await assertEditable(t.id, uid);
     const label = taskType(t.task_type).fields.find((x) => x.id === f.field)?.label ?? f.field;
     await tx(async (client) => {
       await client.query(`DELETE FROM task_files WHERE id = $1`, [f.id]);

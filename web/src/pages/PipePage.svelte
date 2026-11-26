@@ -1,6 +1,7 @@
 <script lang="ts">
   import { TASK_DRAG } from "../lib/drag";
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { live } from "../lib/realtime.svelte";
   import { t } from "../lib/i18n.svelte";
   import { api, errorMessage } from "../lib/api";
   import { autosize } from "../lib/autosize";
@@ -121,6 +122,9 @@
     chosenView = v;
     try { localStorage.setItem("tp:pipeView", v); } catch { /* storage unavailable */ }
   }
+
+  // Changes made by the others (and by one's agent) show while the board is open, even left untouched.
+  onMount(() => live.hold());
 
   $effect(() => {
     app.version;
