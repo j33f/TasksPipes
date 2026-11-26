@@ -26,6 +26,8 @@
   let comment = $state(false);
   let time = $state(false);
   let send = $state(false);
+  let pipes = $state(false);
+  let models = $state(false);
   let remove = $state(false);
   let everywhere = $state(true);
   let chosen = $state<string[]>([]);
@@ -49,7 +51,10 @@
         ...(comment ? (["comments:write"] as const) : []),
         ...(time ? (["time:write"] as const) : []),
         ...(send ? (["tasks:send"] as const) : []),
-        ...(remove ? (["tasks:delete"] as const) : []),
+        ...(pipes ? (["pipes:write"] as const) : []),
+        ...(models ? (["models:write"] as const) : []),
+        ...(models ? (["models:write"] as const) : []),
+      ...(remove ? (["tasks:delete"] as const) : []),
       ];
       const r = allow
         ? await api.post<{ redirect: string }>(`/oauth/requests/${encodeURIComponent(id)}/approve`, { scopes, ...(everywhere ? {} : { spaceIds: chosen }) })
@@ -92,7 +97,9 @@
         <label><input type="checkbox" bind:checked={comment} /> {t("Comment")}{#if asked("comments:write")} <span class="asked">{t("asked")}</span>{/if}</label>
         <label><input type="checkbox" bind:checked={time} /> {t("Log my time")}{#if asked("time:write")} <span class="asked">{t("asked")}</span>{/if}</label>
         <label><input type="checkbox" bind:checked={send} /> {t("Send tasks to other people")}{#if asked("tasks:send")} <span class="asked">{t("asked")}</span>{/if}</label>
-        <label><input type="checkbox" bind:checked={remove} /> {t("Delete, as I could: sub-tasks, time entries, files")}{#if asked("tasks:delete")} <span class="asked">{t("asked")}</span>{/if}</label>
+        <label><input type="checkbox" bind:checked={pipes} /> {t("Create pipes in my spaces")}{#if asked("pipes:write")} <span class="asked">{t("asked")}</span>{/if}</label>
+        <label><input type="checkbox" bind:checked={models} /> {t("Create and change my models (pipe and task types)")}{#if asked("models:write")} <span class="asked">{t("asked")}</span>{/if}</label>
+        <label><input type="checkbox" bind:checked={remove} /> {t("Delete, as I could: sub-tasks, time entries, files, my models")}{#if asked("tasks:delete")} <span class="asked">{t("asked")}</span>{/if}</label>
       </fieldset>
 
       <fieldset>

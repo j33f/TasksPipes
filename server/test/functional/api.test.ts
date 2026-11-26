@@ -113,6 +113,49 @@ describe("access tokens", () => {
   });
 });
 
+describe("models over the API", () => {
+  it("are listed, made, changed and deleted as in the designer", async () => {
+    const catalog = (await api(read, "GET", "/api/v1/catalog")).body;
+    expect(catalog.pipeTypes.map((t: { id: string }) => t.id)).toContain("general");
+    expect(catalog.taskTypes.length).toBeGreaterThan(0);
+    expect((await api(read, "POST", "/api/v1/catalog/task-types", { label: "Read only" })).status).toBe(403);
+
+    const made = await api(write, "POST", "/api/v1/catalog/task-types", { label: "Lead", fields: [{ label: "Budget", type: "money" }] });
+    expect(made.status).toBe(200);
+    const pipe = await api(write, "POST", "/api/v1/catalog/pipe-types", {
+      label: "Leads", taskTypes: [made.body.id],
+      columns: [{ label: "New", status: "backlog" }, { label: "Won", status: "done" }],
+    });
+    expect(pipe.status).toBe(200);
+    const listed = (await api(read, "GET", "/api/v1/catalog")).body.pipeTypes.find((t: { id: string }) => t.id === pipe.body.id);
+    expect(listed).toMatchObject({ label: "Leads", taskTypes: [made.body.id], createdBy: { name: "Alice Martin" } });
+    // The documented schema: a column needs a known state.
+    expect((await api(write, "POST", "/api/v1/catalog/pipe-types", { label: "Bad", columns: [{ label: "A", status: "nope" }] })).status).toBe(400);
+    expect((await api(write, "POST", "/api/v1/catalog/nope", { label: "Bad" })).status).toBe(400);
+
+    const cols = listed.columns.map((c: { id: string; label: string; status: string }) => ({ id: c.id, label: c.label, status: c.status }));
+    expect((await api(write, "PUT", `/api/v1/catalog/pipe-types/${pipe.body.id}`, { ...listed, label: "Sales leads", columns: cols })).status).toBe(200);
+    expect((await api(carolToken, "PUT", `/api/v1/catalog/pipe-types/${pipe.body.id}`, { label: "Mine now", columns: cols })).status).toBe(403);
+    // A task type a pipe type offers is deleted after it.
+    expect((await api(write, "DELETE", `/api/v1/catalog/task-types/${made.body.id}`)).status).toBe(400);
+    expect((await api(write, "DELETE", `/api/v1/catalog/pipe-types/${pipe.body.id}`)).status).toBe(200);
+    expect((await api(write, "DELETE", `/api/v1/catalog/task-types/${made.body.id}`)).status).toBe(200);
+  });
+});
+
+describe("pipes over the API", () => {
+  it("are created in a space one is a member of, from a pipe type", async () => {
+    const space = (await api(read, "GET", "/api/v1/me")).body.personalSpaceId;
+    expect((await api(read, "POST", `/api/v1/spaces/${space}/pipes`, { name: "No" })).status).toBe(403);
+    const made = await api(write, "POST", `/api/v1/spaces/${space}/pipes`, { name: "From the API", kind: "commercial", withTemplates: true });
+    expect(made.status).toBe(200);
+    const pipe = (await api(read, "GET", `/api/v1/pipes/${made.body.id}`)).body;
+    expect(pipe).toMatchObject({ name: "From the API", kind: "commercial" });
+    expect((await api(write, "POST", `/api/v1/spaces/${space}/pipes`, {})).status).toBe(400);
+    expect((await api(carolToken, "POST", `/api/v1/spaces/${space}/pipes`, { name: "Not hers" })).status).toBe(403);
+  });
+});
+
 describe("API documentation", () => {
   it("is an OpenAPI document of the /api/v1 routes, and a Swagger UI page", async () => {
     const doc = (await app.inject({ method: "GET", url: "/api/v1/openapi.json" })).json();
