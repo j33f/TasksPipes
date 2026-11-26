@@ -68,6 +68,11 @@ and accept or refuse it. A confidential task cannot leave its space.
   browser. Dropping a task in another lane gives it that lane's owner or type.
 - **Archiving**: an archived pipe leaves the lists, pickers and "My tasks", and takes no new tasks. It can still be
   viewed and unarchived. A pipe can be archived once all its tasks are done or dropped.
+- **Moving a pipe to a team**: drag a pipe of the sidebar onto a team (after confirming) to move it there with all its
+  tasks — one's own personal pipes (not the *Personal* one), or a team's pipes for an admin of that team. Its tasks
+  keep their history (the move is noted in each), sub-tasks, files, time and sprints; personal tasks get their holder
+  as owner, owners who are not members of the team are unassigned, and labels become the team's labels of the same
+  name (created when missing). A pipe goes to teams only, never to a personal space.
 - **Linked documents**: a pipe holds links to its documents (specification, brief, mock-ups, repository…), shown
   under its description. Its members add them by choosing where the document lives, among the sources fitting the
   pipe type — GitHub, GitLab and Figma first for development, Figma, Miro and Canva for design, Outline, Google Docs,

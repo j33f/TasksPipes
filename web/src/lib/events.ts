@@ -107,6 +107,7 @@ export function eventChanges(e: TaskEvent): string[] {
     out.push(t("Estimate: {from} → {to}", { from: est(e.details.estimate.from), to: est(e.details.estimate.to) }));
   }
   if (e.details?.whileBlocked) out.push(t("While it still waited for other tasks"));
+  if (e.details?.withPipe) out.push(t("With its whole pipe"));
   if (e.details?.priority) out.push(t("Priority: {from} → {to}", { from: priorityName(e.details.priority.from), to: priorityName(e.details.priority.to) }));
   if (e.details?.startDate) {
     const d = (v: string | null) => (v ? formatDate(v) : t("none"));

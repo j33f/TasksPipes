@@ -20,3 +20,24 @@ export function draggedTask(e: DragEvent): DraggedTask | null {
 
 /** Whether what is dragged over is a task (its data is only readable on drop, its type on drag over). */
 export const isTaskDrag = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes(TASK_DRAG);
+
+/** A pipe dragged from the sidebar onto a team, to move it there with its tasks (Sidebar.svelte). */
+export const PIPE_DRAG = "application/x-taskspipes-pipe";
+
+export interface DraggedPipe {
+  id: string;
+  name: string;
+  spaceId: string;
+}
+
+/** The pipe a drop carries, or null. */
+export function draggedPipe(e: DragEvent): DraggedPipe | null {
+  try {
+    const p = JSON.parse(e.dataTransfer?.getData(PIPE_DRAG) || "null");
+    return p && typeof p.id === "string" && typeof p.name === "string" && typeof p.spaceId === "string" ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+export const isPipeDrag = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes(PIPE_DRAG);
