@@ -16,6 +16,7 @@
   let comment = $state(false);
   let time = $state(false);
   let send = $state(false);
+  let pipes = $state(false);
   let models = $state(false);
   let remove = $state(false);
   let everywhere = $state(true);
@@ -43,6 +44,7 @@
       ...(comment ? (["comments:write"] as const) : []),
       ...(time ? (["time:write"] as const) : []),
       ...(send ? (["tasks:send"] as const) : []),
+      ...(pipes ? (["pipes:write"] as const) : []),
       ...(models ? (["models:write"] as const) : []),
       ...(remove ? (["tasks:delete"] as const) : []),
     ];
@@ -100,6 +102,7 @@
         {#if tk.scopes.includes("comments:write")}<span class="badge">{t("Comments")}</span>{/if}
         {#if tk.scopes.includes("time:write")}<span class="badge">{t("Logs time")}</span>{/if}
         {#if tk.scopes.includes("tasks:send")}<span class="badge warn">{t("Sends tasks to others")}</span>{/if}
+        {#if tk.scopes.includes("pipes:write")}<span class="badge">{t("Creates pipes")}</span>{/if}
         {#if tk.scopes.includes("models:write")}<span class="badge">{t("Makes models")}</span>{/if}
         {#if tk.scopes.includes("tasks:delete")}<span class="badge warn">{t("Deletes")}</span>{/if}
         <span class="small muted">
@@ -120,6 +123,7 @@
       <label><input type="checkbox" bind:checked={comment} /> {t("Comment")}</label>
       <label><input type="checkbox" bind:checked={time} /> {t("Log my time")}</label>
       <label><input type="checkbox" bind:checked={send} /> {t("Send tasks to other people")}</label>
+      <label><input type="checkbox" bind:checked={pipes} /> {t("Create pipes in my spaces")}</label>
       <label><input type="checkbox" bind:checked={models} /> {t("Create and change my models (pipe and task types)")}</label>
       <label><input type="checkbox" bind:checked={remove} /> {t("Delete, as I could: sub-tasks, time entries, files, my models")}</label>
     </fieldset>

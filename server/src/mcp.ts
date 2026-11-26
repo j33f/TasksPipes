@@ -6,7 +6,7 @@
  * - every tool goes through /api/v1 (app.inject) with the agent's token: the same routes, rights and checks as the
  *   app, so an agent never does more than its owner may;
  * - its scopes (MCP_SCOPES): reading always; changing tasks (all a person can change), commenting, logging time,
- *   sending tasks to others, making models (pipe and task types) and deleting (sub-tasks, time entries, files, and
+ *   sending tasks to others, creating pipes, making models (pipe and task types) and deleting (sub-tasks, time entries, files, and
  *   with models:write the person's models: never a task) only when granted;
  * - its spaces, when its owner chose some: nothing else is shown or changed;
  * - confidential and team-only content never reaches it (as with webhooks): it stays in the app;
@@ -766,6 +766,39 @@ function buildServer(app: FastifyInstance, c: Caller) {
         await ownTask(app, c, taskId);
         await call(app, c, "POST", `/tasks/${taskId}/send`, target);
         return { ok: true };
+      })
+    );
+  }
+
+  if (can("pipes:write")) {
+    server.registerTool(
+      "create_pipe",
+      {
+        title: "Create a pipe",
+        description: "Create a pipe (board) in a space the person is a member of, from a pipe type (kind: see list_models; general by default), optionally with the type's starter tasks.",
+        inputSchema: z.object({
+          spaceId: id,
+          name: z.string().min(1).max(120),
+          kind: z.string().max(100).optional(),
+          description: z.string().max(10000).optional(),
+          visibility: z.enum(["private", "open"]).optional().describe("private (default): the space's members; open: anyone who can see the space's open pipes"),
+          color: HEX.optional(),
+          icon: z.string().max(32).optional().describe("An icon name or an emoji (the type's by default)"),
+          withTemplates: z.boolean().optional().describe("Add the pipe type's starter tasks"),
+        }),
+      },
+      run(async ({ spaceId, kind, ...pipe }) => {
+        if (!allowedSpace(c, spaceId)) throw new ToolError("Space not found");
+        // A confidential pipe would be hidden from the agent that made it: made in the app only.
+        if (kind) modelOf(c, "pipe", kind);
+        const { id: pipeId } = await call(app, c, "POST", `/spaces/${spaceId}/pipes`, { ...pipe, ...(kind ? { kind } : {}) });
+        const p = await ownPipe(app, c, pipeId);
+        return {
+          id: p.id, name: p.name, kind: p.kind, space: { id: p.space.id, name: p.space.name },
+          columns: columnsOf(c, p.kind),
+          taskTypes: taskTypesOf(p.kind).map((t) => ({ id: t.id, label: localizeTaskType(c.locale, t).label })),
+          tasks: (p.tasks ?? []).length,
+        };
       })
     );
   }

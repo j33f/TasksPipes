@@ -702,7 +702,7 @@ export interface ImportPreview {
 
 /** A personal access token of the public API (its value is only shown at creation). */
 /** What an agent token may do over MCP (server: api.ts MCP_SCOPES); reading always. */
-export type McpScope = "tasks:read" | "tasks:write" | "comments:write" | "time:write" | "tasks:send" | "models:write" | "tasks:delete";
+export type McpScope = "tasks:read" | "tasks:write" | "comments:write" | "time:write" | "tasks:send" | "pipes:write" | "models:write" | "tasks:delete";
 
 export interface AccessToken {
   id: string;

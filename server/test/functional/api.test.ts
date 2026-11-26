@@ -143,6 +143,19 @@ describe("models over the API", () => {
   });
 });
 
+describe("pipes over the API", () => {
+  it("are created in a space one is a member of, from a pipe type", async () => {
+    const space = (await api(read, "GET", "/api/v1/me")).body.personalSpaceId;
+    expect((await api(read, "POST", `/api/v1/spaces/${space}/pipes`, { name: "No" })).status).toBe(403);
+    const made = await api(write, "POST", `/api/v1/spaces/${space}/pipes`, { name: "From the API", kind: "commercial", withTemplates: true });
+    expect(made.status).toBe(200);
+    const pipe = (await api(read, "GET", `/api/v1/pipes/${made.body.id}`)).body;
+    expect(pipe).toMatchObject({ name: "From the API", kind: "commercial" });
+    expect((await api(write, "POST", `/api/v1/spaces/${space}/pipes`, {})).status).toBe(400);
+    expect((await api(carolToken, "POST", `/api/v1/spaces/${space}/pipes`, { name: "Not hers" })).status).toBe(403);
+  });
+});
+
 describe("API documentation", () => {
   it("is an OpenAPI document of the /api/v1 routes, and a Swagger UI page", async () => {
     const doc = (await app.inject({ method: "GET", url: "/api/v1/openapi.json" })).json();

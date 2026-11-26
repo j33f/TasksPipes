@@ -481,3 +481,22 @@ describe("models over MCP", () => {
   });
 });
 
+describe("pipes made over MCP", () => {
+  it("are created by an agent allowed to, in its spaces, never of a confidential type", async () => {
+    const reader = (await agentToken([])).body.token;
+    expect((await rpc(reader, "tools/list")).body.result.tools.map((t: { name: string }) => t.name)).not.toContain("create_pipe");
+    const token = (await agentToken(["pipes:write"], [team])).body.token;
+    const made = await tool(token, "create_pipe", { spaceId: team, name: "Hiring", kind: "rentree", withTemplates: true });
+    expect(made).toMatchObject({ name: "Hiring", kind: "rentree", space: { id: team } });
+    expect(made.columns.length).toBeGreaterThan(1);
+    const pipe = (await alice.get(`/api/pipes/${made.id}`)).body;
+    expect(pipe.name).toBe("Hiring");
+    expect(pipe.tasks.length).toBeGreaterThan(0);
+    // Its starter tasks are recorded as made over MCP.
+    for (const t of pipe.tasks) expect(t.createdVia).toMatchObject({ kind: "agent", name: "Claude" });
+    const space = (await alice.get("/api/me")).body.personalSpaceId;
+    expect((await tool(token, "create_pipe", { spaceId: space, name: "Outside" })).error).toBe("Space not found");
+    expect((await tool(token, "create_pipe", { spaceId: team, name: "Secret", kind: "garde_alternee" })).error).toMatch(/not found/);
+  });
+});
+

@@ -19,7 +19,9 @@ export const MAX_TOKEN_DAYS = 366;
 /** Agent tokens (MCP) live 90 days at most when they expire; any token may also never expire (days: null). */
 export const MAX_AGENT_TOKEN_DAYS = 90;
 /** What an agent token may do over MCP (mcp.ts); reading is always among them. */
-export const MCP_SCOPES = ["tasks:read", "tasks:write", "comments:write", "time:write", "tasks:send", "models:write", "tasks:delete"] as const;
+export const MCP_SCOPES = [
+  "tasks:read", "tasks:write", "comments:write", "time:write", "tasks:send", "pipes:write", "models:write", "tasks:delete",
+] as const;
 export type McpScope = (typeof MCP_SCOPES)[number];
 /**
  * The MCP endpoint calls /api/v1 itself (app.inject) with the agent's token and this header: agent tokens are refused
@@ -161,6 +163,18 @@ export const V1_ROUTES: Record<string, Doc> = {
   "GET /users": { tag: "People", summary: "People one can see", response: list("People") },
   "GET /spaces": { tag: "Spaces", summary: "Spaces one can reach: personal spaces and teams", response: list("Spaces") },
   "GET /spaces/:id": { tag: "Spaces", summary: "A space, its members, pipes and incoming", params: idParams, response: object("Space") },
+  "POST /spaces/:id/pipes": {
+    tag: "Pipes", summary: "Create a pipe in a space one is a member of, of a pipe type (kind, see GET /catalog)", params: idParams,
+    body: { type: "object", required: ["name"], properties: {
+      name: { type: "string", maxLength: 120 },
+      kind: { type: "string", description: "The id of a pipe type one may use (\"general\" by default)" },
+      description: { type: "string" },
+      visibility: { type: "string", enum: ["private", "open"], description: "private (default): its space's members; open: anyone (never for a confidential type)" },
+      color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" }, icon: { type: "string", description: "An icon name or an emoji" },
+      withTemplates: { type: "boolean", description: "Add the pipe type's starter tasks" },
+    } },
+    response: object("The new pipe", { id: uuid }),
+  },
   "GET /pipes/:id": { tag: "Pipes", summary: "A pipe and its tasks", params: idParams, response: object("Pipe with its tasks") },
   "GET /pipes/:id/sprints": { tag: "Sprints", summary: "The sprints of a pipe in sprints, latest first", params: idParams, response: list("Sprints") },
   "GET /pipes/:id/sprint-progress": {
