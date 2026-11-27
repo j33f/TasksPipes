@@ -1021,6 +1021,14 @@ END $f$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS tasks_assignee_agent_reset ON tasks;
 CREATE TRIGGER tasks_assignee_agent_reset BEFORE UPDATE OF space_id, assignee_id ON tasks
   FOR EACH ROW EXECUTE FUNCTION tasks_assignee_agent_reset();
+
+-- The instance's AI answers comments on the tasks handed to one's agent (ai-replies.ts): each person chooses.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_replies boolean NOT NULL DEFAULT false;
+-- The last history entry the AI replies looked at (one row; locked by the instance working on it).
+CREATE TABLE IF NOT EXISTS ai_reply_cursor (
+  id int PRIMARY KEY CHECK (id = 1),
+  event_id bigint NOT NULL
+);
 `;
 
 /**

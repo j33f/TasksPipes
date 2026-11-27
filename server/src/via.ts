@@ -16,6 +16,9 @@ export const viaKind = (): "agent" | "token" | null => {
   return t ? (t.kind === "agent" ? "agent" : "token") : null;
 };
 
+/** Runs `fn` as if it came through this access token (work done outside a request: the instance's AI replies). */
+export const runVia = <T>(token: { id: string; kind: string }, fn: () => Promise<T>): Promise<T> => store.run(token, fn);
+
 /** Wraps every route registered after it, so that its handler runs with the request's token known. */
 export function trackVia(app: FastifyInstance) {
   app.addHook("onRoute", (route) => {

@@ -1,3 +1,4 @@
+import { runAiReplies } from "./ai-replies.js";
 import { config } from "./config.js";
 import { loadSettings, migrate, pool } from "./db.js";
 import { SETTINGS_REFRESH_MS } from "./settings.js";
@@ -11,7 +12,7 @@ import { cleanupInbox } from "./inbox.js";
 import { cleanupOAuth } from "./oauth.js";
 import { cleanupWebhookDeliveries, runWebhooks } from "./webhooks.js";
 import { runRecurrences } from "./recurrence.js";
-import { recordOccurrence } from "./routes.js";
+import { commentTask, recordOccurrence } from "./routes.js";
 import { checkForUpdate } from "./updates.js";
 import { checkBackups } from "./backups.js";
 
@@ -76,6 +77,17 @@ setInterval(() => {
     .catch((err) => app.log.error({ err }, "Webhook sending failed"))
     .finally(() => (sendingWebhooks = false));
 }, 15_000).unref();
+
+// The instance's AI answers for the agents of those who chose it (ai-replies.ts): every 10 seconds, one pass at a time.
+let replying = false;
+setInterval(() => {
+  if (replying) return;
+  replying = true;
+  runAiReplies(commentTask, app.log)
+    .then((n) => n && app.log.info({ written: n }, "AI replies written"))
+    .catch((err) => app.log.error({ err }, "AI replies failed"))
+    .finally(() => (replying = false));
+}, 10_000).unref();
 
 // Settings changed in the administration on another instance.
 setInterval(() => {

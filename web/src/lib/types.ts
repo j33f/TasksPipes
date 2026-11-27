@@ -50,6 +50,8 @@ export interface Me {
   notificationPrefs?: NotificationPrefs;
   /** One has an AI agent that works: tasks can be handed to it. */
   hasAgent?: boolean;
+  /** The instance's AI answers for the agent (comments on the tasks handed to it). */
+  aiReplies?: boolean;
 }
 
 export type NotificationMode = "immediate" | "digest" | "off";

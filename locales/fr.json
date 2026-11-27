@@ -1386,7 +1386,11 @@
     "Complete the task with my answers": "Compléter la tâche avec mes réponses",
     "Ask the assistant": "Demander à l'assistant",
     "The assistant searches…": "L'assistant cherche…",
-    "The assistant found no task about it.": "L'assistant n'a trouvé aucune tâche à ce sujet."
+    "The assistant found no task about it.": "L'assistant n'a trouvé aucune tâche à ce sujet.",
+    "The instance's AI answers for my agent": "L'IA de l'instance répond pour mon agent",
+    "When a task is handed to your agent or someone comments on one, the AI set up on this instance may write a comment — an answer, or its questions. It changes nothing else. Leave it off if Claude Code already listens through the channel.": "Quand une tâche est confiée à votre agent ou que quelqu'un en commente une, l'IA configurée sur cette instance peut écrire un commentaire — une réponse, ou ses questions. Elle ne change rien d'autre. Laissez décoché si Claude Code écoute déjà par la channel.",
+    "The instance's AI now answers for your agent": "L'IA de l'instance répond désormais pour votre agent",
+    "The instance's AI no longer answers for your agent": "L'IA de l'instance ne répond plus pour votre agent"
   },
   "server": {
     "{label} is required": "{label} requis",
