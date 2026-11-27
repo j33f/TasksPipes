@@ -255,6 +255,16 @@ export const V1_ROUTES: Record<string, Doc> = {
     params: { type: "object", required: ["id", "blockerId"], properties: { id: uuid, blockerId: uuid } },
     response: object("The tasks it waits for (blockedBy) and those waiting for it (blocks)"),
   },
+  "POST /tasks/:id/relations": {
+    tag: "Tasks", summary: "Relate a task to another one (taskId), neither waiting for the other", params: idParams,
+    body: { type: "object", required: ["taskId"], properties: { taskId: uuid } },
+    response: object("The tasks it waits for (blockedBy), those waiting for it (blocks) and those related to it (related)"),
+  },
+  "DELETE /tasks/:id/relations/:taskId": {
+    tag: "Tasks", summary: "Stop relating two tasks",
+    params: { type: "object", required: ["id", "taskId"], properties: { id: uuid, taskId: uuid } },
+    response: object("The tasks it waits for (blockedBy), those waiting for it (blocks) and those related to it (related)"),
+  },
   "GET /tasks/:id/time": { tag: "Time", summary: "Time logged on a task", params: idParams, response: object("Entries and total", { totalMinutes: { type: "integer" } }) },
   "POST /tasks/:id/time": {
     tag: "Time", summary: "Log one's own time on a task (today, or a day of the last 90 days)", params: idParams,

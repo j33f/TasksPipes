@@ -180,6 +180,9 @@ those types keep working. This is a personal choice: others still see every type
   owner and author are told, in the app at once and by e-mail if they are not in the app then. A linked task someone
   cannot open shows them only its title and owner, without a link; a confidential or team-only one shows as *Task not
   accessible*. Those who may edit the task can unlink any task it waits for, even one they cannot open.
+- **Related tasks**: two tasks can also simply be linked, neither waiting for the other (*Dependencies › Add a
+  related task*): the link shows on both tasks, under *Related to*, blocks nothing and tells no one. Those who may edit
+  either task can remove it; the same rules as for dependencies apply to a related task one cannot open.
 - **Repeat** — recurring tasks (a task in a pipe, for those who manage it): a new task is made on each date of a rule —
   - every *n* days;
   - every *n* weeks, on chosen days;

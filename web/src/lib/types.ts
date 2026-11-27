@@ -313,6 +313,8 @@ export interface TaskEvent {
     action?: string;
     /** A task it waits for was added or removed (event "dependency"). */
     dependency?: "added" | "removed";
+    /** A related task was added or removed (event "dependency"). */
+    relation?: "added" | "removed";
     /** Moved forward while it still waited for other tasks. */
     whileBlocked?: boolean;
     /** Moved to another space along with its whole pipe (event "moved"). */
@@ -353,6 +355,8 @@ export interface TaskDetail extends Task {
   /** Tasks it waits for, and tasks waiting for it. */
   blockedBy: Dependency[];
   blocks: Dependency[];
+  /** Tasks related to it, neither waiting for the other. */
+  related: Dependency[];
 }
 
 /**

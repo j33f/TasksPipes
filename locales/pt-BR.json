@@ -1325,7 +1325,12 @@
     "With its whole pipe": "Com todo o seu pipe",
     "Move the pipe “{pipe}” and all its tasks to the team {team}? Its members will see and change them; owners who are not members are unassigned.": "Mover o pipe “{pipe}” e todas as suas tarefas para a equipe {team}? Os membros poderão vê-las e alterá-las; os responsáveis que não são membros ficarão sem atribuição.",
     "“{pipe}” moved to {team}": "“{pipe}” movido para {team}",
-    "Add a task to {column}": "Adicionar uma tarefa em {column}"
+    "Add a task to {column}": "Adicionar uma tarefa em {column}",
+    "Related to": "Relacionada a",
+    "Add a related task": "Adicionar uma tarefa relacionada",
+    "No longer related": "Deixar de relacionar",
+    "added a related task": "adicionou uma tarefa relacionada",
+    "removed a related task": "removeu uma tarefa relacionada"
   },
   "server": {
     "{label} is required": "{label}: obrigatório",
@@ -1805,7 +1810,10 @@
     "Only an admin of the team can move its pipes elsewhere": "Só um administrador da equipe pode mover os pipes dela para outro lugar",
     "The default pipe of a personal space cannot be moved": "O pipe padrão de um espaço pessoal não pode ser movido",
     "This pipe is already in this space": "Este pipe já está neste espaço",
-    "A pipe can only be moved to a team": "Um pipe só pode ser movido para uma equipe"
+    "A pipe can only be moved to a team": "Um pipe só pode ser movido para uma equipe",
+    "A task cannot be related to itself": "Uma tarefa não pode estar relacionada a ela mesma",
+    "A task is related to {n} tasks at most": "Uma tarefa está relacionada a {n} tarefas no máximo",
+    "Related task": "Tarefa relacionada"
   },
   "catalog": {
     "Prêt à démarrer": "Pronta para começar",
