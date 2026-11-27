@@ -4,7 +4,7 @@
  * type and of the task's type, which the models can change). Nothing is saved here: the person sees the proposal
  * next to what is there and applies what they keep. Confidential tasks never reach the AI.
  */
-import { aiConfig, complete } from "./ai.js";
+import { aiConfig, complete, type AiMessage } from "./ai.js";
 import { isConfidential } from "./access.js";
 import { query, type Row } from "./db.js";
 import { bad, forbidden } from "./errors.js";
@@ -91,16 +91,88 @@ export function cleanProposal(answer: Record<string, unknown>, t: Row, fields: F
   return out;
 }
 
-/** A proposal for a task the person may edit. */
-export async function assistTask(t: Row): Promise<Proposal> {
+/** What the person said to the assistant: answers to its questions, and a discussion. */
+export interface Exchange {
+  answers?: { question: string; answer: string }[];
+  discussion?: AiMessage[];
+}
+
+/** Answers and discussion, checked and capped (they come from the browser). */
+export function cleanExchange(input: unknown): Exchange {
+  const b = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const answers = (Array.isArray(b.answers) ? b.answers : []).slice(0, 20)
+    .map((a) => ({ question: str(a?.question, 500), answer: str(a?.answer, 4000) }))
+    .filter((a) => a.question && a.answer);
+  const discussion = (Array.isArray(b.discussion) ? b.discussion : []).slice(-30)
+    .map((m) => ({ role: m?.role === "assistant" ? "assistant" : "user", content: str(m?.content, 4000) }) as AiMessage)
+    .filter((m) => m.content);
+  return { ...(answers.length ? { answers } : {}), ...(discussion.length ? { discussion } : {}) };
+}
+
+/** The AI, its rules for this task, the fields it may fill and what it is told of the task. */
+async function context(t: Row) {
   const cfg = aiConfig();
   if (!cfg?.model) throw bad("No AI assistant is set up on this instance");
   if (isConfidential(t)) throw forbidden("The AI assistant never sees confidential tasks");
   const type = taskTypeById(t.task_type);
   const fields = (type?.fields ?? []).filter((f) => FILLABLE.has(f.type));
   const rules = [pipeTypeById(t.pipe_kind)?.assistant, type?.assistant].filter(Boolean);
-  const system = rules.length ? `${RULES}\n\nRules of this kind of task:\n- ${rules.join("\n- ")}` : RULES;
-  const facts = await taskFacts(t, fields);
-  const text = await complete(cfg, system, [{ role: "user", content: JSON.stringify(facts) }], { maxTokens: 8000 });
+  const kindRules = rules.length ? `\n\nRules of this kind of task:\n- ${rules.join("\n- ")}` : "";
+  return { cfg, fields, kindRules, facts: await taskFacts(t, fields) };
+}
+
+/** A proposal for a task the person may edit, using what they answered or discussed, if anything. */
+export async function assistTask(t: Row, exchange: Exchange = {}): Promise<Proposal> {
+  const { cfg, fields, kindRules, facts } = await context(t);
+  const told = exchange.answers || exchange.discussion
+    ? `\n\nThe person also told you this (it is as reliable as the task itself):\n${JSON.stringify(exchange)}`
+    : "";
+  const text = await complete(cfg, RULES + kindRules, [{ role: "user", content: JSON.stringify(facts) + told }], { maxTokens: 8000 });
   return cleanProposal(parseAnswer(text), t, fields);
+}
+
+const QUESTIONS = `You help people keep their tasks clear and complete, in a task manager.
+Read the task given as JSON and find what is missing or unclear to do it (or to fill its empty fields).
+Ask at most 6 short questions, most useful first; none about what the task or its comments already say.
+For each, offer 2 to 5 likely answers when you can guess them (else none).
+Write in the language of the task. Answer with one JSON object and nothing else:
+{"questions": [{"question": string, "options": [string]}]}
+No question when nothing is missing: {"questions": []}.`;
+
+export interface Question {
+  question: string;
+  options: string[];
+}
+
+/** The questions of an answer, checked and capped. */
+export function cleanQuestions(answer: Record<string, unknown>): Question[] {
+  const list = Array.isArray(answer.questions) ? answer.questions : [];
+  return list
+    .map((q) => ({
+      question: typeof q?.question === "string" ? q.question.trim().slice(0, 500) : "",
+      options: (Array.isArray(q?.options) ? q.options : []).filter((o: unknown) => typeof o === "string" && o.trim())
+        .map((o: string) => o.trim().slice(0, 200)).slice(0, 5),
+    }))
+    .filter((q) => q.question)
+    .slice(0, 6);
+}
+
+/** What the assistant asks to complete the task or clear up what is vague. */
+export async function assistQuestions(t: Row): Promise<Question[]> {
+  const { cfg, kindRules, facts } = await context(t);
+  const text = await complete(cfg, QUESTIONS + kindRules, [{ role: "user", content: JSON.stringify(facts) }], { maxTokens: 4000 });
+  return cleanQuestions(parseAnswer(text));
+}
+
+const DISCUSSION = `You help a person clarify one of their tasks, in a task manager. The task is given as JSON below.
+Discuss it with them: answer briefly, ask one thing at a time, suggest options. Never invent facts about the task.
+Write in the language the person writes in. Plain text or short Markdown.`;
+
+/** The assistant's next message in a discussion about the task. */
+export async function assistDiscussion(t: Row, messages: AiMessage[]): Promise<string> {
+  if (!messages.length || messages.at(-1)!.role !== "user") throw bad("Write a message first");
+  const { cfg, kindRules, facts } = await context(t);
+  const text = await complete(cfg, `${DISCUSSION}${kindRules}\n\nThe task:\n${JSON.stringify(facts)}`, messages, { maxTokens: 2000 });
+  return text.trim().slice(0, 8000);
 }

@@ -1373,7 +1373,17 @@
     "Followed by the AI assistant when it rewords or completes a task of these pipes.": "El asistente de IA las sigue cuando reformula o completa una tarea de estos pipes.",
     "e.g. Fill “As a…”, “I want…”, “So that…” from the comments": "p. ej. Rellenar «Como…», «Quiero…», «Para…» a partir de los comentarios",
     "Followed by the AI assistant when it rewords or completes a task of this type.": "El asistente de IA las sigue cuando reformula o completa una tarea de este tipo.",
-    "Apply": "Aplicar"
+    "Apply": "Aplicar",
+    "Answer its questions": "Responder a sus preguntas",
+    "The assistant looks for what is missing…": "El asistente busca lo que falta…",
+    "The assistant has no question: the task looks complete.": "El asistente no tiene preguntas: la tarea parece completa.",
+    "Answer what you can, then let the assistant complete the task.": "Responda lo que pueda y deje que el asistente complete la tarea.",
+    "Other": "Otro",
+    "Let's discuss it": "Hablémoslo",
+    "Your answer": "Su respuesta",
+    "Discussion with the assistant": "Conversación con el asistente",
+    "Your message": "Su mensaje",
+    "Complete the task with my answers": "Completar la tarea con mis respuestas"
   },
   "server": {
     "{label} is required": "{label}: obligatorio",
@@ -1866,7 +1876,8 @@
     "This AI is on an internal address: allow internal addresses first": "Esta IA está en una dirección interna: permita primero las direcciones internas",
     "No AI assistant is set up on this instance": "No hay ningún asistente de IA configurado en esta instancia",
     "The AI assistant never sees confidential tasks": "El asistente de IA nunca ve las tareas confidenciales",
-    "Rules for the AI assistant": "Indicaciones para el asistente de IA"
+    "Rules for the AI assistant": "Indicaciones para el asistente de IA",
+    "Write a message first": "Escriba primero un mensaje"
   },
   "catalog": {
     "Prêt à démarrer": "Lista para empezar",
