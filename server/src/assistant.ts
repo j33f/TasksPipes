@@ -37,7 +37,7 @@ Answer with one JSON object and nothing else:
 null (or leaving a field out) keeps what is there.`;
 
 /** What the AI is told of a task. */
-async function taskFacts(t: Row, fields: Field[]) {
+export async function taskFacts(t: Row, fields: Field[]) {
   const [comments, items] = await Promise.all([
     query(
       `SELECT e.comment, e.created_at, u.name FROM task_events e JOIN users u ON u.id = e.actor_id

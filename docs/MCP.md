@@ -146,6 +146,16 @@ Keep the TasksPipes MCP server connected too (see above): Claude reads and chang
 the hood, the channel reads `GET /mcp/events` (Server-Sent Events, the agent token as bearer; `Last-Event-ID`
 resumes after a cut).
 
+## The instance's AI answers for your agent
+
+Without Claude Code listening, the AI set up on the instance (*Administration › Settings › AI assistant*) can answer
+for your agent: tick **The instance's AI answers for my agent** in *Settings › AI agents (MCP)*. Then, when a task is
+handed to your agent or someone comments on one, the AI reads the task and its comments and, when useful, writes one
+comment — an answer, or the questions needed to go on. It changes nothing else, never answers its own comments, never
+sees a confidential task, and writes at most 30 comments an hour for you. Its comments show as yours via your agent
+(**MCP** tag), like the agent's. Leave it off when Claude Code already listens through the channel, or both would
+answer.
+
 ## For administrators
 
 - **OAuth.** TasksPipes is the authorization server of its own `/mcp` (OAuth 2.1): protected resource metadata at

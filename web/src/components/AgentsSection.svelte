@@ -87,6 +87,17 @@
     await api.del(`/me/tokens/${tk.id}`).then(() => { load(); app.refreshMe().catch(() => {}); }).catch((err) => app.toast(errorMessage(err), "error"));
   }
 
+  // The instance's AI answers for the agent (server/src/ai-replies.ts).
+  async function setAiReplies(on: boolean) {
+    try {
+      await api.patch("/me", { aiReplies: on });
+      await app.refreshMe();
+      app.toast(on ? t("The instance's AI now answers for your agent") : t("The instance's AI no longer answers for your agent"));
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    }
+  }
+
   const copy = (text: string) => navigator.clipboard.writeText(text).then(() => app.toast(t("Copied"))).catch(() => {});
 </script>
 
@@ -117,6 +128,16 @@
     {t("Let an AI assistant (Claude, Cursor…) work on your tasks for you. It acts with your rights, only where you allow it, and never sees confidential pipes. What it does shows in the history as done via it.")}
   </p>
   <p class="small">{t("MCP address:")} <code>{endpoint}</code></p>
+
+  {#if app.me?.features.ai}
+    <label class="check ai-replies">
+      <input type="checkbox" checked={app.me.aiReplies} onchange={(e) => setAiReplies(e.currentTarget.checked)} />
+      <span>
+        {t("The instance's AI answers for my agent")}
+        <span class="hint">{t("When a task is handed to your agent or someone comments on one, the AI set up on this instance may write a comment — an answer, or its questions. It changes nothing else. Leave it off if Claude Code already listens through the channel.")}</span>
+      </span>
+    </label>
+  {/if}
 
   {#if created}
     <div class="callout created" role="status">
@@ -184,6 +205,9 @@
 </div>
 
 <style>
+  .ai-replies { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 12px; font-size: 14px; }
+  .ai-replies input { margin-top: 3px; }
+  .ai-replies .hint { display: block; }
   .section { margin-top: 24px; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .grow { flex: 1; min-width: 0; }
