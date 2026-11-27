@@ -38,7 +38,7 @@ import { hasDevices, pushRoutes } from "./push.js";
 import { updateRoutes } from "./updates.js";
 import { emailDomainAllowed } from "./settings.js";
 import { aiReady } from "./ai.js";
-import { assistDiscussion, assistQuestions, assistTask, cleanExchange } from "./assistant.js";
+import { assistDiscussion, assistQuestions, assistSearch, assistTask, cleanExchange } from "./assistant.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
 import { cleanPoints } from "./points.js";
 import { cleanSprintId, cleanSprintSettings, pipeSprints, pipeVelocity, sprintChange, sprintRoutes, sprintSettings, worksInSprints } from "./sprints.js";
@@ -1209,6 +1209,10 @@ export async function apiRoutes(app: FastifyInstance) {
   // ----- Search -------------------------------------------------------------
 
   // Tasks one can see anywhere, by text or number; filters by status ("open" too), owner, task type, label and priority.
+  // The AI assistant answers a question about one's tasks, from those the search finds (never confidential ones).
+  app.post("/search/assistant", rateLimited(LIMITS.assistant), async (req: Req) =>
+    assistSearch(me(req), localeOf(req), typeof req.body?.question === "string" ? req.body.question : ""));
+
   app.get("/search", rateLimited(LIMITS.search), async (req: Req) => {
     const q = req.query;
     return searchTasks(me(req), localeOf(req), String(q.q ?? "").slice(0, 200), {

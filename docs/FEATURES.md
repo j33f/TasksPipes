@@ -416,6 +416,11 @@ incoming bucket you can see:
 A search only finds what you could open in the app, checked in the database query itself. **Confidential** and
 **team-only** tasks are found only by those who see them, and show no excerpt: their content stays on their page.
 
+**Ask the assistant** (once an administrator has connected an AI) answers a question typed in the search — *"what is
+left to do for ACME?"* — in a few sentences, with the tasks it relies on, to open them. The AI turns the question into
+searches, reads only the tasks they find among those you can see (title, place, owner, excerpt; never confidential
+ones) and names the ones that answer.
+
 ## My tasks and Next action
 
 - **My tasks** lists everything assigned to you and still to do, across all pipes, grouped by state, by pipe or by priority, and filtered by label and priority.
