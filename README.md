@@ -71,6 +71,8 @@ follows Outline's look and feel.
   proposes a clearer title, a complete description and field values from the task and its comments, following rules
   each model can set; you keep what you want. It never sees confidential pipes. Its questions and assisted search
   come next.
+- **Claude Code channel** — what happens to the tasks you hand to your AI agent (a task handed to it, a comment on
+  one) is pushed into your Claude Code session, which can answer with a comment; see [docs/MCP.md](docs/MCP.md).
 - **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
   keeps a “Deleted account”), and administrators of the instance can disable accounts.
 - **Sub-tasks, history, live updates (one person edits a task at a time, others can claim it), a right-click menu on tasks**, English, French, Spanish and Portuguese (Brazil and Portugal; a language is one file), light and dark themes.
