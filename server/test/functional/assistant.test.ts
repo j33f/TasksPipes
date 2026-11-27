@@ -93,6 +93,28 @@ describe("the AI assistant on a task", () => {
     expect(prompts.length).toBe(before);
   });
 
+  it("asks its questions, discusses the task, and completes it with the answers", async () => {
+    const id = (await alice.post("/api/tasks", { title: "Export", pipeId: board, description: "Export the board." })).body.id;
+    answer = JSON.stringify({ questions: [{ question: "Which format?", options: ["CSV", "Excel"] }, { question: "" }] });
+    const asked = await alice.post(`/api/tasks/${id}/assist/questions`);
+    expect(asked.body).toEqual({ questions: [{ question: "Which format?", options: ["CSV", "Excel"] }] });
+
+    answer = "Both are possible; CSV is simpler.";
+    const said = await alice.post(`/api/tasks/${id}/assist/discussion`, {
+      messages: [{ role: "user", content: "Which one do you advise?" }],
+    });
+    expect(said.body).toEqual({ reply: "Both are possible; CSV is simpler." });
+    const chat = prompts.at(-1);
+    expect(chat.messages[0].content).toContain("Export the board.");
+    expect(chat.messages.at(-1)).toEqual({ role: "user", content: "Which one do you advise?" });
+    expect((await alice.post(`/api/tasks/${id}/assist/discussion`, { messages: [] })).body.error).toBe("Write a message first");
+
+    answer = JSON.stringify({ description: "Export the board as CSV." });
+    const proposal = await alice.post(`/api/tasks/${id}/assist`, { answers: [{ question: "Which format?", answer: "CSV" }] });
+    expect(proposal.body).toEqual({ description: "Export the board as CSV." });
+    expect(prompts.at(-1).messages[1].content).toContain('"answer":"CSV"');
+  });
+
   it("tells when the answer cannot be read", async () => {
     answer = "Sorry, I can't.";
     const id = (await alice.post("/api/tasks", { title: "z", pipeId: board })).body.id;

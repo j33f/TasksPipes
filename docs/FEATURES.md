@@ -390,6 +390,11 @@ title, description, fields, sub-tasks and its last 40 comments — and proposes 
 without inventing facts: what is missing goes in a note. The proposal shows next to what is there; tick what to keep
 and **Apply** (one change, in the history as usual), or **Ask again**. Nothing changes until then.
 
+**Answer its questions** asks the assistant what is missing or vague: at most six questions, each with the answers it
+guesses, **Other** (free text) and **Let's discuss it** — a short discussion with the assistant about the task. Then
+**Complete the task with my answers**: a new proposal uses what you answered and discussed, shown and applied the same
+way. Answers and discussion stay in that window; nothing is saved but what you apply.
+
 It follows general rules, then those of the pipe's type and of the task's type, which any model can set (*Rules for
 the AI assistant*). Built in: development pipes ask for short, assertive titles keeping the decisions of the comments;
 user stories get "As a… / I want… / So that…" and acceptance criteria (Given… When… Then…); bugs get the observed and

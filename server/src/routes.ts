@@ -38,7 +38,7 @@ import { hasDevices, pushRoutes } from "./push.js";
 import { updateRoutes } from "./updates.js";
 import { emailDomainAllowed } from "./settings.js";
 import { aiReady } from "./ai.js";
-import { assistTask } from "./assistant.js";
+import { assistDiscussion, assistQuestions, assistTask, cleanExchange } from "./assistant.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
 import { cleanPoints } from "./points.js";
 import { cleanSprintId, cleanSprintSettings, pipeSprints, pipeVelocity, sprintChange, sprintRoutes, sprintSettings, worksInSprints } from "./sprints.js";
@@ -1961,9 +1961,23 @@ export async function apiRoutes(app: FastifyInstance) {
   });
 
   // The AI assistant proposes a better title, description and fields; nothing is saved (the person applies them).
+  // With what the person answered to its questions or discussed with it (lot 3), when given.
   app.post("/tasks/:id/assist", rateLimited(LIMITS.assistant), async (req: Req) => {
     const { t } = await loadTaskFor(req.params.id, me(req), "editContent");
-    return assistTask(t);
+    return assistTask(t, cleanExchange(req.body));
+  });
+
+  // The assistant's questions on what is missing or vague, with the answers it guesses.
+  app.post("/tasks/:id/assist/questions", rateLimited(LIMITS.assistant), async (req: Req) => {
+    const { t } = await loadTaskFor(req.params.id, me(req), "editContent");
+    return { questions: await assistQuestions(t) };
+  });
+
+  // "Let's discuss it": the assistant's next message in a short discussion about the task (kept by the page only).
+  app.post("/tasks/:id/assist/discussion", rateLimited(LIMITS.assistant), async (req: Req) => {
+    const { t } = await loadTaskFor(req.params.id, me(req), "editContent");
+    const { discussion } = cleanExchange({ discussion: req.body?.messages });
+    return { reply: await assistDiscussion(t, discussion ?? []) };
   });
 
   app.patch("/tasks/:id", async (req: Req) => {

@@ -69,8 +69,9 @@ follows Outline's look and feel.
 - **AI assistant** (being built) — an administrator connects one AI for the instance: Anthropic, OpenAI, Mistral AI,
   OpenRouter, Ollama or any server speaking their APIs, with its models listed from the provider. On a task, it
   proposes a clearer title, a complete description and field values from the task and its comments, following rules
-  each model can set; you keep what you want. It never sees confidential pipes. Its questions and assisted search
-  come next.
+  each model can set; it asks its questions on what is missing (with likely answers, free text, or a short
+  discussion) and completes the task with your answers; you keep what you want. It never sees confidential pipes.
+  Assisted search comes next.
 - **Claude Code channel** — what happens to the tasks you hand to your AI agent (a task handed to it, a comment on
   one) is pushed into your Claude Code session, which can answer with a comment; see [docs/MCP.md](docs/MCP.md).
 - **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
