@@ -1324,7 +1324,8 @@
     "{name} just changed this task through an access token.": "{name} acaba de cambiar esta tarea con un token de acceso.",
     "With its whole pipe": "Con todo su pipe",
     "Move the pipe “{pipe}” and all its tasks to the team {team}? Its members will see and change them; owners who are not members are unassigned.": "¿Mover el pipe «{pipe}» y todas sus tareas al equipo {team}? Sus miembros podrán verlas y cambiarlas; los responsables que no sean miembros quedarán sin asignar.",
-    "“{pipe}” moved to {team}": "«{pipe}» movido a {team}"
+    "“{pipe}” moved to {team}": "«{pipe}» movido a {team}",
+    "Add a task to {column}": "Añadir una tarea en {column}"
   },
   "server": {
     "{label} is required": "{label}: obligatorio",
