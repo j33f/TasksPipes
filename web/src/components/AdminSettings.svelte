@@ -146,7 +146,7 @@
         </div>
       {/each}
       <div class="row">
-        <button class="btn small" disabled={busy !== null} onclick={() => save(section.id)}>{t("Save")}</button>
+        <button data-save class="btn small" disabled={busy !== null} onclick={() => save(section.id)}>{t("Save")}</button>
         {#if section.id === "smtp"}
           <button class="btn neutral small" disabled={busy !== null} onclick={testMail}>{t("Send me a test e-mail")}</button>
         {/if}

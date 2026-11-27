@@ -360,7 +360,7 @@
           <MarkdownEditor bind:value={descriptionDraft} rows={10} autofocus mentions={mentionableOn(task.id)} />
           <div class="row" style="margin-top:8px; justify-content:flex-end">
             <button class="btn neutral small" onclick={() => (editingDescription = false)}>{t("Cancel")}</button>
-            <button class="btn small" disabled={busy} onclick={saveDescription}>{t("Save")}</button>
+            <button data-save class="btn small" disabled={busy} onclick={saveDescription}>{t("Save")}</button>
           </div>
         {:else}
           <div class="description">

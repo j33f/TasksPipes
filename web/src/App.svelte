@@ -22,6 +22,7 @@
   import InboxModal from "./components/InboxModal.svelte";
   import { inbox } from "./lib/inbox.svelte";
   import { isSearchShortcut } from "./lib/search";
+  import { onSaveShortcut } from "./lib/save-shortcut";
   import Home from "./pages/Home.svelte";
   import SpacePage from "./pages/SpacePage.svelte";
   import PipePage from "./pages/PipePage.svelte";
@@ -165,7 +166,10 @@
     if (app.me && isSearchShortcut(e)) {
       e.preventDefault();
       app.dialog = "search";
+      return;
     }
+    // Ctrl/⌘ + Enter presses the save button of what is being edited.
+    onSaveShortcut(e);
   }
 </script>
 
