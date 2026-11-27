@@ -11,8 +11,10 @@ export interface SettingDef {
   key: string;
   env: string;
   kind: SettingKind;
-  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push" | "updates" | "mcp";
+  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push" | "updates" | "mcp" | "ai";
   default: string | number | boolean | string[] | null;
+  /** The values a string may take (empty always allowed). */
+  choices?: string[];
 }
 
 export const SETTINGS: SettingDef[] = [
@@ -56,6 +58,15 @@ export const SETTINGS: SettingDef[] = [
 
   // AI agents acting for people over MCP (mcp.ts): off until an administrator turns it on.
   { key: "mcp.enabled", env: "MCP_ENABLED", kind: "bool", section: "mcp", default: false },
+
+  // The AI assistant (ai.ts): one AI for the instance; no provider, no assistant. Choices are kept in step with ai.ts.
+  { key: "ai.provider", env: "AI_PROVIDER", kind: "string", section: "ai", default: "", choices: ["anthropic", "openai", "mistral", "openrouter", "ollama", "other"] },
+  { key: "ai.url", env: "AI_URL", kind: "url", section: "ai", default: "" },
+  { key: "ai.api", env: "AI_API", kind: "string", section: "ai", default: "openai", choices: ["openai", "anthropic"] },
+  { key: "ai.apiKey", env: "AI_API_KEY", kind: "secret", section: "ai", default: "" },
+  { key: "ai.model", env: "AI_MODEL", kind: "string", section: "ai", default: "" },
+  { key: "ai.effort", env: "AI_EFFORT", kind: "string", section: "ai", default: "", choices: ["low", "medium", "high"] },
+  { key: "ai.allowPrivate", env: "AI_ALLOW_PRIVATE", kind: "bool", section: "ai", default: false },
 ];
 
 export const settingDef = (key: string) => SETTINGS.find((d) => d.key === key);

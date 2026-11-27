@@ -2,7 +2,7 @@
   import { api, errorMessage } from "../lib/api";
   import { app } from "../lib/app.svelte";
   import { t } from "../lib/i18n.svelte";
-  import { LABELS, SECTIONS, type Setting } from "../lib/admin-settings";
+  import { BRANDS, CHOICES, LABELS, SECTIONS, SHOWN_WHEN, type Setting } from "../lib/admin-settings";
 
 
   let settings = $state<Setting[]>([]);
@@ -92,6 +92,33 @@
     }
   }
 
+  /** Models offered by the AI being set up (the values typed, not saved yet). */
+  let aiModels = $state<{ id: string; name: string }[]>([]);
+
+  async function findModels() {
+    busy = "ai";
+    try {
+      aiModels = (await api.post<{ models: { id: string; name: string }[] }>("/admin/ai/models", { settings: changes("ai") })).models;
+      app.toast(aiModels.length ? t("{count} models found: choose one in the Model field", { count: aiModels.length }) : t("The AI offers no model"));
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    } finally {
+      busy = null;
+    }
+  }
+
+  async function testAi() {
+    busy = "ai";
+    try {
+      const r = await api.post<{ model: string; answer: string }>("/admin/ai/test", { settings: changes("ai") });
+      app.toast(t("The AI answers ({model}): {answer}", { model: r.model, answer: r.answer }));
+    } catch (err) {
+      app.toast(errorMessage(err), "error");
+    } finally {
+      busy = null;
+    }
+  }
+
   // Fills the key fields with a fresh pair; the administrator then saves the section to use it.
   async function generateVapid() {
     busy = "push";
@@ -119,7 +146,7 @@
       <p class="small muted">{t(section.intro)}</p>
       {#if section.id === "outlineOauth" && redirects}<code class="redirect">{redirects.oauthRedirect}</code>{/if}
       {#if section.id === "oidc" && redirects}<code class="redirect">{redirects.oidcRedirect}</code>{/if}
-      {#each list as s (s.key)}
+      {#each list.filter((x) => SHOWN_WHEN[x.key]?.(draft) ?? true) as s (s.key)}
         {@const [label, hint] = LABELS[s.key] ?? [s.key]}
         <div class="field">
           {#if s.kind === "bool"}
@@ -138,6 +165,17 @@
                   placeholder={s.isSet ? t("Set: type a new value to replace it") : t("Not set")} bind:value={draft[s.key]} />
                 {#if s.isSet && !s.locked}<button class="btn ghost small" disabled={busy !== null} onclick={() => clearSecret(s)}>{t("Remove")}</button>{/if}
               </div>
+            {:else if s.choices}
+              <select id={`set-${s.key}`} class="input" disabled={s.locked} bind:value={draft[s.key]}>
+                {#each [...("" in (CHOICES[s.key] ?? {}) ? [""] : []), ...s.choices] as c (c)}
+                  <option value={c}>{CHOICES[s.key]?.[c] ? t(CHOICES[s.key][c]) : (BRANDS[c] ?? c)}</option>
+                {/each}
+              </select>
+            {:else if s.key === "ai.model"}
+              <input id={`set-${s.key}`} class="input" list="ai-models" disabled={s.locked} bind:value={draft[s.key]} />
+              <datalist id="ai-models">
+                {#each aiModels as m (m.id)}<option value={m.id}>{m.name}</option>{/each}
+              </datalist>
             {:else}
               <input id={`set-${s.key}`} class="input" type={s.kind === "int" ? "number" : s.kind === "url" ? "url" : "text"} disabled={s.locked} bind:value={draft[s.key]} />
             {/if}
@@ -149,6 +187,10 @@
         <button data-save class="btn small" disabled={busy !== null} onclick={() => save(section.id)}>{t("Save")}</button>
         {#if section.id === "smtp"}
           <button class="btn neutral small" disabled={busy !== null} onclick={testMail}>{t("Send me a test e-mail")}</button>
+        {/if}
+        {#if section.id === "ai"}
+          <button class="btn neutral small" disabled={busy !== null || !draft["ai.provider"]} onclick={findModels}>{t("Find the models")}</button>
+          <button class="btn neutral small" disabled={busy !== null || !draft["ai.provider"] || !draft["ai.model"]} onclick={testAi}>{t("Test the connection")}</button>
         {/if}
         {#if section.id === "push"}
           <button class="btn neutral small" disabled={busy !== null} onclick={generateVapid}>{t("Generate a key pair")}</button>
