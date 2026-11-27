@@ -39,12 +39,26 @@
   const others = $derived(app.users.filter((u) => u.id !== app.me?.user.id));
   let failed = $state(false);
 
+  // Shown: whose tasks the list holds (a live refresh keeps it on screen; another person empties it first).
+  let shownFor: string | null | undefined;
   $effect(() => {
     app.version;
     const id = userId && userId !== app.me?.user.id ? userId : null;
-    tasks = null;
-    failed = false;
-    api.get<Task[]>(id ? `/users/${id}/tasks` : "/me/tasks").then((d) => (tasks = d)).catch(() => ((failed = true), (tasks = [])));
+    if (id !== shownFor) {
+      shownFor = id;
+      tasks = null;
+    }
+    api.get<Task[]>(id ? `/users/${id}/tasks` : "/me/tasks")
+      .then((d) => {
+        if (shownFor !== id) return;
+        failed = false;
+        tasks = d;
+      })
+      .catch(() => {
+        if (shownFor !== id) return;
+        failed = true;
+        tasks = [];
+      });
   });
 
   const shown = $derived(
