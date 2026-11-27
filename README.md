@@ -66,6 +66,9 @@ follows Outline's look and feel.
   without connecting it again. It never sees confidential pipes and never deletes a task; what it does shows in the history
   with an **MCP** tag, and you can hand tasks to your own agent ("<your name> (MCP)"). Off until an administrator
   turns it on; see [docs/MCP.md](docs/MCP.md).
+- **AI assistant** (being built) — an administrator connects one AI for the instance: Anthropic, OpenAI, Mistral AI,
+  OpenRouter, Ollama or any server speaking their APIs, with its models listed from the provider. It never sees
+  confidential pipes. Rewording tasks, its questions and assisted search come next.
 - **Your data, your account** — download everything about you as a zip, delete your e-mail account (the history
   keeps a “Deleted account”), and administrators of the instance can disable accounts.
 - **Sub-tasks, history, live updates (one person edits a task at a time, others can claim it), a right-click menu on tasks**, English, French, Spanish and Portuguese (Brazil and Portugal; a language is one file), light and dark themes.

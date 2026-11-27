@@ -117,7 +117,7 @@
         <input id="incoming-due" class="input mono" bind:value={dueDate} placeholder={"{{dueDate}}"} maxlength="2000" />
         <label class="label-text" for="incoming-external">{t("External id")}</label>
         <input id="incoming-external" class="input mono" bind:value={externalId} placeholder={"{{externalId}}"} maxlength="2000" />
-        <div class="row end"><button type="button" class="btn small" disabled={busy} onclick={save}>{t("Save")}</button></div>
+        <div class="row end"><button data-save type="button" class="btn small" disabled={busy} onclick={save}>{t("Save")}</button></div>
       </details>
     </div>
   {/if}

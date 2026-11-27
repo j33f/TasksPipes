@@ -155,6 +155,7 @@ the setting in the app. Those settings are: `SMTP_*`, `MAIL_FROM`, `OUTLINE_ENAB
 | `REALTIME_SHARED` | `false` turns off what lets [several instances](#several-instances) share one database: live updates and "who has a page open" go through PostgreSQL (`LISTEN`/`NOTIFY`). On by default, harmless with a single instance. |
 | `LISTEN_DATABASE_URL` | Connection used to `LISTEN` for the other instances, when `DATABASE_URL` goes through a pooler that does not support it (PgBouncer in transaction mode). Default: `DATABASE_URL`. |
 | `MCP_ENABLED` | `true` turns on the MCP endpoint (`/mcp`), where AI agents act for people with an agent token: never more than their owner may, only the spaces chosen, never confidential content. Off by default; also in Administration › Settings. See [MCP.md](MCP.md). |
+| `AI_PROVIDER`, `AI_URL`, `AI_API`, `AI_API_KEY`, `AI_MODEL`, `AI_EFFORT`, `AI_ALLOW_PRIVATE` | The AI assistant: provider (`anthropic`, `openai`, `mistral`, `openrouter`, `ollama` or `other`), address up to the version (`https://…/v1`, for `other` or to replace the provider's), API of an `other` server (`openai` or `anthropic`), key, model, effort (`low`, `medium`, `high`), and `true` to allow an internal address. All optional; also in Administration › Settings. |
 
 ## Several instances
 

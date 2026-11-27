@@ -45,7 +45,7 @@ export interface Me {
   /** Administrator of the instance (ADMIN_EMAILS): the administration page is offered. */
   admin?: boolean;
   /** What this instance allows. */
-  features: { invitations: boolean; notifications: boolean; outline?: boolean; mcp?: boolean; outlineConnect?: boolean };
+  features: { invitations: boolean; notifications: boolean; outline?: boolean; mcp?: boolean; outlineConnect?: boolean; ai?: boolean };
   /** E-mail notification choices, when e-mail is set up on the instance. */
   notificationPrefs?: NotificationPrefs;
   /** One has an AI agent that works: tasks can be handed to it. */

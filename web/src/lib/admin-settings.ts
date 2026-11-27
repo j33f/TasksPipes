@@ -3,13 +3,15 @@
 /** One setting of the instance, as the server shows it (a secret's value never comes back). */
 export interface Setting {
   key: string;
-  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push" | "updates" | "mcp";
+  section: "smtp" | "outline" | "outlineOauth" | "signin" | "oidc" | "push" | "updates" | "mcp" | "ai";
   kind: "string" | "url" | "bool" | "int" | "list" | "secret";
   locked: boolean;
   env: string;
   default: unknown;
   value: unknown;
   isSet?: boolean;
+  /** The values a text setting may take (shown as a list). */
+  choices?: string[];
 }
 
 /** Label and help of each setting. */
@@ -44,6 +46,28 @@ export const LABELS: Record<string, [string, string?]> = {
   "push.vapidSubject": ["Contact for push services", "A mailto: or https: address; defaults to the app's address"],
   "updates.check": ["Check for new versions", "Asks GitHub for the latest release every hour; administrators are told of a new one"],
   "mcp.enabled": ["Allow AI agents", "People can make agent tokens for AI assistants (Claude, Cursor…) acting for them over MCP"],
+  "ai.provider": ["AI provider", "A well-known provider, or Other for any compatible server"],
+  "ai.url": ["Address of the API", "Up to the version, e.g. https://llm.example.com/v1; empty: the provider's address"],
+  "ai.api": ["API spoken by the server"],
+  "ai.apiKey": ["API key", "Kept encrypted on the server, never shown again"],
+  "ai.model": ["Model", "Find the models below, or type its name"],
+  "ai.effort": ["Effort", "How much the model thinks before answering, when it can"],
+  "ai.allowPrivate": ["Allow a server on an internal address or in plain http", "e.g. Ollama on this machine"],
+};
+
+/** Names of the values that are brands: shown as they are. */
+export const BRANDS: Record<string, string> = {
+  anthropic: "Anthropic (Claude)", openai: "OpenAI", mistral: "Mistral AI", openrouter: "OpenRouter", ollama: "Ollama",
+};
+/** Labels of the values of settings given as a list (shown with t()). */
+export const CHOICES: Record<string, Record<string, string>> = {
+  "ai.provider": { "": "No AI", other: "Other (compatible server)" },
+  "ai.api": { openai: "OpenAI-compatible", anthropic: "Anthropic-compatible" },
+  "ai.effort": { "": "The model's default", low: "Low", medium: "Medium", high: "High" },
+};
+/** Settings shown only for some values of another one. */
+export const SHOWN_WHEN: Record<string, (draft: Record<string, unknown>) => boolean> = {
+  "ai.api": (d) => d["ai.provider"] === "other",
 };
 export const SECTIONS: { id: Setting["section"]; title: string; intro: string }[] = [
   { id: "smtp", title: "E-mail (SMTP)", intro: "Sign-in links, invitations, notifications and reports." },
@@ -53,6 +77,10 @@ export const SECTIONS: { id: Setting["section"]; title: string; intro: string }[
   { id: "oidc", title: "Company sign-in (OpenID Connect)", intro: "Any OpenID Connect provider (Keycloak, Okta, Entra ID…): register a confidential client with this redirect URL." },
   { id: "push", title: "Push notifications", intro: "Notifications on people's devices, next to e-mail. Without a key pair, one is derived from the app's secret." },
   { id: "updates", title: "Updates", intro: "New versions of TasksPipes, published on GitHub." },
+  {
+    id: "ai", title: "AI assistant",
+    intro: "One AI for the whole instance, reached with the OpenAI or the Anthropic API. It never sees confidential pipes.",
+  },
   {
     id: "mcp", title: "AI agents (MCP)",
     intro: "Agents act with the rights of the person who made their token, only in the spaces chosen, and never see confidential pipes. Nothing they do deletes.",
