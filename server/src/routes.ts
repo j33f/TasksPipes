@@ -559,6 +559,15 @@ async function checkAssignee(spaceId: string, assigneeId: string | null, db?: Qu
   );
 }
 
+/** Adds a comment to a task's history, as `actorId` (and "via" the token of the request, or of runVia). */
+export async function commentTask(t: Row, actorId: string, body: string, details: object | null = null) {
+  await tx(async (client) => {
+    const s = snapshot(t);
+    await recordEvent(client, t.id, actorId, "comment", s, s, body, details);
+    await client.query(`UPDATE tasks SET updated_at = now() WHERE id = $1`, [t.id]);
+  });
+}
+
 /** Whether someone has an AI agent (MCP) that works: a token or OAuth grant neither revoked nor expired. */
 export async function hasAgent(userId: string, db?: Queryable): Promise<boolean> {
   if (!config.mcpEnabled) return false;
@@ -792,6 +801,8 @@ export async function apiRoutes(app: FastifyInstance) {
     },
     // An AI agent that works: tasks can be handed to it ("me (MCP)").
     hasAgent: await hasAgent(me(req)),
+    // The instance's AI answers comments on the tasks handed to the agent (ai-replies.ts).
+    aiReplies: Boolean((await one(`SELECT ai_replies FROM users WHERE id = $1`, [me(req)]))?.ai_replies),
     // Choices of notifications: by e-mail when it is set up, and for push notifications.
     notificationPrefs: prefsOf((await one(`SELECT notification_prefs FROM users WHERE id = $1`, [me(req)]))?.notification_prefs),
   }));
@@ -864,7 +875,12 @@ export async function apiRoutes(app: FastifyInstance) {
     const theme = "theme" in b ? (b.theme === null ? null : ["light", "dark"].includes(b.theme) ? b.theme : bad("Invalid theme")) : u.theme;
     if (locale instanceof HttpError) throw locale;
     if (theme instanceof HttpError) throw theme;
-    await query(`UPDATE users SET name = $2, locale = $3, theme = $4, updated_at = now() WHERE id = $1`, [me(req), name, locale, theme]);
+    // The instance's AI answers comments on the tasks handed to one's agent (ai-replies.ts).
+    const aiReplies = "aiReplies" in b ? b.aiReplies === true : undefined;
+    await query(
+      `UPDATE users SET name = $2, locale = $3, theme = $4, ai_replies = COALESCE($5, ai_replies), updated_at = now() WHERE id = $1`,
+      [me(req), name, locale, theme, aiReplies ?? null]
+    );
     return { ok: true };
   });
 
@@ -2186,12 +2202,7 @@ export async function apiRoutes(app: FastifyInstance) {
 
   app.post("/tasks/:id/comments", async (req: Req) => {
     const { t } = await loadTaskFor(req.params.id, me(req), "comment");
-    const body = text(req.body?.body, "Comment", { required: true });
-    await tx(async (client) => {
-      const s = snapshot(t);
-      await recordEvent(client, t.id, me(req), "comment", s, s, body);
-      await client.query(`UPDATE tasks SET updated_at = now() WHERE id = $1`, [t.id]);
-    });
+    await commentTask(t, me(req), text(req.body?.body, "Comment", { required: true }));
     return { ok: true };
   });
 
