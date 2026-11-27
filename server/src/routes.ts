@@ -1145,6 +1145,27 @@ export async function apiRoutes(app: FastifyInstance) {
     return rows.map(presentTask);
   });
 
+  // Someone else's "My tasks": what they own (assigned to them, or unassigned in their personal space) and still have
+  // to do, among the tasks one may see oneself; nobody one does not know (connected, or in a team with them).
+  app.get("/users/:id/tasks", async (req: Req) => {
+    const uid = me(req);
+    const id = uuid(req.params.id, "Person");
+    const known = await one(
+      `SELECT 1 FROM users u WHERE u.id = $1 AND (user_visible($2, u.id) OR (u.disabled_at IS NULL AND EXISTS (
+         SELECT 1 FROM space_members a JOIN space_members b ON b.space_id = a.space_id WHERE a.user_id = $2 AND b.user_id = u.id)))`,
+      [id, uid]
+    );
+    if (!known) throw notFound("Person not found");
+    const { rows } = await query(
+      `${TASK_SELECT} WHERE COALESCE(t.assignee_id, s.user_id) = $1 AND t.status NOT IN ('done','abandoned')
+       AND t.pipe_id IS NOT NULL AND p.archived_at IS NULL
+       AND ${taskVisibleSql("$2", "$3")}
+       ORDER BY t.due_date NULLS LAST, t.position, t.created_at LIMIT 500`,
+      [id, uid, teamOnlyKinds()]
+    );
+    return rows.map(presentTask);
+  });
+
   // Calendar: tasks due in a period (at most CALENDAR_DAYS), in the pipes one sees, archived ones left out; one's
   // own (scope=mine, the default) or all those one sees. canMove: one may change the due date (a member).
   app.get("/calendar", rateLimited(LIMITS.search), async (req: Req) => {

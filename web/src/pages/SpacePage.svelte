@@ -100,7 +100,7 @@
         </h1>
         {#if space.kind === "team"}
           <div class="row subtitle">
-            <div class="avatar-stack">{#each space.members.slice(0, 8) as m (m.id)}<Avatar user={m} size={22} />{/each}</div>
+            <div class="avatar-stack">{#each space.members.slice(0, 8) as m (m.id)}<a href={`/tasks?user=${m.id}`} class="member-link" title={t("Tasks of {name}", { name: m.name })}><Avatar user={m} size={22} /></a>{/each}</div>
             <span>{tn(space.members.length, "{n} member", "{n} members")} · {t("admins: {names}", { names: space.members.filter((m) => m.role === "admin").map((m) => m.name).join(", ") })}</span>
           </div>
         {:else if waiting}
@@ -223,6 +223,7 @@
 
 <style>
   .team-color { position: relative; display: inline-flex; }
+  .member-link { display: inline-flex; border-radius: 50%; }
   .avatar-btn { border: 0; background: none; padding: 0; border-radius: 10px; cursor: pointer; display: inline-flex; }
   .avatar-btn:hover { box-shadow: 0 0 0 2px var(--divider); }
   .color-popover {
