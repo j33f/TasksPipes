@@ -590,7 +590,12 @@ Its **Settings** tab manages the instance while it runs, without a restart:
 - **accounts without Outline**: sign-up with an e-mail address, invitations by e-mail, and the **e-mail domains**
   allowed to sign up or be invited;
 - **company sign-in (OpenID Connect)**: on or off, issuer, client, secret, button label, scopes, domains;
-- **updates**: check for new versions (on by default).
+- **updates**: check for new versions (on by default);
+- **AI assistant**: one AI for the whole instance — a well-known provider (Anthropic, OpenAI, Mistral AI, OpenRouter,
+  Ollama) or any server speaking the OpenAI or the Anthropic API, its address, its API key (kept encrypted), the
+  model (*Find the models* lists those the AI offers, before saving) and the effort; *Test the connection* asks it a
+  short question. A server on an internal address (Ollama on the same machine) must be allowed. Confidential pipes
+  are never sent to it. The assistant's features come in the next versions.
 
 A setting given by the server's environment (`.env`) wins and shows locked. Secrets are kept encrypted with
 `APP_SECRET` and never shown again: they can only be replaced or removed. A change that would leave the administrator

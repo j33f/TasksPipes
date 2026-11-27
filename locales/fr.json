@@ -1336,7 +1336,32 @@
     "Whose tasks": "Tâches de qui",
     "This person's tasks cannot be shown.": "Les tâches de cette personne ne peuvent pas être affichées.",
     "{name} has nothing to do that you can see.": "{name} n’a rien à faire que vous puissiez voir.",
-    "this person": "cette personne"
+    "this person": "cette personne",
+    "AI assistant": "Assistant IA",
+    "One AI for the whole instance, reached with the OpenAI or the Anthropic API. It never sees confidential pipes.": "Une IA pour toute l'instance, jointe avec l'API d'OpenAI ou d'Anthropic. Elle ne voit jamais les pipes confidentiels.",
+    "AI provider": "Fournisseur d'IA",
+    "Address of the API": "Adresse de l'API",
+    "Up to the version, e.g. https://llm.example.com/v1; empty: the provider's address": "Jusqu'à la version, ex. https://llm.example.com/v1 ; vide : l'adresse du fournisseur",
+    "API spoken by the server": "API parlée par le serveur",
+    "API key": "Clé d'API",
+    "Kept encrypted on the server, never shown again": "Gardée chiffrée sur le serveur, jamais réaffichée",
+    "Model": "Modèle",
+    "Find the models below, or type its name": "Trouvez les modèles ci-dessous, ou tapez son nom",
+    "Effort": "Effort",
+    "How much the model thinks before answering, when it can": "Combien le modèle réfléchit avant de répondre, quand il le peut",
+    "Allow a server on an internal address or in plain http": "Autoriser un serveur sur une adresse interne ou en http simple",
+    "e.g. Ollama on this machine": "ex. Ollama sur cette machine",
+    "Other (compatible server)": "Autre (serveur compatible)",
+    "OpenAI-compatible": "Compatible OpenAI",
+    "Anthropic-compatible": "Compatible Anthropic",
+    "The model's default": "Celui du modèle",
+    "Find the models": "Trouver les modèles",
+    "Test the connection": "Tester la connexion",
+    "{count} models found: choose one in the Model field": "{count} modèles trouvés : choisissez-en un dans le champ Modèle",
+    "The AI offers no model": "L'IA ne propose aucun modèle",
+    "The AI answers ({model}): {answer}": "L'IA répond ({model}) : {answer}",
+    "No AI": "Aucune IA",
+    "A well-known provider, or Other for any compatible server": "Un fournisseur connu, ou Autre pour tout serveur compatible"
   },
   "server": {
     "{label} is required": "{label} requis",
@@ -1820,7 +1845,13 @@
     "A task cannot be related to itself": "Une tâche ne peut pas être liée à elle-même",
     "A task is related to {n} tasks at most": "Une tâche est liée à {n} tâches au plus",
     "Related task": "Tâche liée",
-    "Person not found": "Personne introuvable"
+    "Person not found": "Personne introuvable",
+    "Choose an AI provider first": "Choisissez d'abord un fournisseur d'IA",
+    "Choose the AI's model first": "Choisissez d'abord le modèle de l'IA",
+    "The AI answered {status}: {error}": "L'IA a répondu {status} : {error}",
+    "The AI could not be reached: {error}": "L'IA est injoignable : {error}",
+    "The AI's answer could not be read": "La réponse de l'IA est illisible",
+    "This AI is on an internal address: allow internal addresses first": "Cette IA est sur une adresse interne : autorisez d'abord les adresses internes"
   },
   "catalog": {}
 }

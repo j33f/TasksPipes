@@ -14,6 +14,7 @@ import { closeUserConnections } from "./realtime.js";
 import { LIMITS, rateLimited } from "./rate-limit.js";
 import { localeOf, tr } from "./i18n.js";
 import { generateVapidKeys } from "./push.js";
+import { aiConfig, complete, listModels } from "./ai.js";
 import { SETTINGS, lockedSetting, setting, settingDef, storedSetting, type SettingDef } from "./settings-store.js";
 
 const HOST = /^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -57,6 +58,7 @@ export function cleanSetting(def: SettingDef, v: unknown): unknown {
     default: {
       if (typeof v !== "string" || v.length > 500) throw bad("Invalid value for {key}", label);
       const s = def.kind === "secret" ? v : v.trim();
+      if (def.choices && s && !def.choices.includes(s)) throw bad("Invalid value for {key}", label);
       if (def.key === "smtp.from" && s && !isEmail(s.match(/<([^>]+)>\s*$/)?.[1] ?? s)) throw bad("Invalid value for {key}", label);
       if (def.key === "push.vapidPublicKey" && s && !isVapidKey(s, 65)) throw bad("Invalid value for {key}", label);
       if (def.key === "push.vapidPrivateKey" && s && !isVapidKey(s, 32)) throw bad("Invalid value for {key}", label);
@@ -129,6 +131,7 @@ export function presentSettings() {
       locked: lockedSetting(d.key),
       env: d.env,
       default: d.default,
+      choices: d.choices,
       // A secret only tells whether it is set.
       value: d.kind === "secret" ? null : value,
       isSet: d.kind === "secret" ? Boolean(value) : undefined,
@@ -180,6 +183,28 @@ export const SETTINGS_REFRESH_MS = 30_000;
 
 type Req = FastifyRequest<{ Body: Record<string, unknown> }>;
 
+/** The changes sent by the administration page, checked; an empty secret keeps the current one. */
+function cleanChanges(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw bad("Invalid settings");
+  const changes: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(body as Record<string, unknown>)) {
+    const d = settingDef(key);
+    if (!d) throw bad("Unknown setting: {key}", { key });
+    if (lockedSetting(key)) throw bad("{key} is set by the server ({env}): change it there", { key, env: d.env });
+    if (d.kind === "secret" && raw === "") continue;
+    changes[key] = cleanSetting(d, raw);
+  }
+  return changes;
+}
+
+/** The AI connection with the values being edited (not saved yet), or an error when there is none. */
+function proposedAi(body: unknown) {
+  const changes = cleanChanges(body ?? {});
+  const cfg = aiConfig(<T>(k: string) => setting<T>(k, changes));
+  if (!cfg) throw bad("Choose an AI provider first");
+  return cfg;
+}
+
 /** Routes of the administration (registered behind its check: administrators only). */
 export async function settingsRoutes(app: FastifyInstance) {
   app.get("/admin/settings", async () => ({
@@ -189,17 +214,7 @@ export async function settingsRoutes(app: FastifyInstance) {
   }));
 
   app.put("/admin/settings", rateLimited(LIMITS.adminSettings), async (req: Req) => {
-    const body = req.body?.settings;
-    if (!body || typeof body !== "object" || Array.isArray(body)) throw bad("Invalid settings");
-    const changes: Record<string, unknown> = {};
-    for (const [key, raw] of Object.entries(body as Record<string, unknown>)) {
-      const d = settingDef(key);
-      if (!d) throw bad("Unknown setting: {key}", { key });
-      if (lockedSetting(key)) throw bad("{key} is set by the server ({env}): change it there", { key, env: d.env });
-      // An empty secret keeps the current one.
-      if (d.kind === "secret" && raw === "") continue;
-      changes[key] = cleanSetting(d, raw);
-    }
+    const changes = cleanChanges(req.body?.settings);
     await assertAdminsKeepAccess(req.user!.id, changes);
     const wasOutline = config.outlineEnabled;
     const changed = await saveSettings(changes, req.user!.id);
@@ -223,6 +238,16 @@ export async function settingsRoutes(app: FastifyInstance) {
       throw bad("Sending failed: {error}", { error: String((err as Error).message ?? err).replace(String(config.smtp.pass || "\u0000"), "***").slice(0, 300) });
     }
     return { ok: true, to };
+  });
+
+  // The AI assistant: the models the AI offers, and a short exchange to check the connection, with the values
+  // being edited (an empty key: the saved one).
+  app.post("/admin/ai/models", rateLimited(LIMITS.adminAi), async (req: Req) => ({ models: await listModels(proposedAi(req.body?.settings)) }));
+
+  app.post("/admin/ai/test", rateLimited(LIMITS.adminAi), async (req: Req) => {
+    const cfg = proposedAi(req.body?.settings);
+    const answer = await complete(cfg, "You check that a connection works. Answer with one short sentence.", [{ role: "user", content: "Say hello." }], { maxTokens: 200, timeoutMs: 60_000 });
+    return { ok: true, model: cfg.model, answer: answer.trim().slice(0, 500) };
   });
 
   // A fresh VAPID key pair for push notifications, for the administrator to review and save.

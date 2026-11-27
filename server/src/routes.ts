@@ -37,6 +37,7 @@ import { searchTasks } from "./search.js";
 import { hasDevices, pushRoutes } from "./push.js";
 import { updateRoutes } from "./updates.js";
 import { emailDomainAllowed } from "./settings.js";
+import { aiReady } from "./ai.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
 import { cleanPoints } from "./points.js";
 import { cleanSprintId, cleanSprintSettings, pipeSprints, pipeVelocity, sprintChange, sprintRoutes, sprintSettings, worksInSprints } from "./sprints.js";
@@ -785,6 +786,8 @@ export async function apiRoutes(app: FastifyInstance) {
       outlineConnect: config.outlineEnabled && config.oauthEnabled && req.outlineUrl === config.outlineUrl,
       // AI agents over MCP (mcp.ts): agent tokens can be made.
       mcp: config.mcpEnabled,
+      // The AI assistant (ai.ts): an AI is connected with a model chosen.
+      ai: aiReady(),
     },
     // An AI agent that works: tasks can be handed to it ("me (MCP)").
     hasAgent: await hasAgent(me(req)),
