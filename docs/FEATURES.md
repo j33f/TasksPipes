@@ -396,6 +396,9 @@ A search only finds what you could open in the app, checked in the database quer
 ## My tasks and Next action
 
 - **My tasks** lists everything assigned to you and still to do, across all pipes, grouped by state, by pipe or by priority, and filtered by label and priority.
+- **Someone else's tasks**: *My tasks* can show what another person still has to do (pick them at the top, or click
+  a member's avatar on a team's page): the same view, limited to the tasks you can see yourself — their personal
+  pipes stay private.
 - **Next action** follows Getting Things Done: capture an idea into your Personal pipe, see the tasks in progress
   (check their next sub-task, finish them), and get a suggestion of the next task to start — late or due soon first,
   then ready, already begun or waiting for long; a task still waiting for other tasks is never suggested. Beyond

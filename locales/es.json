@@ -1330,7 +1330,13 @@
     "Add a related task": "Añadir una tarea relacionada",
     "No longer related": "Dejar de relacionar",
     "added a related task": "añadió una tarea relacionada",
-    "removed a related task": "quitó una tarea relacionada"
+    "removed a related task": "quitó una tarea relacionada",
+    "Tasks of {name}": "Tareas de {name}",
+    "Everything assigned to {name} and still to do, among the tasks you can see.": "Todo lo asignado a {name} y aún por hacer, entre las tareas que usted ve.",
+    "Whose tasks": "Tareas de quién",
+    "This person's tasks cannot be shown.": "No se pueden mostrar las tareas de esta persona.",
+    "{name} has nothing to do that you can see.": "{name} no tiene nada que hacer que usted pueda ver.",
+    "this person": "esta persona"
   },
   "server": {
     "{label} is required": "{label}: obligatorio",
@@ -1813,7 +1819,8 @@
     "A pipe can only be moved to a team": "Un pipe solo se puede mover a un equipo",
     "A task cannot be related to itself": "Una tarea no puede estar relacionada consigo misma",
     "A task is related to {n} tasks at most": "Una tarea está relacionada con {n} tareas como máximo",
-    "Related task": "Tarea relacionada"
+    "Related task": "Tarea relacionada",
+    "Person not found": "Persona no encontrada"
   },
   "catalog": {
     "Prêt à démarrer": "Lista para empezar",
