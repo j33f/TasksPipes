@@ -116,8 +116,8 @@ documents and files (50 MB max per file, stored in the database).
 
 ### Models
 
-Anyone can design pipe types (columns and their state, offered task types, confidentiality, starter tasks) and task
-types (fields, with a live preview), from scratch or from an existing model. A model starts **private** — seen and
+Anyone can design pipe types (columns and their state, offered task types, confidentiality, starter tasks, rules for
+the AI assistant) and task types (fields, rules for the AI assistant, with a live preview), from scratch or from an existing model. A model starts **private** — seen and
 used by its author only — and can be made **public**; it is filed in a category. Only its author can change it.
 A type in use cannot be deleted, and the kind of a saved field cannot change.
 
@@ -379,6 +379,20 @@ or team; archived pipes do not count. When accepting a task, it can be **turned 
 chosen pipe (the dialog says when the pipe does not offer its current type); fields both types share are kept, and
 the change is recorded in the history. In a pipe, a task's page turns it into any type the pipe offers.
 
+## AI assistant
+
+Once an administrator has connected an AI (see [Administration](#administration)), a task's page offers
+**Assistant** to whoever may edit it, except in confidential and team-reserved pipes. The assistant reads the task —
+title, description, fields, sub-tasks and its last 40 comments — and proposes a clearer **title**, a complete
+**description** and values for the **fields** of its type (text, choices, dates, numbers…; never people or files),
+without inventing facts: what is missing goes in a note. The proposal shows next to what is there; tick what to keep
+and **Apply** (one change, in the history as usual), or **Ask again**. Nothing changes until then.
+
+It follows general rules, then those of the pipe's type and of the task's type, which any model can set (*Rules for
+the AI assistant*). Built in: development pipes ask for short, assertive titles keeping the decisions of the comments;
+user stories get "As a… / I want… / So that…" and acceptance criteria (Given… When… Then…); bugs get the observed and
+expected behaviour and numbered steps to reproduce. Each person can ask it 30 times an hour.
+
 ## Search
 
 **Search** at the top of the sidebar, or **Ctrl + K** (**⌘ + K** on a Mac) anywhere, finds tasks in every pipe and
@@ -595,7 +609,7 @@ Its **Settings** tab manages the instance while it runs, without a restart:
   Ollama) or any server speaking the OpenAI or the Anthropic API, its address, its API key (kept encrypted), the
   model (*Find the models* lists those the AI offers, before saving) and the effort; *Test the connection* asks it a
   short question. A server on an internal address (Ollama on the same machine) must be allowed. Confidential pipes
-  are never sent to it. The assistant's features come in the next versions.
+  are never sent to it. What it does is described in [AI assistant](#ai-assistant).
 
 A setting given by the server's environment (`.env`) wins and shows locked. Secrets are kept encrypted with
 `APP_SECRET` and never shown again: they can only be replaced or removed. A change that would leave the administrator

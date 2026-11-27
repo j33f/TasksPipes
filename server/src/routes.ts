@@ -38,6 +38,7 @@ import { hasDevices, pushRoutes } from "./push.js";
 import { updateRoutes } from "./updates.js";
 import { emailDomainAllowed } from "./settings.js";
 import { aiReady } from "./ai.js";
+import { assistTask } from "./assistant.js";
 import { cleanLabelIds, cleanPriority, keepSpaceLabels, labelRoutes, setTaskLabels } from "./labels.js";
 import { cleanPoints } from "./points.js";
 import { cleanSprintId, cleanSprintSettings, pipeSprints, pipeVelocity, sprintChange, sprintRoutes, sprintSettings, worksInSprints } from "./sprints.js";
@@ -1957,6 +1958,12 @@ export async function apiRoutes(app: FastifyInstance) {
         id: f.id, field: f.field, name: f.name, mime: f.mime, size: f.size, createdAt: f.created_at, uploadedBy: f.uploaded_by_name,
       })),
     };
+  });
+
+  // The AI assistant proposes a better title, description and fields; nothing is saved (the person applies them).
+  app.post("/tasks/:id/assist", rateLimited(LIMITS.assistant), async (req: Req) => {
+    const { t } = await loadTaskFor(req.params.id, me(req), "editContent");
+    return assistTask(t);
   });
 
   app.patch("/tasks/:id", async (req: Req) => {

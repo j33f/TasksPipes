@@ -8,6 +8,7 @@
   import type { ChecklistItem, DocRef, Label, Pipe, Sprint, TaskDetail, UserRef } from "../lib/types";
   import Modal from "./Modal.svelte";
   import Markdown from "./Markdown.svelte";
+  import AssistDialog from "./AssistDialog.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
   import Avatar from "./Avatar.svelte";
   import Icon, { iconOf } from "./Icon.svelte";
@@ -54,7 +55,7 @@
   let collectionId = $state<string | null>(null);
   let comment = $state("");
   let commentKey = $state(0);
-  let dialog = $state<"send" | "refuse" | "accept" | "labels" | null>(null);
+  let dialog = $state<"send" | "refuse" | "accept" | "labels" | "assist" | null>(null);
   let sprints = $state<Sprint[]>([]);
   const taskSprint = $derived(sprints.find((s) => s.id === task?.sprintId) ?? null);
   // Labels of the task's space, loaded when choosing them.
@@ -275,6 +276,10 @@
 
   // Read-only while someone else edits it; commenting stays open.
   const perms = $derived(task && lockedByOther ? { ...task.permissions, manage: false, editContent: false, refuse: false } : task?.permissions);
+  // Sending, and the AI assistant: never for a team's reserved pipe; the assistant never for a confidential one.
+  const pipeType = $derived(app.pipeType(task?.pipe?.kind));
+  const canSend = $derived(Boolean(perms?.manage && !pipeType?.teamOnly));
+  const canAssist = $derived(Boolean(app.me?.features.ai && perms?.editContent && !pipeType?.confidential && !pipeType?.teamOnly));
   const shown = $derived(task && perms ? { ...task, permissions: perms } : task);
   const due = $derived(task ? dueState(task.dueDate, task.status) : "");
 </script>
@@ -444,9 +449,10 @@
       </section>
 
       <aside class="task-side">
-        {#if perms?.manage && !app.pipeType(task.pipe?.kind)?.teamOnly}
+        {#if canSend || canAssist}
           <div class="row wrap" style="margin-bottom:20px">
-            <button class="btn neutral small" onclick={() => (dialog = "send")}><Icon name="send" size={16} />{t("Send to…")}</button>
+            {#if canSend}<button class="btn neutral small" onclick={() => (dialog = "send")}><Icon name="send" size={16} />{t("Send to…")}</button>{/if}
+            {#if canAssist}<button class="btn neutral small" onclick={() => (dialog = "assist")}><Icon name="sparkles" size={16} />{t("Assistant")}</button>{/if}
           </div>
         {/if}
 
@@ -648,6 +654,7 @@
   {/if}
 </Modal>
 
+{#if task && dialog === "assist"}<AssistDialog {task} type={taskType} onclose={() => (dialog = null)} ondone={load} />{/if}
 {#if task && dialog === "send"}<SendDialog {task} onclose={() => (dialog = null)} />{/if}
 {#if task && dialog === "refuse"}<RefuseDialog {task} onclose={() => (dialog = null)} ondone={onclose} />{/if}
 {#if task && dialog === "labels"}<LabelsModal spaceId={task.space.id} onclose={() => { dialog = null; loadLabels(); }} />{/if}

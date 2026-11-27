@@ -52,6 +52,7 @@ pipeTypes:                    # optional
     taskTypes: [company_visit, cours]   # task types of this file, or built-in / available ones
     templates:                # starter tasks (optional)
       - Sign the work-study contract
+    assistant: Keep the company's name in the title.   # rules for the AI assistant (optional)
 ```
 
 - **Column states**: `backlog`, `ready`, `started`, `ongoing`, `blocked`, `done`, `abandoned`.
