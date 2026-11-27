@@ -55,19 +55,51 @@ const LINKED = (user: string, teamOnly: string) => `
   LEFT JOIN users asg ON asg.id = t.assignee_id
   LEFT JOIN pipes p ON p.id = t.pipe_id`;
 
-/** The tasks `taskId` waits for, and those waiting for it, as `userId` sees them. */
+/** The tasks `taskId` waits for, those waiting for it, and those related to it, as `userId` sees them. */
 export async function dependenciesOf(db: Queryable, taskId: string, userId: string) {
   const sql = LINKED("$2", "$3");
   const params = [taskId, userId, teamOnlyKinds()];
-  const [blockedBy, blocks] = await Promise.all([
+  const related = sql
+    .replace("FROM task_dependencies d", "FROM task_relations d")
+    .replace("%SIDE%", "CASE WHEN d.a_id = $1 THEN d.b_id ELSE d.a_id END");
+  const [blockedBy, blocks, relatedTo] = await Promise.all([
     db.query(`${sql.replace("%SIDE%", "d.blocker_id")} WHERE d.task_id = $1 ORDER BY d.created_at`, params),
     db.query(`${sql.replace("%SIDE%", "d.task_id")} WHERE d.blocker_id = $1 ORDER BY d.created_at`, params),
+    db.query(`${related} WHERE $1 IN (d.a_id, d.b_id) ORDER BY d.created_at`, params),
   ]);
   return {
-    // The blockers of a task one may edit can be unlinked, even those one cannot open.
+    // The blockers of a task one may edit can be unlinked, even those one cannot open; related tasks too.
     blockedBy: blockedBy.rows.map((r) => presentDependency(r, true)),
     blocks: blocks.rows.map((r) => presentDependency(r, false)),
+    related: relatedTo.rows.map((r) => presentDependency(r, true)),
   };
+}
+
+/** At most this many tasks related to one task. */
+export const MAX_RELATED = 50;
+
+/** The pair of a relation, in the order it is stored. */
+const pair = (x: string, y: string) => (x < y ? [x, y] : [y, x]);
+
+/**
+ * Relates two tasks (both checked by the caller), neither waiting for the other; in a transaction. False when they
+ * already were.
+ */
+export async function addRelation(db: Queryable, taskId: string, otherId: string, userId: string): Promise<boolean> {
+  if (taskId === otherId) throw bad("A task cannot be related to itself");
+  const n = await one(`SELECT count(*)::int AS n FROM task_relations WHERE $1 IN (a_id, b_id)`, [taskId], db);
+  if (n!.n >= MAX_RELATED) throw bad("A task is related to {n} tasks at most", { n: MAX_RELATED });
+  const { rowCount } = await db.query(
+    `INSERT INTO task_relations (a_id, b_id, created_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+    [...pair(taskId, otherId), userId]
+  );
+  return Boolean(rowCount);
+}
+
+/** Unrelates two tasks; false when they were not. */
+export async function removeRelation(db: Queryable, taskId: string, otherId: string): Promise<boolean> {
+  const { rowCount } = await db.query(`DELETE FROM task_relations WHERE a_id = $1 AND b_id = $2`, pair(taskId, otherId));
+  return Boolean(rowCount);
 }
 
 /** Whether `blockerId` already waits, directly or not, for `taskId` (linking them would make a loop). */

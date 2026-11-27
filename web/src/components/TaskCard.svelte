@@ -72,6 +72,8 @@
     background: var(--card-background); border-radius: 8px; box-shadow: var(--card-shadow);
     padding: 10px 12px; cursor: pointer; font-size: 14px; outline: none;
   }
+  /* A card one can move is taken by any point, its title too: pressing on its text drags it instead of selecting the text. */
+  .task-card[draggable="true"] { user-select: none; -webkit-user-select: none; -webkit-user-drag: element; }
   .task-card:hover, .task-card:focus-visible { box-shadow: var(--card-shadow), 0 2px 8px rgb(0 0 0 / 10%); }
   .task-card.dragging { opacity: 0.4; }
   .t-type { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-tertiary); margin-bottom: 3px; }

@@ -180,6 +180,9 @@ those types keep working. This is a personal choice: others still see every type
   owner and author are told, in the app at once and by e-mail if they are not in the app then. A linked task someone
   cannot open shows them only its title and owner, without a link; a confidential or team-only one shows as *Task not
   accessible*. Those who may edit the task can unlink any task it waits for, even one they cannot open.
+- **Related tasks**: two tasks can also simply be linked, neither waiting for the other (*Dependencies › Add a
+  related task*): the link shows on both tasks, under *Related to*, blocks nothing and tells no one. Those who may edit
+  either task can remove it; the same rules as for dependencies apply to a related task one cannot open.
 - **Repeat** — recurring tasks (a task in a pipe, for those who manage it): a new task is made on each date of a rule —
   - every *n* days;
   - every *n* weeks, on chosen days;
@@ -393,6 +396,9 @@ A search only finds what you could open in the app, checked in the database quer
 ## My tasks and Next action
 
 - **My tasks** lists everything assigned to you and still to do, across all pipes, grouped by state, by pipe or by priority, and filtered by label and priority.
+- **Someone else's tasks**: *My tasks* can show what another person still has to do (pick them at the top, or click
+  a member's avatar on a team's page): the same view, limited to the tasks you can see yourself — their personal
+  pipes stay private.
 - **Next action** follows Getting Things Done: capture an idea into your Personal pipe, see the tasks in progress
   (check their next sub-task, finish them), and get a suggestion of the next task to start — late or due soon first,
   then ready, already begun or waiting for long; a task still waiting for other tasks is never suggested. Beyond

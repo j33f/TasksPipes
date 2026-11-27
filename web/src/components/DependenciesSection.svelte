@@ -9,7 +9,9 @@
   let { task, onchange }: { task: TaskDetail; onchange: () => void } = $props();
 
   const canEdit = $derived(task.permissions.editContent);
-  let adding = $state(false);
+  // What is being added: a task it waits for, or a related one.
+  let adding = $state<"waits" | "related" | null>(null);
+  const related = $derived(task.related ?? []);
   let q = $state("");
   let results = $state<SearchResult[]>([]);
   let error = $state("");
@@ -28,7 +30,7 @@
       try {
         const found = await api.get<SearchResult[]>(`/search?${new URLSearchParams({ q: text })}`);
         if (n !== seq) return;
-        const linked = new Set(task.blockedBy.map((d) => d.id));
+        const linked = new Set((adding === "related" ? related : task.blockedBy).map((d) => d.id));
         results = found.filter((r) => r.id !== task.id && !linked.has(r.id)).slice(0, 8);
       } catch (err) {
         if (n === seq) error = errorMessage(err);
@@ -52,14 +54,16 @@
 
   const add = (r: SearchResult) =>
     change(async () => {
-      await api.post(`/tasks/${task.id}/dependencies`, { blockerId: r.id });
+      if (adding === "related") await api.post(`/tasks/${task.id}/relations`, { taskId: r.id });
+      else await api.post(`/tasks/${task.id}/dependencies`, { blockerId: r.id });
       q = "";
-      adding = false;
+      adding = null;
     });
   const remove = (d: Dependency) => change(() => api.del(`/tasks/${task.id}/dependencies/${d.id}`));
+  const unrelate = (d: Dependency) => change(() => api.del(`/tasks/${task.id}/relations/${d.id}`));
 </script>
 
-{#snippet item(d: Dependency, removable: boolean)}
+{#snippet item(d: Dependency, removable: boolean, kind: "waits" | "related" = "waits")}
   <li class:resolved={d.resolved}>
     <Icon name={d.resolved ? "check" : "link"} size={14} />
     {#if d.visible}
@@ -70,12 +74,29 @@
     {#if d.owner}<span class="muted small">· {d.owner.name}</span>{/if}
     {#if d.resolved}<span class="muted small">· {t("finished")}</span>{/if}
     {#if removable && canEdit && d.id}
-      <button class="btn ghost icon small" title={t("Stop waiting for it")} disabled={busy} onclick={() => remove(d)}><Icon name="unlink" size={14} /></button>
+      {#if kind === "related"}
+        <button class="btn ghost icon small" title={t("No longer related")} disabled={busy} onclick={() => unrelate(d)}><Icon name="unlink" size={14} /></button>
+      {:else}
+        <button class="btn ghost icon small" title={t("Stop waiting for it")} disabled={busy} onclick={() => remove(d)}><Icon name="unlink" size={14} /></button>
+      {/if}
     {/if}
   </li>
 {/snippet}
 
-{#if task.blockedBy.length || task.blocks.length || canEdit}
+{#snippet search()}
+  <input class="input" bind:value={q} placeholder={t("Search a task…")} aria-label={t("Search a task…")} />
+  {#if results.length}
+    <ul class="results">
+      {#each results as r (r.id)}
+        <li><button class="link-btn" disabled={busy} onclick={() => add(r)}>#{r.number} {r.title}</button>
+          {#if r.owner}<span class="muted small">· {r.owner.name}</span>{/if}</li>
+      {/each}
+    </ul>
+  {/if}
+  <button class="btn ghost small" onclick={() => { adding = null; q = ""; }}>{t("Cancel")}</button>
+{/snippet}
+
+{#if task.blockedBy.length || task.blocks.length || related.length || canEdit}
   <div class="infos">
     <div class="section-title"><Icon name="link" />{t("Dependencies")}</div>
     {#if task.blockers}
@@ -85,25 +106,27 @@
       <div class="label-text">{t("Waits for")}</div>
       <ul class="deps">{#each task.blockedBy as d, i (d.id ?? i)}{@render item(d, true)}{/each}</ul>
       {#if canEdit}
-        {#if adding}
-          <input class="input" bind:value={q} placeholder={t("Search a task…")} aria-label={t("Search a task…")} />
-          {#if results.length}
-            <ul class="results">
-              {#each results as r (r.id)}
-                <li><button class="link-btn" disabled={busy} onclick={() => add(r)}>#{r.number} {r.title}</button>
-                  {#if r.owner}<span class="muted small">· {r.owner.name}</span>{/if}</li>
-              {/each}
-            </ul>
-          {/if}
-          <button class="btn ghost small" onclick={() => { adding = false; q = ""; }}>{t("Cancel")}</button>
+        {#if adding === "waits"}
+          {@render search()}
         {:else}
-          <button class="btn neutral small" onclick={() => (adding = true)}>{t("Add a task it waits for")}</button>
+          <button class="btn neutral small" onclick={() => { adding = "waits"; q = ""; }}>{t("Add a task it waits for")}</button>
         {/if}
       {/if}
     {/if}
     {#if task.blocks.length}
       <div class="label-text">{t("Blocks")}</div>
       <ul class="deps">{#each task.blocks as d, i (d.id ?? i)}{@render item(d, false)}{/each}</ul>
+    {/if}
+    {#if related.length || canEdit}
+      <div class="label-text">{t("Related to")}</div>
+      <ul class="deps">{#each related as d, i (d.id ?? i)}{@render item(d, true, "related")}{/each}</ul>
+      {#if canEdit}
+        {#if adding === "related"}
+          {@render search()}
+        {:else}
+          <button class="btn neutral small" onclick={() => { adding = "related"; q = ""; }}>{t("Add a related task")}</button>
+        {/if}
+      {/if}
     {/if}
     {#if error}<p class="error-text">{error}</p>{/if}
   </div>

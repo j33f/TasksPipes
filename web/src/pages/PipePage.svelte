@@ -127,9 +127,24 @@
   // Changes made by the others (and by one's agent) show while the board is open, even left untouched.
   onMount(() => live.hold());
 
+  // A reload while a card is dragged would redraw the board under the pointer: it waits for the drop.
+  let reloadAfterDrag = false;
   $effect(() => {
     app.version;
-    api.get<PipeDetail>(`/pipes/${id}`)
+    const pipeId = id;
+    untrack(() => (draggedId ? (reloadAfterDrag = true) : loadPipe(pipeId)));
+  });
+  function endDrag() {
+    draggedId = null;
+    drop = null;
+    if (reloadAfterDrag) {
+      reloadAfterDrag = false;
+      loadPipe(id);
+    }
+  }
+
+  function loadPipe(pipeId: string) {
+    api.get<PipeDetail>(`/pipes/${pipeId}`)
       .then(async (p) => {
         // Changed by someone else meanwhile: the cards glide to their new place (one's own moves are already shown).
         const same = pipe?.id === p.id;
@@ -141,7 +156,7 @@
         }
       })
       .catch((err) => (error = errorMessage(err)));
-  });
+  }
 
   const visible = $derived(
     (pipe?.tasks ?? []).filter(
@@ -165,6 +180,7 @@
   function ondragover(e: DragEvent, stage: string, lane: string) {
     if (!draggedId) return;
     e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
     const body = e.currentTarget as HTMLElement;
     const cards = [...body.querySelectorAll<HTMLElement>("[data-task-card]")].filter((c) => c.dataset.taskCard !== draggedId);
     let index = cards.length;
@@ -421,6 +437,13 @@
               <span class="col-points" title={t("Points of the tasks shown")}>{t("{n} pts", { n: pts })}</span>
             {/if}
             {#if overLimit(n, s.wipLimit)}<span class="sr-only">{t("Over its limit")}</span>{/if}
+            <!-- Adding a task without scrolling down to the end of a long column. -->
+            {#if pipe.canAddTasks}
+              <button class="btn ghost icon col-add" title={t("Add a task to {column}", { column: s.label })}
+                aria-label={t("Add a task to {column}", { column: s.label })} onclick={() => (newTaskStage = s.id)}>
+                <Icon name="plus" size={16} />
+              </button>
+            {/if}
           </header>
         {/each}
       </div>
@@ -431,22 +454,27 @@
         <div class="board-row lane">
           {#each boardColumns as s (s.id)}
             {@const tasks = cells[lane.id][s.id]}
+            {@const others = tasks.filter((x) => x.id !== draggedId)}
             <div class="column-body" class:drop-target={drop?.stage === s.id && drop.lane === lane.id} role="list"
               data-lane={lane.id} data-stage={s.id}
               ondragover={(e) => ondragover(e, s.id, lane.id)} {ondrop}
               ondragleave={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) drop = null; }}>
-              {#each tasks.filter((x) => x.id !== draggedId) as x, i (x.id)}
-                {#if drop?.stage === s.id && drop.lane === lane.id && drop.index === i}<div class="drop-indicator"></div>{/if}
-                <TaskCard task={x} draggable={pipe.canManage}
+              <!-- The dragged card stays in the page, faded, until the drop: taking it out of the page while dragged
+                   lets the browser drop the drag (no lift, no drop). -->
+              {#each tasks as x (x.id)}
+                {#if drop?.stage === s.id && drop.lane === lane.id && x.id !== draggedId && drop.index === others.indexOf(x)}<div class="drop-indicator"></div>{/if}
+                <TaskCard task={x} draggable={pipe.canManage} dragging={x.id === draggedId}
                   ondragstart={(e) => {
+                    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
                     e.dataTransfer?.setData("text/plain", x.id);
                     // For a pipe of the sidebar to take it (Sidebar.svelte).
                     e.dataTransfer?.setData(TASK_DRAG, JSON.stringify({ id: x.id, title: x.title, pipeId: pipe!.id, spaceId: pipe!.space.id }));
+                    // Not while the browser takes the card's picture.
                     setTimeout(() => (draggedId = x.id));
                   }}
-                  ondragend={() => { draggedId = null; drop = null; }} />
+                  ondragend={endDrag} />
               {/each}
-              {#if drop?.stage === s.id && drop.lane === lane.id && drop.index >= tasks.filter((x) => x.id !== draggedId).length}<div class="drop-indicator"></div>{/if}
+              {#if drop?.stage === s.id && drop.lane === lane.id && drop.index >= others.length}<div class="drop-indicator"></div>{/if}
               {#if pipe.canAddTasks && lane.change === null}
                 <button class="btn ghost small add" onclick={() => (newTaskStage = s.id)}><Icon name="plus" size={16} />{t("Add")}</button>
               {/if}
@@ -521,6 +549,8 @@
   }
   .column-header.over { box-shadow: inset 0 3px 0 var(--danger, #ed2651); }
   .column-header .col-points { margin-left: auto; font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .column-header .col-add { margin: -4px -6px -4px auto; width: 26px; height: 26px; min-height: 26px; padding: 0; color: var(--text-tertiary); }
+  .column-header .col-points + .col-add, .column-header .col-points ~ .col-add { margin-left: 4px; }
   .column-header.over .count { background: var(--danger, #ed2651); color: #fff; }
   .column-body { padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 8px; min-height: 80px; background: var(--background-secondary); }
   .board-row:last-child .column-body { border-radius: 0 0 10px 10px; }

@@ -312,6 +312,13 @@ describe("an agent with full access to tasks", () => {
       { id: other.id, number: other.number, status: "backlog", done: false },
     ]);
     expect((await tool(token, "remove_dependency", { taskId: created.id, waitsForTaskId: other.id })).waitsFor).toEqual([]);
+    // Related, neither waiting for the other: shown on both tasks.
+    expect((await tool(token, "add_related_task", { taskId: created.id, relatedTaskId: other.id })).relatedTo).toEqual([
+      { id: other.id, number: other.number, status: "backlog", done: false },
+    ]);
+    expect((await tool(token, "get_task", { taskId: other.id })).relatedTo.map((d: { id: string }) => d.id)).toEqual([created.id]);
+    expect((await tool(token, "get_task", { taskId: created.id })).waitsFor).toEqual([]);
+    expect((await tool(token, "remove_related_task", { taskId: other.id, relatedTaskId: created.id })).relatedTo).toEqual([]);
 
     await tool(token, "update_task", { taskId: created.id, assigneeId: null, labelIds: [] });
     task = await tool(token, "get_task", { taskId: created.id });

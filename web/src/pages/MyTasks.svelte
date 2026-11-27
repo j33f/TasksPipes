@@ -7,6 +7,7 @@
   import TaskRow from "../components/TaskRow.svelte";
   import Icon from "../components/Icon.svelte";
   import { t } from "../lib/i18n.svelte";
+  import { router, setParams } from "../lib/router.svelte";
 
   let tasks = $state<Task[] | null>(null);
   let filter = $state("");
@@ -29,9 +30,35 @@
     try { localStorage.setItem("tp:myTasksBy", v); } catch { /* storage unavailable */ }
   }
 
+  // Someone else's tasks (?user=…): what they still have to do, among the tasks one sees oneself.
+  const userId = $derived(router.params.get("user"));
+  // A teammate one is not connected with is not in the people list: shown without a name.
+  const person = $derived(
+    userId && userId !== app.me?.user.id ? (app.users.find((u) => u.id === userId) ?? { id: userId, name: t("this person") }) : null
+  );
+  const others = $derived(app.users.filter((u) => u.id !== app.me?.user.id));
+  let failed = $state(false);
+
+  // Shown: whose tasks the list holds (a live refresh keeps it on screen; another person empties it first).
+  let shownFor: string | null | undefined;
   $effect(() => {
     app.version;
-    api.get<Task[]>("/me/tasks").then((d) => (tasks = d));
+    const id = userId && userId !== app.me?.user.id ? userId : null;
+    if (id !== shownFor) {
+      shownFor = id;
+      tasks = null;
+    }
+    api.get<Task[]>(id ? `/users/${id}/tasks` : "/me/tasks")
+      .then((d) => {
+        if (shownFor !== id) return;
+        failed = false;
+        tasks = d;
+      })
+      .catch(() => {
+        if (shownFor !== id) return;
+        failed = true;
+        tasks = [];
+      });
   });
 
   const shown = $derived(
@@ -64,13 +91,26 @@
 <div class="page">
   <div class="page-header">
     <div class="grow">
-      <h1><Icon name="checklist" size={26} />{t("My tasks")}</h1>
-      <div class="subtitle">{t("Everything assigned to you and still to do, across all pipes.")}</div>
+      {#if person}
+        <h1><Icon name="checklist" size={26} />{t("Tasks of {name}", { name: person.name })}</h1>
+        <div class="subtitle">{t("Everything assigned to {name} and still to do, among the tasks you can see.", { name: person.name })}</div>
+      {:else}
+        <h1><Icon name="checklist" size={26} />{t("My tasks")}</h1>
+        <div class="subtitle">{t("Everything assigned to you and still to do, across all pipes.")}</div>
+      {/if}
     </div>
-    <a class="btn neutral" href="/next"><Icon name="target" size={18} />{t("Next action")}</a>
+    {#if !person}<a class="btn neutral" href="/next"><Icon name="target" size={18} />{t("Next action")}</a>{/if}
   </div>
 
   <div class="toolbar">
+    {#if others.length || person}
+      <select class="input narrow" aria-label={t("Whose tasks")} value={person?.id ?? ""}
+        onchange={(e) => setParams({ user: (e.currentTarget as HTMLSelectElement).value || null })}>
+        <option value="">{t("Mine")}</option>
+        {#each others as u (u.id)}<option value={u.id}>{u.name}</option>{/each}
+        {#if person && !others.some((u) => u.id === person.id)}<option value={person.id}>{person.name}</option>{/if}
+      </select>
+    {/if}
     <input class="input" placeholder={t("Filter…")} bind:value={filter} />
     {#if labelChoices.length}
       <select class="input narrow" bind:value={labelFilter} aria-label={t("Label")}>
@@ -92,8 +132,10 @@
 
   {#if !tasks}
     <div class="muted">{t("Loading…")}</div>
+  {:else if failed}
+    <div class="callout danger">{t("This person's tasks cannot be shown.")}</div>
   {:else if !tasks.length}
-    <div class="empty">{t("Nothing to do for now. Enjoy!")}</div>
+    <div class="empty">{person ? t("{name} has nothing to do that you can see.", { name: person.name }) : t("Nothing to do for now. Enjoy!")}</div>
   {:else}
     {#each groups.filter((g) => g.tasks.length || by === "state") as g (g.id)}
       <div class="section">

@@ -526,7 +526,7 @@ function buildServer(app: FastifyInstance, c: Caller) {
     "get_task",
     {
       title: "Get a task",
-      description: "A task with its column, owner, description, labels, the values of its type's fields, sub-tasks, the tasks it waits for or holds up, files and history.",
+      description: "A task with its column, owner, description, labels, the values of its type's fields, sub-tasks, the tasks it waits for, holds up or is related to, files and history.",
       inputSchema: z.object({ taskId: id }),
       annotations: read,
     },
@@ -544,6 +544,7 @@ function buildServer(app: FastifyInstance, c: Caller) {
         subtasks: (t.items ?? []).map((i: Json) => ({ id: i.id, text: i.text, done: i.done, ...(i.doneBy ? { doneBy: i.doneBy } : {}) })),
         waitsFor: (t.blockedBy ?? []).map(linked),
         holdsUp: (t.blocks ?? []).map(linked),
+        relatedTo: (t.related ?? []).map(linked),
         files: (t.files ?? []).map((f: Json) => ({ id: f.id, field: f.field, name: f.name, size: f.size })),
         history: (t.events ?? []).map((e: Json) => ({
           at: e.createdAt, type: e.type, by: e.actor?.name,
@@ -744,6 +745,36 @@ function buildServer(app: FastifyInstance, c: Caller) {
         await ownTask(app, c, taskId);
         const d = await call(app, c, "DELETE", `/tasks/${taskId}/dependencies/${waitsForTaskId}`);
         return { waitsFor: (d.blockedBy ?? []).map(linked), holdsUp: (d.blocks ?? []).map(linked) };
+      })
+    );
+
+    server.registerTool(
+      "add_related_task",
+      {
+        title: "Relate two tasks",
+        description: "Relate a task to another one (relatedTaskId), neither waiting for the other (see add_dependency for that).",
+        inputSchema: z.object({ taskId: id, relatedTaskId: id }),
+      },
+      run(async ({ taskId, relatedTaskId }) => {
+        await ownTask(app, c, taskId);
+        await ownTask(app, c, relatedTaskId);
+        const d = await call(app, c, "POST", `/tasks/${taskId}/relations`, { taskId: relatedTaskId });
+        return { relatedTo: (d.related ?? []).map(linked) };
+      })
+    );
+
+    server.registerTool(
+      "remove_related_task",
+      {
+        title: "Stop relating two tasks",
+        description: "Stop relating a task to another one (relatedTaskId, see get_task's relatedTo).",
+        inputSchema: z.object({ taskId: id, relatedTaskId: id }),
+        annotations: { idempotentHint: true },
+      },
+      run(async ({ taskId, relatedTaskId }) => {
+        await ownTask(app, c, taskId);
+        const d = await call(app, c, "DELETE", `/tasks/${taskId}/relations/${relatedTaskId}`);
+        return { relatedTo: (d.related ?? []).map(linked) };
       })
     );
   }

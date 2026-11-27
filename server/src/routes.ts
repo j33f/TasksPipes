@@ -44,7 +44,7 @@ import { sendSprintReport } from "./sprint-report.js";
 import { exportSprintToOutline, outlineReportRoutes } from "./outline-reports.js";
 import { pokerEnabled, pokerRoutes } from "./poker.js";
 import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
-import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
+import { addDependency, addRelation, dependenciesOf, isResolved, openBlockers, releaseWaiting, removeRelation } from "./dependencies.js";
 import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
 import {
   SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, taskVisibleSql, teamOnlyKinds, type TaskPermissions,
@@ -1145,6 +1145,27 @@ export async function apiRoutes(app: FastifyInstance) {
     return rows.map(presentTask);
   });
 
+  // Someone else's "My tasks": what they own (assigned to them, or unassigned in their personal space) and still have
+  // to do, among the tasks one may see oneself; nobody one does not know (connected, or in a team with them).
+  app.get("/users/:id/tasks", async (req: Req) => {
+    const uid = me(req);
+    const id = uuid(req.params.id, "Person");
+    const known = await one(
+      `SELECT 1 FROM users u WHERE u.id = $1 AND (user_visible($2, u.id) OR (u.disabled_at IS NULL AND EXISTS (
+         SELECT 1 FROM space_members a JOIN space_members b ON b.space_id = a.space_id WHERE a.user_id = $2 AND b.user_id = u.id)))`,
+      [id, uid]
+    );
+    if (!known) throw notFound("Person not found");
+    const { rows } = await query(
+      `${TASK_SELECT} WHERE COALESCE(t.assignee_id, s.user_id) = $1 AND t.status NOT IN ('done','abandoned')
+       AND t.pipe_id IS NOT NULL AND p.archived_at IS NULL
+       AND ${taskVisibleSql("$2", "$3")}
+       ORDER BY t.due_date NULLS LAST, t.position, t.created_at LIMIT 500`,
+      [id, uid, teamOnlyKinds()]
+    );
+    return rows.map(presentTask);
+  });
+
   // Calendar: tasks due in a period (at most CALENDAR_DAYS), in the pipes one sees, archived ones left out; one's
   // own (scope=mine, the default) or all those one sees. canMove: one may change the due date (a member).
   app.get("/calendar", rateLimited(LIMITS.search), async (req: Req) => {
@@ -2171,6 +2192,32 @@ export async function apiRoutes(app: FastifyInstance) {
       if (!rowCount) return;
       const s = snapshot(t);
       await recordEvent(client, t.id, uid, "dependency", s, s, null, { dependency: "removed" });
+    });
+    return dependenciesOf(pool, t.id, uid);
+  });
+
+  // Related tasks, neither waiting for the other: those who may edit a task relate it to a task they can open.
+  app.post("/tasks/:id/relations", rateLimited(LIMITS.dependencies), async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    const { t: other } = await loadTaskFor(uuid(req.body?.taskId, "Related task"), uid);
+    await tx(async (client) => {
+      if (!(await addRelation(client, t.id, other.id, uid))) return;
+      const s = snapshot(t);
+      await recordEvent(client, t.id, uid, "dependency", s, s, null, { relation: "added" });
+    });
+    return dependenciesOf(pool, t.id, uid);
+  });
+
+  // A related task one cannot open can still be unrelated by those who may edit the task.
+  app.delete("/tasks/:id/relations/:taskId", rateLimited(LIMITS.dependencies), async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    const otherId = uuid(req.params.taskId, "Related task");
+    await tx(async (client) => {
+      if (!(await removeRelation(client, t.id, otherId))) return;
+      const s = snapshot(t);
+      await recordEvent(client, t.id, uid, "dependency", s, s, null, { relation: "removed" });
     });
     return dependenciesOf(pool, t.id, uid);
   });
