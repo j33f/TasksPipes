@@ -10,6 +10,8 @@ import { query, type Row } from "./db.js";
 import { bad, forbidden } from "./errors.js";
 import { cleanFieldValue } from "./fields.js";
 import { pipeTypeById, taskTypeById, type Field } from "./pipeTypes.js";
+import type { Locale } from "./i18n.js";
+import { searchTasks } from "./search.js";
 
 /** Field types the assistant may fill (people, files and documents stay with people). */
 const FILLABLE = new Set(["text", "textarea", "number", "money", "date", "url", "email", "phone", "select", "multiselect", "checkbox"]);
@@ -175,4 +177,42 @@ export async function assistDiscussion(t: Row, messages: AiMessage[]): Promise<s
   const { cfg, kindRules, facts } = await context(t);
   const text = await complete(cfg, `${DISCUSSION}${kindRules}\n\nThe task:\n${JSON.stringify(facts)}`, messages, { maxTokens: 2000 });
   return text.trim().slice(0, 8000);
+}
+
+const SEARCH_QUERIES = `You help a person find tasks in a task manager whose search matches tasks containing every word given.
+Turn their question into at most 4 short searches of 1 to 3 words each (words likely written in the tasks: names,
+subjects; in the language of the question, singular), most likely first. Answer with one JSON object and nothing else:
+{"queries": [string]}`;
+
+const SEARCH_ANSWER = `You help a person find tasks in a task manager. Their question and the tasks found are given as JSON.
+Answer the question in a few sentences using only these tasks, naming them by key (e.g. TP-12); say so when none fits.
+Write in the language of the question. Answer with one JSON object and nothing else:
+{"answer": string, "tasks": [the keys of the tasks that answer the question, most relevant first]}`;
+
+/** The assistant's answer to a question about one's tasks, with the tasks it names (only tasks the person sees). */
+export async function assistSearch(userId: string, lang: Locale, question: string) {
+  const q = question.trim().slice(0, 500);
+  if (!q) throw bad("Ask a question first");
+  const cfg = aiConfig();
+  if (!cfg?.model) throw bad("No AI assistant is set up on this instance");
+  const queries = parseAnswer(await complete(cfg, SEARCH_QUERIES, [{ role: "user", content: q }], { maxTokens: 1000 })).queries;
+  const words = [q, ...(Array.isArray(queries) ? queries : [])].filter((x): x is string => typeof x === "string" && Boolean(x.trim())).slice(0, 5);
+  const found = new Map<string, Awaited<ReturnType<typeof searchTasks>>[number]>();
+  for (const w of words) {
+    for (const r of await searchTasks(userId, lang, w.slice(0, 200))) {
+      // Confidential tasks never reach the AI.
+      if (!r.confidential && found.size < 40) found.set(r.id, r);
+    }
+  }
+  const tasks = [...found.values()];
+  if (!tasks.length) return { answer: null, tasks: [] };
+  const plain = (s: string | null) => (s ?? "").replace(/[\u0002\u0003]/g, "");
+  const facts = tasks.map((r) => ({ key: r.key, title: r.title, status: r.status, where: [r.space.name, r.pipe?.name, r.column].filter(Boolean).join(" › "), owner: r.owner?.name ?? null, excerpt: plain(r.snippet) }));
+  const answer = parseAnswer(await complete(cfg, SEARCH_ANSWER, [{ role: "user", content: JSON.stringify({ question: q, tasks: facts }) }], { maxTokens: 2000 }));
+  const keys = (Array.isArray(answer.tasks) ? answer.tasks : []).map(String);
+  const named = keys.map((k) => tasks.find((r) => r.key === k)).filter((r): r is (typeof tasks)[number] => Boolean(r));
+  return {
+    answer: typeof answer.answer === "string" ? answer.answer.trim().slice(0, 4000) : null,
+    tasks: [...new Set(named)],
+  };
 }

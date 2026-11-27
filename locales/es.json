@@ -1383,7 +1383,10 @@
     "Your answer": "Su respuesta",
     "Discussion with the assistant": "Conversación con el asistente",
     "Your message": "Su mensaje",
-    "Complete the task with my answers": "Completar la tarea con mis respuestas"
+    "Complete the task with my answers": "Completar la tarea con mis respuestas",
+    "Ask the assistant": "Preguntar al asistente",
+    "The assistant searches…": "El asistente busca…",
+    "The assistant found no task about it.": "El asistente no encontró ninguna tarea sobre eso."
   },
   "server": {
     "{label} is required": "{label}: obligatorio",
@@ -1877,7 +1880,8 @@
     "No AI assistant is set up on this instance": "No hay ningún asistente de IA configurado en esta instancia",
     "The AI assistant never sees confidential tasks": "El asistente de IA nunca ve las tareas confidenciales",
     "Rules for the AI assistant": "Indicaciones para el asistente de IA",
-    "Write a message first": "Escriba primero un mensaje"
+    "Write a message first": "Escriba primero un mensaje",
+    "Ask a question first": "Haga primero una pregunta"
   },
   "catalog": {
     "Prêt à démarrer": "Lista para empezar",

@@ -10,6 +10,8 @@
   import { highlight } from "../lib/search";
   import type { Label, SearchResult } from "../lib/types";
   import { t } from "../lib/i18n.svelte";
+  import Icon from "./Icon.svelte";
+  import Markdown from "./Markdown.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -71,6 +73,23 @@
     return () => clearTimeout(timer);
   });
 
+  // The AI assistant answers the question typed, from the tasks the search finds (never confidential ones).
+  let answer = $state<{ question: string; answer: string | null; tasks: SearchResult[] } | null>(null);
+  let asking = $state(false);
+  async function askAssistant() {
+    const question = q.trim();
+    if (!question || asking) return;
+    asking = true;
+    error = "";
+    try {
+      answer = { question, ...(await api.post<{ answer: string | null; tasks: SearchResult[] }>("/search/assistant", { question })) };
+    } catch (err) {
+      error = errorMessage(err);
+    } finally {
+      asking = false;
+    }
+  }
+
   function open(r: SearchResult) {
     onclose();
     app.openTask(r.id);
@@ -124,9 +143,31 @@
       </select>
     </div>
 
+    {#if app.me?.features.ai && q.trim()}
+      <div class="ask">
+        <button class="btn neutral small" disabled={asking} onclick={askAssistant}>
+          <Icon name="sparkles" size={16} />{asking ? t("The assistant searches…") : t("Ask the assistant")}
+        </button>
+      </div>
+    {/if}
+    {#if answer && answer.question === q.trim()}
+      <div class="callout info assistant-answer" aria-live="polite">
+        <Icon name="sparkles" />
+        <div class="grow">
+          {#if answer.answer}<Markdown source={answer.answer} />{:else}<p>{t("The assistant found no task about it.")}</p>{/if}
+          {#each answer.tasks as r (r.id)}
+            <button class="result small-result" onclick={() => open(r)}>
+              <span class="line"><span class="key">{r.key}</span><span class="title">{r.title}</span></span>
+              <span class="path">{path(r)}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     {#if error}
       <p class="error-text" role="alert">{error}</p>
-    {:else if searched && !results.length}
+    {:else if searched && !results.length && answer?.question !== q.trim()}
       <p class="muted">{t("No task found")}</p>
     {/if}
     {#if results.length}
@@ -156,6 +197,9 @@
 </Modal>
 
 <style>
+  .ask { display: flex; justify-content: flex-end; }
+  .assistant-answer :global(p:first-child) { margin-top: 0; }
+  .small-result { padding: 6px 0; }
   .search { display: flex; flex-direction: column; gap: 12px; }
   .filters { display: flex; gap: 8px; flex-wrap: wrap; }
   .filters select { flex: 1 1 160px; width: auto; }

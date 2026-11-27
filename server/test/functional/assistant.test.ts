@@ -8,6 +8,8 @@ import { loadSettings, pool } from "../../src/db.js";
 let alice: Agent, bob: Agent, carol: Agent, board: string, secret: string;
 let server: http.Server, url = "";
 let answer = "";
+/** Answers given in turn before `answer` (several calls in one request). */
+let queue: string[] = [];
 const prompts: any[] = [];
 
 beforeAll(async () => {
@@ -17,7 +19,7 @@ beforeAll(async () => {
     req.on("end", () => {
       prompts.push(JSON.parse(raw));
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ choices: [{ message: { content: answer } }] }));
+      res.end(JSON.stringify({ choices: [{ message: { content: queue.shift() ?? answer } }] }));
     });
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -113,6 +115,26 @@ describe("the AI assistant on a task", () => {
     const proposal = await alice.post(`/api/tasks/${id}/assist`, { answers: [{ question: "Which format?", answer: "CSV" }] });
     expect(proposal.body).toEqual({ description: "Export the board as CSV." });
     expect(prompts.at(-1).messages[1].content).toContain('"answer":"CSV"');
+  });
+
+  it("answers a question about one's tasks from those the search finds, never confidential ones", async () => {
+    const invoice = (await alice.post("/api/tasks", { title: "Send the Zorglub invoice", pipeId: board })).body.id;
+    await alice.post("/api/tasks", { title: "Zorglub learner file", pipeId: (await alice.get(`/api/tasks/${secret}`)).body.pipe.id });
+    const key = (await alice.get(`/api/tasks/${invoice}`)).body.key;
+    queue = [JSON.stringify({ queries: ["zorglub", ""] }), JSON.stringify({ answer: `See ${key}.`, tasks: [key, "TP-999999"] })];
+    const res = await alice.post("/api/search/assistant", { question: "What is left to do for Zorglub?" });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.answer).toBe(`See ${key}.`);
+    expect(res.body.tasks.map((t: { id: string }) => t.id)).toEqual([invoice]);
+    const sent = JSON.parse(prompts.at(-1).messages[1].content);
+    expect(sent.question).toBe("What is left to do for Zorglub?");
+    expect(sent.tasks.map((t: { title: string }) => t.title)).toEqual(["Send the Zorglub invoice"]);
+    // Carol sees none of these tasks: the AI is not even asked to answer.
+    queue = [JSON.stringify({ queries: ["zorglub"] })];
+    const before = prompts.length;
+    expect((await carol.post("/api/search/assistant", { question: "Zorglub?" })).body).toEqual({ answer: null, tasks: [] });
+    expect(prompts.length).toBe(before + 1);
+    expect((await alice.post("/api/search/assistant", { question: " " })).body.error).toBe("Ask a question first");
   });
 
   it("tells when the answer cannot be read", async () => {
