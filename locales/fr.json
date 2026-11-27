@@ -1373,7 +1373,20 @@
     "Followed by the AI assistant when it rewords or completes a task of these pipes.": "Suivies par l'assistant IA quand il reformule ou complète une tâche de ces pipes.",
     "e.g. Fill “As a…”, “I want…”, “So that…” from the comments": "ex. Remplir « En tant que… », « Je veux… », « Afin de… » d'après les commentaires",
     "Followed by the AI assistant when it rewords or completes a task of this type.": "Suivies par l'assistant IA quand il reformule ou complète une tâche de ce type.",
-    "Apply": "Appliquer"
+    "Apply": "Appliquer",
+    "Answer its questions": "Répondre à ses questions",
+    "The assistant looks for what is missing…": "L'assistant cherche ce qui manque…",
+    "The assistant has no question: the task looks complete.": "L'assistant n'a pas de question : la tâche semble complète.",
+    "Answer what you can, then let the assistant complete the task.": "Répondez à ce que vous pouvez, puis laissez l'assistant compléter la tâche.",
+    "Other": "Autre",
+    "Let's discuss it": "Discutons-en",
+    "Your answer": "Votre réponse",
+    "Discussion with the assistant": "Discussion avec l'assistant",
+    "Your message": "Votre message",
+    "Complete the task with my answers": "Compléter la tâche avec mes réponses",
+    "Ask the assistant": "Demander à l'assistant",
+    "The assistant searches…": "L'assistant cherche…",
+    "The assistant found no task about it.": "L'assistant n'a trouvé aucune tâche à ce sujet."
   },
   "server": {
     "{label} is required": "{label} requis",
@@ -1866,7 +1879,9 @@
     "This AI is on an internal address: allow internal addresses first": "Cette IA est sur une adresse interne : autorisez d'abord les adresses internes",
     "No AI assistant is set up on this instance": "Aucun assistant IA n'est configuré sur cette instance",
     "The AI assistant never sees confidential tasks": "L'assistant IA ne voit jamais les tâches confidentielles",
-    "Rules for the AI assistant": "Consignes pour l'assistant IA"
+    "Rules for the AI assistant": "Consignes pour l'assistant IA",
+    "Write a message first": "Écrivez d'abord un message",
+    "Ask a question first": "Posez d'abord une question"
   },
   "catalog": {}
 }

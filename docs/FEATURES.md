@@ -390,6 +390,11 @@ title, description, fields, sub-tasks and its last 40 comments — and proposes 
 without inventing facts: what is missing goes in a note. The proposal shows next to what is there; tick what to keep
 and **Apply** (one change, in the history as usual), or **Ask again**. Nothing changes until then.
 
+**Answer its questions** asks the assistant what is missing or vague: at most six questions, each with the answers it
+guesses, **Other** (free text) and **Let's discuss it** — a short discussion with the assistant about the task. Then
+**Complete the task with my answers**: a new proposal uses what you answered and discussed, shown and applied the same
+way. Answers and discussion stay in that window; nothing is saved but what you apply.
+
 It follows general rules, then those of the pipe's type and of the task's type, which any model can set (*Rules for
 the AI assistant*). Built in: development pipes ask for short, assertive titles keeping the decisions of the comments;
 user stories get "As a… / I want… / So that…" and acceptance criteria (Given… When… Then…); bugs get the observed and
@@ -410,6 +415,11 @@ incoming bucket you can see:
 
 A search only finds what you could open in the app, checked in the database query itself. **Confidential** and
 **team-only** tasks are found only by those who see them, and show no excerpt: their content stays on their page.
+
+**Ask the assistant** (once an administrator has connected an AI) answers a question typed in the search — *"what is
+left to do for ACME?"* — in a few sentences, with the tasks it relies on, to open them. The AI turns the question into
+searches, reads only the tasks they find among those you can see (title, place, owner, excerpt; never confidential
+ones) and names the ones that answer.
 
 ## My tasks and Next action
 
