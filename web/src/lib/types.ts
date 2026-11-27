@@ -468,6 +468,8 @@ export interface TaskType extends CustomMeta {
   icon: string;
   description: string;
   fields: Field[];
+  /** Rules the AI assistant follows on tasks of this type. */
+  assistant?: string;
 }
 
 export interface RncpValue {
@@ -495,6 +497,8 @@ export interface PipeType extends CustomMeta {
   /** Planning Poker on by default in team pipes of this type. */
   planningPoker?: boolean;
   templates: string[];
+  /** Rules the AI assistant follows on tasks of pipes of this type. */
+  assistant?: string;
 }
 
 export interface OutlineDoc extends DocRef {

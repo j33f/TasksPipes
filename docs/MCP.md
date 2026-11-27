@@ -102,6 +102,50 @@ agent is told to ask you for it rather than claim it was done.
 | `delete_subtask`, `delete_time_entry`, `delete_file` | Delete a sub-task, a time entry (yours, or any as an admin of the team) or a file | *Delete* |
 | `delete_model` | Delete a model you made, once no pipe or task uses it | *Create and change my models* and *Delete* |
 
+## Events pushed to Claude Code (channel)
+
+Instead of asking TasksPipes what is new, a **Claude Code** session can be told at once, through a
+[channel](https://code.claude.com/docs/en/channels): what happens to the tasks you handed to your agent
+("<your name> (MCP)") arrives in the session as it happens —
+
+- a task is handed to the agent (`event="assigned"`);
+- someone comments on a task handed to it (`event="comment"`; never its own comments).
+
+Its limits are the token's: its spaces only, never a confidential or team-reserved task. The channel also gives
+Claude a `reply` tool (adds a comment on the task, as the agent: needs *Comment*) and `move` (moves the task to a
+column: needs *Change tasks*).
+
+A channel is a small local program Claude Code starts (it needs Node.js 18 or later). Each instance serves it:
+
+```shell
+curl -o ~/.claude/taskspipes-channel.mjs https://tasks.example.com/taskspipes-channel.mjs
+```
+
+Declare it in the `.mcp.json` of your project (or `~/.claude.json`), with an agent token:
+
+```json
+{
+  "mcpServers": {
+    "taskspipes-channel": {
+      "command": "node",
+      "args": ["/home/me/.claude/taskspipes-channel.mjs"],
+      "env": { "TASKSPIPES_URL": "https://tasks.example.com", "TASKSPIPES_TOKEN": "tp_…" }
+    }
+  }
+}
+```
+
+and start Claude Code with it as a channel. Channels that are not Anthropic's need the development flag, which asks
+for a confirmation (organizations must allow channels, see Claude Code's documentation):
+
+```shell
+claude --dangerously-load-development-channels server:taskspipes-channel
+```
+
+Keep the TasksPipes MCP server connected too (see above): Claude reads and changes the tasks with its tools. Under
+the hood, the channel reads `GET /mcp/events` (Server-Sent Events, the agent token as bearer; `Last-Event-ID`
+resumes after a cut).
+
 ## For administrators
 
 - **OAuth.** TasksPipes is the authorization server of its own `/mcp` (OAuth 2.1): protected resource metadata at

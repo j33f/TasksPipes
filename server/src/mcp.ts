@@ -18,6 +18,8 @@ import { createMcpHandler, McpServer, type AuthInfo } from "@modelcontextprotoco
 import * as z from "zod";
 import { config } from "./config.js";
 import { isConfidential } from "./access.js";
+import { agentEvents, lastEventId } from "./agent-events.js";
+import { one } from "./db.js";
 import { POINTS } from "./points.js";
 import {
   DEFAULT_PIPE_TYPE, FIELD_TYPES, STATUSES, pipeTypeById, taskTypeById, usableBy,
@@ -1037,38 +1039,60 @@ function unauthorized(reply: FastifyReply, message: string, invalid: boolean) {
   return reply.code(401).header("www-authenticate", challenge).send({ error: message });
 }
 
+/** How often the history is read for the agents' event streams (milliseconds). */
+const agentEventsPollMs = () => Number(process.env.AGENT_EVENTS_POLL_MS) || 3000;
+
 export async function mcpRoutes(app: FastifyInstance) {
   const handler = createMcpHandler(
     ({ authInfo }) => buildServer(app, authInfo!.extra!.caller as Caller),
     { responseMode: "json", onerror: (err) => app.log.warn({ err }, "MCP request failed") }
   );
   app.addHook("onClose", async () => handler.close());
+  /** Open event streams, ended when the server stops. */
+  const streams = new Set<() => void>();
+  app.addHook("onClose", async () => {
+    for (const stop of streams) stop();
+  });
 
-  const serve = async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!config.mcpEnabled) return reply.code(404).send({ error: "Not found" });
+  /** The agent calling, or null once the refusal is sent (MCP off, another site, no valid agent token). */
+  const authorize = async (req: FastifyRequest, reply: FastifyReply): Promise<Caller | null> => {
+    if (!config.mcpEnabled) {
+      reply.code(404).send({ error: "Not found" });
+      return null;
+    }
     // Browsers of other sites (DNS rebinding): MCP clients send no Origin, or this one.
     const origin = req.headers.origin;
-    if (origin && origin !== new URL(config.appUrl).origin) return reply.code(403).send({ error: "Forbidden" });
+    if (origin && origin !== new URL(config.appUrl).origin) {
+      reply.code(403).send({ error: "Forbidden" });
+      return null;
+    }
     if (req.apiTokenRefused) {
       await enforceLimit(LIMITS.api, `refused:${req.ip}`);
-      return unauthorized(reply, "This token is invalid, expired or revoked", true);
+      unauthorized(reply, "This token is invalid, expired or revoked", true);
+      return null;
     }
     const t = req.apiToken;
     if (!t || t.kind !== "agent" || !req.user) {
       await enforceLimit(LIMITS.api, `anonymous:${req.ip}`);
-      return unauthorized(reply, "An agent token is needed (Settings › AI agents), or sign in with OAuth", Boolean(req.headers.authorization));
+      unauthorized(reply, "An agent token is needed (Settings › AI agents), or sign in with OAuth", Boolean(req.headers.authorization));
+      return null;
     }
     await enforceLimit(LIMITS.api, t.id);
-    // One tool call per request, so that each one counts in the rate limit (JSON-RPC batches are refused).
-    if (Array.isArray(req.body)) return reply.code(400).send({ error: "Batches are not supported" });
-
-    const caller: Caller = {
+    return {
       token: String(req.headers.authorization).replace(/^Bearer\s+/i, ""),
       userId: req.user.id,
       locale: req.user.locale ?? config.defaultLocale,
       scopes: new Set(t.scopes),
       spaceIds: t.spaceIds ? new Set(t.spaceIds) : null,
     };
+  };
+
+  const serve = async (req: FastifyRequest, reply: FastifyReply) => {
+    const caller = await authorize(req, reply);
+    if (!caller) return reply;
+    // One tool call per request, so that each one counts in the rate limit (JSON-RPC batches are refused).
+    if (Array.isArray(req.body)) return reply.code(400).send({ error: "Batches are not supported" });
+    const t = req.apiToken!;
     const authInfo: AuthInfo = { token: caller.token, clientId: t.id, scopes: [...caller.scopes], extra: { caller } };
 
     const headers = new Headers();
@@ -1091,4 +1115,48 @@ export async function mcpRoutes(app: FastifyInstance) {
   };
 
   app.route({ method: ["GET", "POST", "DELETE"], url: "/mcp", handler: serve });
+
+  // What happens to the tasks handed to the agent, pushed as Server-Sent Events (agent-events.ts): the TasksPipes
+  // channel for Claude Code relays them. Last-Event-ID (or ?after=) resumes a stream without missing anything.
+  app.get("/mcp/events", async (req: FastifyRequest<{ Querystring: { after?: string } }>, reply) => {
+    const caller = await authorize(req, reply);
+    if (!caller) return reply;
+    const resume = String(req.headers["last-event-id"] ?? req.query.after ?? "");
+    let cursor = /^\d{1,18}$/.test(resume) ? resume : await lastEventId();
+    reply.hijack();
+    const res = reply.raw;
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+    res.write(`retry: 5000\n: connected\n\n`);
+    let closed = false;
+    let busy = false;
+    const poll = async () => {
+      if (closed || busy) return;
+      busy = true;
+      try {
+        // Still allowed: a revoked token or turned-off MCP ends the stream.
+        const ok = config.mcpEnabled && (await one(`SELECT 1 FROM api_tokens WHERE id = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())`, [req.apiToken!.id]));
+        if (!ok) return stop();
+        const batch = await agentEvents(caller.userId, caller.spaceIds, cursor);
+        for (const e of batch.events) res.write(`id: ${e.id}\nevent: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`);
+        cursor = batch.cursor;
+      } catch (err) {
+        app.log.warn({ err }, "Agent events failed");
+      } finally {
+        busy = false;
+      }
+    };
+    const timer = setInterval(poll, agentEventsPollMs());
+    const ping = setInterval(() => !closed && res.write(`: ping\n\n`), 25_000);
+    function stop() {
+      if (closed) return;
+      closed = true;
+      clearInterval(timer);
+      clearInterval(ping);
+      res.end();
+    }
+    req.raw.on("close", stop);
+    streams.add(stop);
+    res.on("close", () => streams.delete(stop));
+    void poll();
+  });
 }

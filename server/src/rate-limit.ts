@@ -177,6 +177,8 @@ export const LIMITS = {
   oidc: { name: "oidc", max: 30, timeWindow: 15 * MIN },
   adminSettings: { name: "admin-settings", max: 60, timeWindow: 60 * MIN, keyGenerator: perPerson },
   adminTestMail: { name: "admin-test-mail", max: 10, timeWindow: 60 * MIN, keyGenerator: perPerson },
+  // The AI assistant on a task (assistant.ts): each call costs the instance.
+  assistant: { name: "assistant", max: 30, timeWindow: 60 * MIN, keyGenerator: perPerson },
   adminAi: { name: "admin-ai", max: 60, timeWindow: 60 * MIN, keyGenerator: perPerson },
   totpSettings: { name: "totp-settings", max: 10, timeWindow: 15 * MIN, keyGenerator: perPerson },
   catalogUsage: { name: "catalog-usage", max: 60, timeWindow: MIN, keyGenerator: perPerson },

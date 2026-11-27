@@ -33,6 +33,7 @@
         id: f.id, key: key++, label: f.label, type: f.type,
         options: ((copy ? f.optionLabels : null) ?? f.options ?? []).join("\n"), hint: f.hint ?? "",
       })),
+      assistant: src?.assistant ?? "",
     };
   }
 
@@ -76,6 +77,7 @@
     error = "";
     const body = {
       label: draft.label, description: draft.description, icon: draft.icon, group: draft.group, visibility: draft.visibility, fields: fieldsOut,
+      assistant: draft.assistant,
     };
     try {
       if (editing) await api.put(`/catalog/task-types/${editing.id}`, body);
@@ -138,6 +140,12 @@
         <div class="field">
           <label for="tte-desc">{t("Description")}</label>
           <input id="tte-desc" class="input" bind:value={draft.description} maxlength="500" />
+        </div>
+        <div class="field">
+          <label for="tte-assistant">{t("Rules for the AI assistant")}</label>
+          <textarea id="tte-assistant" class="input" bind:value={draft.assistant} rows="3" maxlength="2000"
+            placeholder={t("e.g. Fill “As a…”, “I want…”, “So that…” from the comments")}></textarea>
+          <div class="hint">{t("Followed by the AI assistant when it rewords or completes a task of this type.")}</div>
         </div>
         <div class="field">
           <span class="label-text">{t("Icon")}</span>

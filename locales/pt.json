@@ -1361,7 +1361,19 @@
     "The AI offers no model": "A IA não oferece nenhum modelo",
     "The AI answers ({model}): {answer}": "A IA responde ({model}): {answer}",
     "No AI": "Nenhuma IA",
-    "A well-known provider, or Other for any compatible server": "Um fornecedor conhecido, ou Outro para qualquer servidor compatível"
+    "A well-known provider, or Other for any compatible server": "Um fornecedor conhecido, ou Outro para qualquer servidor compatível",
+    "Assistant": "Assistente",
+    "Ask again": "Perguntar de novo",
+    "The assistant reads the task and its comments…": "O assistente lê a tarefa e os seus comentários…",
+    "The assistant has nothing to change.": "O assistente não tem nada a mudar.",
+    "Tick what to keep. Nothing changes until you apply it.": "Marque o que quer manter. Nada muda até aplicar.",
+    "The assistant's proposal was applied": "A proposta do assistente foi aplicada",
+    "Rules for the AI assistant": "Instruções para o assistente de IA",
+    "e.g. Short, assertive titles; keep the decisions taken in the comments": "p. ex. Títulos curtos e assertivos; retomar as decisões dos comentários",
+    "Followed by the AI assistant when it rewords or completes a task of these pipes.": "Seguidas pelo assistente de IA quando reformula ou completa uma tarefa destes pipes.",
+    "e.g. Fill “As a…”, “I want…”, “So that…” from the comments": "p. ex. Preencher «Como…», «Quero…», «Para…» a partir dos comentários",
+    "Followed by the AI assistant when it rewords or completes a task of this type.": "Seguidas pelo assistente de IA quando reformula ou completa uma tarefa deste tipo.",
+    "Apply": "Aplicar"
   },
   "server": {
     "{label} is required": "{label}: obrigatório",
@@ -1851,7 +1863,10 @@
     "The AI answered {status}: {error}": "A IA respondeu {status}: {error}",
     "The AI could not be reached: {error}": "Não foi possível contactar a IA: {error}",
     "The AI's answer could not be read": "Não foi possível ler a resposta da IA",
-    "This AI is on an internal address: allow internal addresses first": "Esta IA está num endereço interno: permita primeiro os endereços internos"
+    "This AI is on an internal address: allow internal addresses first": "Esta IA está num endereço interno: permita primeiro os endereços internos",
+    "No AI assistant is set up on this instance": "Nenhum assistente de IA está configurado nesta instância",
+    "The AI assistant never sees confidential tasks": "O assistente de IA nunca vê as tarefas confidenciais",
+    "Rules for the AI assistant": "Instruções para o assistente de IA"
   },
   "catalog": {
     "Prêt à démarrer": "Pronta para começar",

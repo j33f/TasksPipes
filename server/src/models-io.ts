@@ -38,6 +38,7 @@ const pipeOut = (p: PipeType) => ({
   columns: p.columns.map(({ id, label, status, color }) => ({ id, label, status, color })),
   taskTypes: p.taskTypes.length ? p.taskTypes : undefined,
   templates: p.templates.length ? p.templates : undefined,
+  assistant: p.assistant || undefined,
 });
 
 // Choices are written as they read: in the importer's file they become the stored values of a new type.
@@ -54,6 +55,7 @@ const taskOut = (t: ReturnType<typeof localizeTaskType>) => ({
     ...(f.options ? { options: f.optionLabels ?? f.options } : {}),
     ...(f.hint ? { hint: f.hint } : {}),
   })),
+  assistant: t.assistant || undefined,
 });
 
 /**

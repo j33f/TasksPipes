@@ -46,6 +46,8 @@ export interface TaskType extends CustomMeta {
   icon: string;
   description: string;
   fields: Field[];
+  /** Rules the AI assistant follows on tasks of this type (assistant.ts). */
+  assistant?: string;
 }
 
 export interface PipeType extends CustomMeta {
@@ -73,6 +75,8 @@ export interface PipeType extends CustomMeta {
   /** Planning Poker on by default in team pipes of this type (poker.ts); each pipe can turn it on or off. */
   planningPoker?: boolean;
   templates: string[];
+  /** Rules the AI assistant follows on tasks of pipes of this type (assistant.ts). */
+  assistant?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -439,6 +443,8 @@ export const TASK_TYPES: TaskType[] = [
   },
   {
     id: "user_story", label: "User story", icon: "user", description: "Un besoin exprimé du point de vue de l'utilisateur.",
+    assistant: "Remplis « En tant que… », « Je veux… » et « Afin de… » d'après le titre, la description et les commentaires. "
+      + "Écris les critères d'acceptation sous forme de liste vérifiable (Étant donné… Quand… Alors…), en reprenant les décisions prises dans les commentaires.",
     fields: [
       f("role", "En tant que…", "text"), f("besoin", "Je veux…", "textarea"), f("benefice", "Afin de…", "textarea"),
       // Its priority and points are those of every task (tasks.priority, tasks.points).
@@ -447,6 +453,7 @@ export const TASK_TYPES: TaskType[] = [
   },
   {
     id: "bug", label: "Bug", icon: "flag", description: "Un défaut à corriger.",
+    assistant: "Décris le comportement observé et le comportement attendu ; liste les étapes pour reproduire, numérotées, d'après la description et les commentaires.",
     fields: [
       f("severite", "Sévérité", "select", { options: ["Bloquant", "Critique", "Majeur", "Mineur"] }),
       f("environnement", "Environnement", "select", { options: ["Production", "Recette", "Développement"] }),
@@ -927,6 +934,8 @@ export const PIPE_TYPES: PipeType[] = [
   },
   {
     id: "dev", label: "Développement logiciel", group: "Logiciel",
+    assistant: "Titres courts et assertifs, qui disent ce que le logiciel fait une fois la tâche finie (ex. « Ctrl+Entrée enregistre la description »). "
+      + "La description reprend le besoin, le contexte et les décisions des commentaires, sans inventer de détail technique.",
     description: "User stories, bugs et versions, reliés aux pull requests GitHub et merge requests GitLab.",
     color: "#0366d6", icon: "bolt",
     columns: [

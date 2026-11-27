@@ -42,6 +42,7 @@
       sprints: Boolean(src?.sprints),
       planningPoker: Boolean(src?.planningPoker),
       templates: (src?.templates ?? []).join("\n"),
+      assistant: src?.assistant ?? "",
     };
   }
 
@@ -221,6 +222,13 @@
       <label for="pte-templates">{t("Starter tasks (one per line)")}</label>
       <textarea id="pte-templates" class="input" bind:value={draft.templates} rows="4"
         placeholder={t("Offered when a pipe is created, in the first column")}></textarea>
+    </div>
+
+    <div class="field">
+      <label for="pte-assistant">{t("Rules for the AI assistant")}</label>
+      <textarea id="pte-assistant" class="input" bind:value={draft.assistant} rows="3" maxlength="2000"
+        placeholder={t("e.g. Short, assertive titles; keep the decisions taken in the comments")}></textarea>
+      <div class="hint">{t("Followed by the AI assistant when it rewords or completes a task of these pipes.")}</div>
     </div>
 
     {#if error}<div class="error-text">{error}</div>{/if}

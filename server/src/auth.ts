@@ -331,7 +331,7 @@ async function auth(app: FastifyInstance) {
   app.decorateRequest("apiTokenRefused", false);
   app.addHook("onRequest", async (req) => {
     const path = req.url.split("?")[0];
-    if ((req.url.startsWith(`${V1}/`) || path === "/mcp") && req.headers.authorization) {
+    if ((req.url.startsWith(`${V1}/`) || path === "/mcp" || path === "/mcp/events") && req.headers.authorization) {
       const t = await tokenUser(req.headers.authorization);
       if (t === null) req.apiTokenRefused = true;
       if (t) {
