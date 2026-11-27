@@ -421,6 +421,13 @@
               <span class="col-points" title={t("Points of the tasks shown")}>{t("{n} pts", { n: pts })}</span>
             {/if}
             {#if overLimit(n, s.wipLimit)}<span class="sr-only">{t("Over its limit")}</span>{/if}
+            <!-- Adding a task without scrolling down to the end of a long column. -->
+            {#if pipe.canAddTasks}
+              <button class="btn ghost icon col-add" title={t("Add a task to {column}", { column: s.label })}
+                aria-label={t("Add a task to {column}", { column: s.label })} onclick={() => (newTaskStage = s.id)}>
+                <Icon name="plus" size={16} />
+              </button>
+            {/if}
           </header>
         {/each}
       </div>
@@ -521,6 +528,8 @@
   }
   .column-header.over { box-shadow: inset 0 3px 0 var(--danger, #ed2651); }
   .column-header .col-points { margin-left: auto; font-size: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .column-header .col-add { margin: -4px -6px -4px auto; width: 26px; height: 26px; min-height: 26px; padding: 0; color: var(--text-tertiary); }
+  .column-header .col-points + .col-add, .column-header .col-points ~ .col-add { margin-left: 4px; }
   .column-header.over .count { background: var(--danger, #ed2651); color: #fff; }
   .column-body { padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 8px; min-height: 80px; background: var(--background-secondary); }
   .board-row:last-child .column-body { border-radius: 0 0 10px 10px; }
