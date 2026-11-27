@@ -344,7 +344,9 @@ The report hour (18:00 by default) and time zone are set by the instance (`REPOR
   and comments with an **MCP** tag, and a task it created shows the tag next to its author; tasks changed through an
   access token show *via* the token. You can hand a task of yours to your agent: the owner list offers
   "<your name> (MCP)" (only to you), and the agent finds these tasks with `agent_tasks`. Connect it with an agent token, or let a connector
-  that signs in (claude.ai, OAuth) ask for your consent. See [MCP.md](MCP.md).
+  that signs in (claude.ai, OAuth) ask for your consent. A **Claude Code channel** (served by the instance at
+  `/taskspipes-channel.mjs`) pushes to a Claude Code session what happens to the tasks handed to the agent — a task
+  handed to it, a comment on one — and lets Claude answer with a comment. See [MCP.md](MCP.md).
 - **Webhooks** (*a pipe's page › Webhooks*, members of its space) — task events of the pipe are POSTed as JSON to an
   https address: task created, moved (column or pipe), given an owner, commented, done — and, in pipes in sprints, a
   sprint started (its points committed) or closed (its report: points done, carried over, the velocity it leads to).
