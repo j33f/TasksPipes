@@ -99,7 +99,14 @@ export function validatePipeType(input: unknown, userId: string, previous?: Pipe
     sprints: b.sprints === true,
     planningPoker: b.planningPoker === true,
     templates: list(b.templates, "Starter tasks", 50).map((t) => str(t, "Starter task", { max: 300 })).filter(Boolean),
+    ...assistantRules(b),
   };
+}
+
+/** The AI assistant's rules of a type, when given. */
+function assistantRules(b: Record<string, unknown>): { assistant?: string } {
+  const assistant = str(b.assistant, "Rules for the AI assistant", { max: 2000 });
+  return assistant ? { assistant } : {};
 }
 
 export function validateTaskType(input: unknown, previous?: TaskType): Definition<TaskType> {
@@ -134,5 +141,6 @@ export function validateTaskType(input: unknown, previous?: TaskType): Definitio
     icon: str(b.icon, "Icon", { max: 40 }) || "check",
     description: str(b.description, "Description", { max: 500 }),
     fields,
+    ...assistantRules(b),
   };
 }
