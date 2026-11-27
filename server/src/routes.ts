@@ -44,7 +44,7 @@ import { sendSprintReport } from "./sprint-report.js";
 import { exportSprintToOutline, outlineReportRoutes } from "./outline-reports.js";
 import { pokerEnabled, pokerRoutes } from "./poker.js";
 import { cleanDay, cleanEstimate, cleanMinutes, cleanNote, getEntry, presentEntry, timeEntries } from "./worklog.js";
-import { addDependency, dependenciesOf, isResolved, openBlockers, releaseWaiting } from "./dependencies.js";
+import { addDependency, addRelation, dependenciesOf, isResolved, openBlockers, releaseWaiting, removeRelation } from "./dependencies.js";
 import { columnsFor, csvRows, exportCsv, exportJson, planImport, targetsFor, taskTypesOf, trelloRows, TRELLO_MAPPING, type ExportedTask, type Person, type Target } from "./pipe-io.js";
 import {
   SPACE_NAME, TASK_SELECT, getTaskRow, memberRole, spaceVisible, taskPermissions, taskVisibleSql, teamOnlyKinds, type TaskPermissions,
@@ -2171,6 +2171,32 @@ export async function apiRoutes(app: FastifyInstance) {
       if (!rowCount) return;
       const s = snapshot(t);
       await recordEvent(client, t.id, uid, "dependency", s, s, null, { dependency: "removed" });
+    });
+    return dependenciesOf(pool, t.id, uid);
+  });
+
+  // Related tasks, neither waiting for the other: those who may edit a task relate it to a task they can open.
+  app.post("/tasks/:id/relations", rateLimited(LIMITS.dependencies), async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    const { t: other } = await loadTaskFor(uuid(req.body?.taskId, "Related task"), uid);
+    await tx(async (client) => {
+      if (!(await addRelation(client, t.id, other.id, uid))) return;
+      const s = snapshot(t);
+      await recordEvent(client, t.id, uid, "dependency", s, s, null, { relation: "added" });
+    });
+    return dependenciesOf(pool, t.id, uid);
+  });
+
+  // A related task one cannot open can still be unrelated by those who may edit the task.
+  app.delete("/tasks/:id/relations/:taskId", rateLimited(LIMITS.dependencies), async (req: Req) => {
+    const uid = me(req);
+    const { t } = await loadTaskFor(req.params.id, uid, "editContent");
+    const otherId = uuid(req.params.taskId, "Related task");
+    await tx(async (client) => {
+      if (!(await removeRelation(client, t.id, otherId))) return;
+      const s = snapshot(t);
+      await recordEvent(client, t.id, uid, "dependency", s, s, null, { relation: "removed" });
     });
     return dependenciesOf(pool, t.id, uid);
   });

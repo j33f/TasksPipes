@@ -699,6 +699,17 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
 );
 CREATE INDEX IF NOT EXISTS task_dependencies_blocker_idx ON task_dependencies(blocker_id);
 
+-- Tasks related to each other, without one waiting for the other (dependencies.ts): one row per pair, a_id < b_id.
+CREATE TABLE IF NOT EXISTS task_relations (
+  a_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  b_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (a_id, b_id),
+  CHECK (a_id < b_id)
+);
+CREATE INDEX IF NOT EXISTS task_relations_b_idx ON task_relations(b_id);
+
 -- A task no longer blocked is notified too.
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'notifications_kind_check'

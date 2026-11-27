@@ -60,6 +60,7 @@ export function eventSummary(e: TaskEvent): string {
         time: formatWork(e.details?.timeRemoved?.minutes ?? 0), name: e.details?.timeRemoved?.of ?? t("someone"), day: formatDate(e.details?.timeRemoved?.spentOn),
       });
     case "dependency":
+      if (e.details?.relation) return e.details.relation === "removed" ? t("removed a related task") : t("added a related task");
       return e.details?.dependency === "removed" ? t("removed a task it waited for") : t("added a task it waits for");
     case "checklist":
       return t(e.details?.done ? "checked “{item}”" : "unchecked “{item}”", { item: e.details?.item ?? "" });

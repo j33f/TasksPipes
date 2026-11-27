@@ -91,6 +91,7 @@ agent is told to ask you for it rather than claim it was done.
 | `create_task`, `update_task`, `move_task` | Create a task in a pipe (with its sub-tasks), change anything of it (dates, priority, points, sprint, estimate, type, fields — files excepted, owner, its handing to the agent, labels), move it to another pipe | *Create and change tasks* |
 | `add_subtasks`, `update_subtask` | Add sub-tasks; check, uncheck, rename or reorder one | *Create and change tasks* |
 | `add_dependency`, `remove_dependency` | Make a task wait for another one, or stop it | *Create and change tasks* |
+| `add_related_task`, `remove_related_task` | Relate two tasks (neither waits for the other), or stop | *Create and change tasks* |
 | `add_comment` | Comment on a task | *Comment* |
 | `log_time`, `update_time_entry` | Log your time on a task, change one of your entries | *Log my time* |
 | `send_task` | Send a task to someone's incoming | *Send tasks to other people* |

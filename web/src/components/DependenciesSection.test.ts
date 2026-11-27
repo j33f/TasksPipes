@@ -59,6 +59,20 @@ describe("dependencies section", () => {
     expect(calls.at(-1)).toMatchObject({ method: "POST", url: "/api/tasks/t1/dependencies", body: { blockerId: "d" } });
   });
 
+  it("relates a task found by search, and unrelates one", async () => {
+    render(DependenciesSection, { task: task({ blockedBy: [visible], related: [hidden] }), onchange: () => {} });
+    expect(screen.getByText("Related to")).toBeTruthy();
+    await userEvent.click(screen.getByTitle("No longer related"));
+    expect(calls.at(-1)).toMatchObject({ method: "DELETE", url: "/api/tasks/t1/relations/b" });
+    await userEvent.click(screen.getByRole("button", { name: "Add a related task" }));
+    await userEvent.type(screen.getByLabelText("Search a task…"), "de");
+    const deploy = await screen.findByRole("button", { name: "#30 Deploy" });
+    // A task it waits for may be related too; only those already related are left out.
+    expect(screen.getAllByRole("button", { name: "#12 Write the specs" })).toHaveLength(2);
+    await userEvent.click(deploy);
+    expect(calls.at(-1)).toMatchObject({ method: "POST", url: "/api/tasks/t1/relations", body: { taskId: "d" } });
+  });
+
   it("is read-only for those who cannot edit the task", () => {
     render(DependenciesSection, { task: task({ blockedBy: [visible], permissions: { view: true, manage: false, editContent: false, comment: true, refuse: false } }), onchange: () => {} });
     expect(screen.queryByTitle("Stop waiting for it")).toBeNull();
